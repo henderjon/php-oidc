@@ -36,6 +36,11 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 		curl_setopt($handle, CURLOPT_HTTPHEADER, $this->formatHeaders($headers));
 
 		if( $body === null ) {
+			// CURLOPT_HTTPGET does not clear a CURLOPT_CUSTOMREQUEST left over from a prior POST
+			// on this reused handle - without resetting it first, this "GET" would still be sent
+			// as a bodyless POST, which some servers (e.g. Microsoft's JWKS endpoint) reject with
+			// a 411 Length Required.
+			curl_setopt($handle, CURLOPT_CUSTOMREQUEST, null);
 			curl_setopt($handle, CURLOPT_HTTPGET, true);
 		} else {
 			curl_setopt($handle, CURLOPT_CUSTOMREQUEST, 'POST');

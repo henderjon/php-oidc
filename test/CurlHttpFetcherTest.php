@@ -89,6 +89,53 @@ class CurlHttpFetcherTest extends TestCase {
 		$fetcher->fetch('http://127.0.0.1:1/unreachable', null);
 	}
 
+	public function testFetchGetAfterPostSendsAnActualGetNotALeftoverPost(): void {
+		self::$server->setResponseOfPath('/token', new Response('{"access_token":"abc"}'));
+		self::$server->setResponseOfPath('/jwks', new Response('{"keys":[]}'));
+
+		$fetcher = new CurlHttpFetcher;
+		$fetcher->fetch($this->url('token'), 'grant_type=client_credentials');
+		$fetcher->fetch($this->url('jwks'), null);
+
+		$this->assertSame('GET', self::$server->getLastRequest()->getRequestMethod());
+	}
+
+	public function testFetchGetAfterPostDoesNotSendALeftoverBody(): void {
+		self::$server->setResponseOfPath('/token', new Response('{"access_token":"abc"}'));
+		self::$server->setResponseOfPath('/jwks', new Response('{"keys":[]}'));
+
+		$fetcher = new CurlHttpFetcher;
+		$fetcher->fetch($this->url('token'), 'grant_type=client_credentials');
+		$fetcher->fetch($this->url('jwks'), null);
+
+		$this->assertSame('', self::$server->getLastRequest()->getInput());
+	}
+
+	public function testFetchGetAfterPostDoesNotLeakTheAuthorizationHeader(): void {
+		self::$server->setResponseOfPath('/token', new Response('{"access_token":"abc"}'));
+		self::$server->setResponseOfPath('/jwks', new Response('{"keys":[]}'));
+
+		$fetcher = new CurlHttpFetcher;
+		$fetcher->fetch($this->url('token'), 'grant_type=client_credentials', [ 'Authorization' => 'Bearer secret-token' ]);
+		$fetcher->fetch($this->url('jwks'), null);
+
+		$this->assertArrayNotHasKey('Authorization', self::$server->getLastRequest()->getHeaders());
+	}
+
+	public function testFetchPostAfterGetSendsTheNewBody(): void {
+		self::$server->setResponseOfPath('/discovery', new Response('{}'));
+		self::$server->setResponseOfPath('/token', new Response('{"access_token":"abc"}'));
+
+		$fetcher = new CurlHttpFetcher;
+		$fetcher->fetch($this->url('discovery'), null);
+		$fetcher->fetch($this->url('token'), 'grant_type=client_credentials');
+
+		$request = self::$server->getLastRequest();
+
+		$this->assertSame('POST', $request->getRequestMethod());
+		$this->assertSame('grant_type=client_credentials', $request->getInput());
+	}
+
 	public function testFetcherCanBeReusedAcrossCalls(): void {
 		self::$server->setResponseOfPath('/first', new Response('first'));
 		self::$server->setResponseOfPath('/second', new Response('second'));
