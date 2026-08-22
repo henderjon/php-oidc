@@ -4,10 +4,12 @@ namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Exceptions\UserInfoRequestException;
+use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\FakeHttpFetcher;
 use Oidc\Fakes\InMemoryCache;
 use Oidc\Fakes\RsaKeyFixture;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 use Psr\SimpleCache\CacheInterface;
 
 class OpenIDConnectClientTest extends TestCase {
@@ -36,8 +38,8 @@ class OpenIDConnectClientTest extends TestCase {
 		);
 	}
 
-	private function makeClient( FakeHttpFetcher $fetcher, ?CacheInterface $cache = null ): OpenIDConnectClient {
-		return (new OpenIDConnectClientFactory($fetcher))->make($cache ?? new InMemoryCache, 'the-cache-key');
+	private function makeClient( FakeHttpFetcher $fetcher, ?CacheInterface $cache = null, ?ArrayLogger $logger = null ): OpenIDConnectClient {
+		return (new OpenIDConnectClientFactory($fetcher, logger: $logger ?? new ArrayLogger))->make($cache ?? new InMemoryCache, 'the-cache-key');
 	}
 
 	/**
@@ -283,16 +285,47 @@ class OpenIDConnectClientTest extends TestCase {
 
 	public function testCompleteAuthorizationCodeFlowWithWrongStateFails(): void {
 		$fetcher = new FakeHttpFetcher;
-		$client  = $this->makeClient($fetcher);
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
 
 		$client->buildAuthorizationCodeRedirect($this->config());
 
-		$this->expectException(AuthenticationFailedException::class);
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'code'  => 'the-code',
+				'state' => 'a-forged-state',
+			]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			// The exception itself stays generic - the detail lives in the log instead.
+			$this->assertSame('Unable to verify state', $e->getMessage());
+		}
 
-		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
-			'code'  => 'the-code',
-			'state' => 'a-forged-state',
-		]));
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
+		$this->assertSame('a-forged-state', $records[0]['context']['state']);
+	}
+
+	public function testCompleteAuthorizationCodeFlowWithNoStateAtAllLogsDistinctlyFromAWrongState(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$client->buildAuthorizationCodeRedirect($this->config());
+
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'code' => 'the-code',
+			]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('Unable to verify state', $e->getMessage());
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: callback is missing the state parameter', $records[0]['message']);
 	}
 
 	public function testCompleteAuthorizationCodeFlowWithProviderErrorFails(): void {

@@ -2,6 +2,8 @@
 
 namespace Oidc;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Psr\SimpleCache\CacheInterface;
 
 /**
@@ -37,6 +39,7 @@ final class AuthorizationStateStore {
 		private readonly CacheInterface $cache,
 		private readonly string $cacheKeySuffix = "",
 		private readonly int $ttlSeconds = 600,
+		private readonly LoggerInterface $logger = new NullLogger,
 	) {
 	}
 
@@ -57,10 +60,13 @@ final class AuthorizationStateStore {
 
 	/**
 	 * Looks up and clears the attempt started under the given state. Returns
-	 * null if no such attempt exists - it was never started, already
-	 * consumed, expired, or the cached entry is not the shape this class
-	 * wrote - the caller must treat all of those the same way: reject the
-	 * callback.
+	 * null if no such attempt exists - the caller must treat every reason the
+	 * same way: reject the callback. The logger gets more detail than the
+	 * caller does, but PSR-16's `get()` only ever reports a hit or a miss -
+	 * it cannot say why a miss happened, so a forged/wrong state, an expired
+	 * entry, and one evicted early by the cache backend all log identically
+	 * as "not found". Only a hit that is not the shape this class wrote
+	 * (`corrupted`) is actually distinguishable from that.
 	 */
 	public function consume(string $state): ?FlowState {
 		$key  = $this->flowKey($state);
@@ -68,7 +74,19 @@ final class AuthorizationStateStore {
 
 		$this->cache->delete($key);
 
+		if( $flow === null ) {
+			$this->logger->warning('OIDC: no pending authorization flow found for the given state', [ 'state' => $state ]);
+
+			return null;
+		}
+
 		if( !is_array($flow) || !is_string($flow['nonce'] ?? null) ) {
+			$this->logger->warning('OIDC: cached authorization flow entry is not the expected shape', [
+				'state' => $state,
+				'type'  => get_debug_type($flow),
+				'keys'  => is_array($flow) ? array_keys($flow) : null,
+			]);
+
 			return null;
 		}
 

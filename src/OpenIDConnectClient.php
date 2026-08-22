@@ -7,6 +7,8 @@ use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\UserInfoRequestException;
 use Oidc\Interfaces\TokenGrantClientInterface;
 use Oidc\Interfaces\UserInfoClientInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * The real engine behind every capability interface in this module.
@@ -34,6 +36,7 @@ final class OpenIDConnectClient implements
 		private readonly ClaimsValidator $claimsValidator,
 		private readonly TokenEndpointClient $tokenEndpointClient,
 		private readonly HttpFetcherInterface $httpFetcher,
+		private readonly LoggerInterface $logger = new NullLogger,
 	) {
 	}
 
@@ -177,9 +180,18 @@ final class OpenIDConnectClient implements
 	 * when there is no state to look up, or no attempt matches it - the caller must
 	 * fail closed either way; it is not this method's job to decide which message to
 	 * throw, since a provider error should be reported ahead of a generic state failure.
+	 * The distinction between "no state at all" and "state did not match" is logged
+	 * (here and in AuthorizationStateStore respectively) rather than reflected in the
+	 * exception, which stays generic for whoever ends up seeing it unhandled.
 	 */
 	private function consumeFlow( IncomingAuthorizationResponse $response ): ?FlowState {
-		return $response->state !== null ? $this->stateStore->consume($response->state) : null;
+		if( $response->state === null ) {
+			$this->logger->warning('OIDC: callback is missing the state parameter');
+
+			return null;
+		}
+
+		return $this->stateStore->consume($response->state);
 	}
 
 	/**
