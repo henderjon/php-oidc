@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 final class FetchResponse {
 

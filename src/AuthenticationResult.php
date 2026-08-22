@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 /**
  * The outcome of completing an authorization code or implicit flow.

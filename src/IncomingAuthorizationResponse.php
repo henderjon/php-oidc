@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 /**
  * What a provider sent back to the redirect URL - an authorization code

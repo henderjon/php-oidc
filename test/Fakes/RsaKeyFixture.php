@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc\Fakes;
+namespace Oidc\Fakes;
 
 use Firebase\JWT\JWT;
 

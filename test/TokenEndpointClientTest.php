@@ -1,9 +1,9 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\TokenRequestException;
-use Henderjon\Oidc\Fakes\FakeHttpFetcher;
+use Oidc\Exceptions\TokenRequestException;
+use Oidc\Fakes\FakeHttpFetcher;
 use PHPUnit\Framework\TestCase;
 
 class TokenEndpointClientTest extends TestCase {

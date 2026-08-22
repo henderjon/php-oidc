@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc\Exceptions;
+namespace Oidc\Exceptions;
 
 /**
  * Thrown by the HTTP transport itself (connection failure, timeout) below

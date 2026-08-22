@@ -1,8 +1,8 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Fakes\InMemoryCache;
+use Oidc\Fakes\InMemoryCache;
 use PHPUnit\Framework\TestCase;
 
 class AuthorizationStateStoreTest extends TestCase {

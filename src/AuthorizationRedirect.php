@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 /**
  * A URL to send the user-agent to next - a login redirect or a sign-out

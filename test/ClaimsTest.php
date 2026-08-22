@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 use PHPUnit\Framework\TestCase;
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc\Exceptions;
+namespace Oidc\Exceptions;
 
 /**
  * Thrown when the userinfo endpoint cannot be reached or returns an

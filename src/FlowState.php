@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 /**
  * The state and nonce for one in-flight authorization attempt. Both are

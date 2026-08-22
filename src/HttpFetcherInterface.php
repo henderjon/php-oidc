@@ -1,8 +1,8 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\HttpTransportException;
 
 /**
  * The seam every other collaborator talks through instead of calling curl

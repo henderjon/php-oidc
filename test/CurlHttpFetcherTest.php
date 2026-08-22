@@ -1,10 +1,10 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 use donatj\MockWebServer\MockWebServer;
 use donatj\MockWebServer\Response;
-use Henderjon\Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\HttpTransportException;
 use PHPUnit\Framework\TestCase;
 
 class CurlHttpFetcherTest extends TestCase {

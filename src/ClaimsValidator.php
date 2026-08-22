@@ -1,8 +1,8 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\AuthenticationFailedException;
 
 /**
  * Validates the OIDC-specific claims that `Firebase\JWT\JWT::decode()`

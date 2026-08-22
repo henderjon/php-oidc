@@ -1,9 +1,9 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\HttpTransportException;
-use Henderjon\Oidc\Exceptions\TokenRequestException;
+use Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\TokenRequestException;
 
 /**
  * Posts to `token_endpoint` for the two grants this module supports:

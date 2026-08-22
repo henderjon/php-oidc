@@ -1,11 +1,11 @@
 <?php
 
-namespace Henderjon\Oidc\Interfaces;
+namespace Oidc\Interfaces;
 
-use Henderjon\Oidc\Exceptions\ProviderDiscoveryException;
-use Henderjon\Oidc\Exceptions\TokenRequestException;
-use Henderjon\Oidc\OpenIDConnectClientConfig;
-use Henderjon\Oidc\TokenResult;
+use Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\Exceptions\TokenRequestException;
+use Oidc\OpenIDConnectClientConfig;
+use Oidc\TokenResult;
 
 /**
  * Non-interactive token acquisition via the client credentials grant -

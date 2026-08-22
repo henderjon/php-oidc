@@ -1,12 +1,12 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
-use Henderjon\Oidc\Exceptions\UserInfoRequestException;
-use Henderjon\Oidc\Fakes\FakeHttpFetcher;
-use Henderjon\Oidc\Fakes\InMemoryCache;
-use Henderjon\Oidc\Fakes\RsaKeyFixture;
+use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\UserInfoRequestException;
+use Oidc\Fakes\FakeHttpFetcher;
+use Oidc\Fakes\InMemoryCache;
+use Oidc\Fakes\RsaKeyFixture;
 use PHPUnit\Framework\TestCase;
 use Psr\SimpleCache\CacheInterface;
 

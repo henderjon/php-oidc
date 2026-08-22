@@ -1,8 +1,8 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\TokenRequestException;
+use Oidc\Exceptions\TokenRequestException;
 use PHPUnit\Framework\TestCase;
 
 class TokenResultTest extends TestCase {

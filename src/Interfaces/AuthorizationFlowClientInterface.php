@@ -1,13 +1,13 @@
 <?php
 
-namespace Henderjon\Oidc\Interfaces;
+namespace Oidc\Interfaces;
 
-use Henderjon\Oidc\AuthenticationResult;
-use Henderjon\Oidc\AuthorizationRedirect;
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
-use Henderjon\Oidc\Exceptions\ProviderDiscoveryException;
-use Henderjon\Oidc\IncomingAuthorizationResponse;
-use Henderjon\Oidc\OpenIDConnectClientConfig;
+use Oidc\AuthenticationResult;
+use Oidc\AuthorizationRedirect;
+use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\IncomingAuthorizationResponse;
+use Oidc\OpenIDConnectClientConfig;
 
 /**
  * Interactive login: authorization code flow (Clever, Google, Azure AD)

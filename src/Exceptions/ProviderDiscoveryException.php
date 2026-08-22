@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc\Exceptions;
+namespace Oidc\Exceptions;
 
 /**
  * Thrown when a provider's `.well-known/openid-configuration` or JWKS

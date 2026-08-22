@@ -1,10 +1,10 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\HttpTransportException;
-use Henderjon\Oidc\Exceptions\ProviderDiscoveryException;
-use Henderjon\Oidc\Fakes\FakeHttpFetcher;
+use Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\Fakes\FakeHttpFetcher;
 use PHPUnit\Framework\TestCase;
 
 class ProviderMetadataResolverTest extends TestCase {

@@ -1,9 +1,9 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\HttpTransportException;
-use Henderjon\Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\ProviderDiscoveryException;
 
 /**
  * Resolves one provider endpoint value at a time: an explicit override on

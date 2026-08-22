@@ -1,10 +1,10 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
-use Henderjon\Oidc\Interfaces\TokenGrantClientInterface;
-use Henderjon\Oidc\Interfaces\UserInfoClientInterface;
+use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Interfaces\TokenGrantClientInterface;
+use Oidc\Interfaces\UserInfoClientInterface;
 
 /**
  * A hand-written fake for a consuming application's own controller tests -

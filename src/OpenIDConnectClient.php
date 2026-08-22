@@ -1,12 +1,12 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
-use Henderjon\Oidc\Exceptions\HttpTransportException;
-use Henderjon\Oidc\Exceptions\UserInfoRequestException;
-use Henderjon\Oidc\Interfaces\TokenGrantClientInterface;
-use Henderjon\Oidc\Interfaces\UserInfoClientInterface;
+use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\UserInfoRequestException;
+use Oidc\Interfaces\TokenGrantClientInterface;
+use Oidc\Interfaces\UserInfoClientInterface;
 
 /**
  * The real engine behind every capability interface in this module.

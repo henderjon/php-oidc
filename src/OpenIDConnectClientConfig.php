@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 /**
  * Everything needed to talk to one OpenID Connect provider for one call.

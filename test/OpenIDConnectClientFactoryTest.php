@@ -1,9 +1,9 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Fakes\FakeHttpFetcher;
-use Henderjon\Oidc\Fakes\InMemoryCache;
+use Oidc\Fakes\FakeHttpFetcher;
+use Oidc\Fakes\InMemoryCache;
 use PHPUnit\Framework\TestCase;
 
 class OpenIDConnectClientFactoryTest extends TestCase {

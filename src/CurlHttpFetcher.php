@@ -1,8 +1,8 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\HttpTransportException;
 
 /**
  * The one class in this module that talks to real sockets. Reuses a single

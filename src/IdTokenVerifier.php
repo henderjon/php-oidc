@@ -1,13 +1,13 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
-use Henderjon\Oidc\Exceptions\HttpTransportException;
-use Henderjon\Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\ProviderDiscoveryException;
 use Psr\Clock\ClockInterface;
 
 /**

@@ -1,9 +1,9 @@
 <?php
 
-namespace Henderjon\Oidc\Fakes;
+namespace Oidc\Fakes;
 
-use Henderjon\Oidc\FetchResponse;
-use Henderjon\Oidc\HttpFetcherInterface;
+use Oidc\FetchResponse;
+use Oidc\HttpFetcherInterface;
 
 /**
  * A canned-response test double for HttpFetcherInterface, shared across

@@ -1,8 +1,8 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\TokenRequestException;
+use Oidc\Exceptions\TokenRequestException;
 
 /**
  * A token endpoint response - shared by the authorization code exchange

@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc\Exceptions;
+namespace Oidc\Exceptions;
 
 class OpenIDConnectException extends \RuntimeException {
 

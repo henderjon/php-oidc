@@ -1,11 +1,11 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
-use Henderjon\Oidc\Interfaces\AuthorizationFlowClientInterface;
-use Henderjon\Oidc\Interfaces\TokenGrantClientInterface;
-use Henderjon\Oidc\Interfaces\UserInfoClientInterface;
+use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Interfaces\AuthorizationFlowClientInterface;
+use Oidc\Interfaces\TokenGrantClientInterface;
+use Oidc\Interfaces\UserInfoClientInterface;
 use PHPUnit\Framework\TestCase;
 
 class MockOpenIDConnectClientTest extends TestCase {

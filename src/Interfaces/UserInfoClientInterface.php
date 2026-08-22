@@ -1,11 +1,11 @@
 <?php
 
-namespace Henderjon\Oidc\Interfaces;
+namespace Oidc\Interfaces;
 
-use Henderjon\Oidc\Claims;
-use Henderjon\Oidc\Exceptions\ProviderDiscoveryException;
-use Henderjon\Oidc\Exceptions\UserInfoRequestException;
-use Henderjon\Oidc\OpenIDConnectClientConfig;
+use Oidc\Claims;
+use Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\Exceptions\UserInfoRequestException;
+use Oidc\OpenIDConnectClientConfig;
 
 /**
  * Extends AuthorizationFlowClientInterface rather than standing alone,

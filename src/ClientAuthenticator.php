@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 /**
  * Applies RFC 6749 §2.3.1 client authentication to a token/introspection/

@@ -1,8 +1,8 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\AuthenticationFailedException;
 use PHPUnit\Framework\TestCase;
 
 class ClaimsValidatorTest extends TestCase {

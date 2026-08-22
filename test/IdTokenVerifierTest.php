@@ -1,14 +1,14 @@
 <?php
 
-namespace Henderjon\Oidc;
+namespace Oidc;
 
 use Firebase\JWT\JWT;
-use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
-use Henderjon\Oidc\Exceptions\HttpTransportException;
-use Henderjon\Oidc\Exceptions\ProviderDiscoveryException;
-use Henderjon\Oidc\Fakes\FakeHttpFetcher;
-use Henderjon\Oidc\Fakes\FixedClock;
-use Henderjon\Oidc\Fakes\RsaKeyFixture;
+use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\Fakes\FakeHttpFetcher;
+use Oidc\Fakes\FixedClock;
+use Oidc\Fakes\RsaKeyFixture;
 use PHPUnit\Framework\TestCase;
 
 class IdTokenVerifierTest extends TestCase {

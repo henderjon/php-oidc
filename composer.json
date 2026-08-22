@@ -22,12 +22,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Henderjon\\Oidc\\": "src/"
+            "Oidc\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Henderjon\\Oidc\\": "test/"
+            "Oidc\\": "test/"
         }
     }
 }

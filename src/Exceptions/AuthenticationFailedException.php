@@ -1,6 +1,6 @@
 <?php
 
-namespace Henderjon\Oidc\Exceptions;
+namespace Oidc\Exceptions;
 
 /**
  * Thrown when a callback carries an `error` response, an invalid or expired
