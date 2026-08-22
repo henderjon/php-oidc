@@ -15,8 +15,8 @@ use Psr\SimpleCache\CacheInterface;
  * subclassing anything.
  *
  * One store tracks exactly one in-flight attempt at a time - scope a
- * separate cache instance (or cacheKey) per SSO integration if you need
- * more than one in flight concurrently.
+ * separate cache instance (or cacheKeySuffix) per SSO integration if you
+ * need more than one in flight concurrently.
  */
 final class AuthorizationStateStore {
 

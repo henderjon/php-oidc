@@ -37,7 +37,7 @@ class OpenIDConnectClientTest extends TestCase {
 	}
 
 	private function makeClient( FakeHttpFetcher $fetcher, ?CacheInterface $cache = null ): OpenIDConnectClient {
-		return new OpenIDConnectClient($cache ?? new InMemoryCache, 'the-cache-key', $fetcher);
+		return (new OpenIDConnectClientFactory($fetcher))->make($cache ?? new InMemoryCache, 'the-cache-key');
 	}
 
 	/**
@@ -47,14 +47,6 @@ class OpenIDConnectClientTest extends TestCase {
 		parse_str((string)parse_url($url, PHP_URL_QUERY), $params);
 
 		return $params;
-	}
-
-	public function testConstructorDefaultsCreateAWorkingClient(): void {
-		$client = new OpenIDConnectClient(new InMemoryCache);
-
-		$this->assertInstanceOf(Interfaces\AuthorizationFlowClientInterface::class, $client);
-		$this->assertInstanceOf(Interfaces\TokenGrantClientInterface::class, $client);
-		$this->assertInstanceOf(Interfaces\UserInfoClientInterface::class, $client);
 	}
 
 	public function testBuildAuthorizationCodeRedirect(): void {

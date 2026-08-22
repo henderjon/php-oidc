@@ -24,20 +24,13 @@ class MockOpenIDConnectClient implements
 	TokenGrantClientInterface,
 	UserInfoClientInterface {
 
-	public string $redirectUrl = 'https://example.com/mock-authorize';
-
-	public AuthenticationResult $authenticationResult;
-
-	public ?AuthenticationFailedException $authenticationException = null;
-
-	public TokenResult $tokenResult;
-
-	public Claims $userInfo;
-
-	public function __construct() {
-		$this->authenticationResult = new AuthenticationResult('mock-id-token', new Claims([ 'sub' => 'mock-user' ]));
-		$this->tokenResult          = new TokenResult([ 'access_token' => 'mock-access-token' ]);
-		$this->userInfo             = new Claims([ 'sub' => 'mock-user' ]);
+	public function __construct(
+		public string $redirectUrl = 'https://example.com/mock-authorize',
+		public AuthenticationResult $authenticationResult = new AuthenticationResult('mock-id-token', new Claims([ 'sub' => 'mock-user' ])),
+		public ?AuthenticationFailedException $authenticationException = null,
+		public TokenResult $tokenResult = new TokenResult([ 'access_token' => 'mock-access-token' ]),
+		public Claims $userInfo = new Claims([ 'sub' => 'mock-user' ]),
+	) {
 	}
 
 	public function buildAuthorizationCodeRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect {

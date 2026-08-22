@@ -7,13 +7,15 @@ use Henderjon\Oidc\Exceptions\HttpTransportException;
 use Henderjon\Oidc\Exceptions\UserInfoRequestException;
 use Henderjon\Oidc\Interfaces\TokenGrantClientInterface;
 use Henderjon\Oidc\Interfaces\UserInfoClientInterface;
-use Psr\Clock\ClockInterface;
-use Psr\SimpleCache\CacheInterface;
 
 /**
  * The real engine behind every capability interface in this module.
  * Composes (never extends) a handful of small, independently-testable
  * collaborators - nothing here talks to curl, JWKS, or a cache directly.
+ *
+ * Takes every collaborator as a constructor argument rather than building
+ * any of them itself - OpenIDConnectClientFactory is where they get
+ * assembled. Construct this class directly only from a factory or test code.
  *
  * UserInfoClientInterface already extends AuthorizationFlowClientInterface,
  * so implementing it here covers both without listing the base interface
@@ -25,23 +27,14 @@ final class OpenIDConnectClient implements
 
 	private const DEFAULT_SCOPE = 'openid';
 
-	private AuthorizationStateStore $stateStore;
-	private ProviderMetadataResolver $providerMetadataResolver;
-	private IdTokenVerifier $idTokenVerifier;
-	private ClaimsValidator $claimsValidator;
-	private TokenEndpointClient $tokenEndpointClient;
-
 	public function __construct(
-		CacheInterface $stateCache,
-		string $cacheKey = "",
-		private readonly HttpFetcherInterface $httpFetcher = new CurlHttpFetcher,
-		ClockInterface $clock = new CurrentClock,
+		private readonly AuthorizationStateStore $stateStore,
+		private readonly ProviderMetadataResolver $providerMetadataResolver,
+		private readonly IdTokenVerifier $idTokenVerifier,
+		private readonly ClaimsValidator $claimsValidator,
+		private readonly TokenEndpointClient $tokenEndpointClient,
+		private readonly HttpFetcherInterface $httpFetcher,
 	) {
-		$this->stateStore               = new AuthorizationStateStore($stateCache, $cacheKey);
-		$this->providerMetadataResolver = new ProviderMetadataResolver($this->httpFetcher);
-		$this->idTokenVerifier          = new IdTokenVerifier($this->httpFetcher, $clock);
-		$this->claimsValidator          = new ClaimsValidator;
-		$this->tokenEndpointClient      = new TokenEndpointClient($this->httpFetcher, $this->providerMetadataResolver);
 	}
 
 	public function buildAuthorizationCodeRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect {
