@@ -14,8 +14,8 @@ class AuthorizationStateStoreTest extends TestCase {
 	public function testStartGeneratesStateAndNonce(): void {
 		$flow = $this->makeStore()->start();
 
-		$this->assertNotNull($flow->state);
-		$this->assertNotNull($flow->nonce);
+		$this->assertNotSame('', $flow->state);
+		$this->assertNotSame('', $flow->nonce);
 		$this->assertNotSame($flow->state, $flow->nonce);
 	}
 
@@ -23,29 +23,25 @@ class AuthorizationStateStoreTest extends TestCase {
 		$store   = $this->makeStore();
 		$started = $store->start();
 
-		$consumed = $store->consume();
+		$consumed = $store->consume($started->state);
 
+		$this->assertNotNull($consumed);
 		$this->assertSame($started->state, $consumed->state);
 		$this->assertSame($started->nonce, $consumed->nonce);
 	}
 
 	public function testConsumeClearsTheStoredValues(): void {
-		$store = $this->makeStore();
-		$store->start();
+		$store   = $this->makeStore();
+		$started = $store->start();
 
-		$store->consume();
-		$second = $store->consume();
+		$store->consume($started->state);
+		$second = $store->consume($started->state);
 
-		$this->assertNull($second->state);
-		$this->assertNull($second->nonce);
+		$this->assertNull($second);
 	}
 
-	public function testConsumeWithoutStartReturnsAllNull(): void {
-		$consumed = $this->makeStore()->consume();
-
-		$this->assertNull($consumed->state);
-		$this->assertNull($consumed->nonce);
-		$this->assertNull($consumed->codeVerifier);
+	public function testConsumeWithoutAMatchingStartReturnsNull(): void {
+		$this->assertNull($this->makeStore()->consume('never-started'));
 	}
 
 	public function testStartWithoutACodeVerifierLeavesItNull(): void {
@@ -58,20 +54,10 @@ class AuthorizationStateStoreTest extends TestCase {
 		$store   = $this->makeStore();
 		$started = $store->start(codeVerifier: 'the-code-verifier');
 
-		$consumed = $store->consume();
+		$consumed = $store->consume($started->state);
 
 		$this->assertSame('the-code-verifier', $started->codeVerifier);
-		$this->assertSame('the-code-verifier', $consumed->codeVerifier);
-	}
-
-	public function testConsumeClearsTheStoredCodeVerifier(): void {
-		$store = $this->makeStore();
-		$store->start(codeVerifier: 'the-code-verifier');
-
-		$store->consume();
-		$second = $store->consume();
-
-		$this->assertNull($second->codeVerifier);
+		$this->assertSame('the-code-verifier', $consumed?->codeVerifier);
 	}
 
 	public function testEachStartProducesADifferentStateAndNonce(): void {
@@ -84,6 +70,30 @@ class AuthorizationStateStoreTest extends TestCase {
 		$this->assertNotSame($first->nonce, $second->nonce);
 	}
 
+	public function testConcurrentStartsOnTheSameStoreDoNotCollide(): void {
+		$store = $this->makeStore();
+
+		$first  = $store->start();
+		$second = $store->start();
+
+		$consumedFirst  = $store->consume($first->state);
+		$consumedSecond = $store->consume($second->state);
+
+		$this->assertSame($first->nonce, $consumedFirst?->nonce);
+		$this->assertSame($second->nonce, $consumedSecond?->nonce);
+	}
+
+	public function testConsumingOneOfTwoConcurrentStartsLeavesTheOtherIntact(): void {
+		$store = $this->makeStore();
+
+		$first  = $store->start();
+		$second = $store->start();
+
+		$store->consume($first->state);
+
+		$this->assertSame($second->nonce, $store->consume($second->state)?->nonce);
+	}
+
 	public function testDifferentCacheKeysDoNotCollideOnASharedCache(): void {
 		$cache = new InMemoryCache;
 		$userA = new AuthorizationStateStore($cache, 'user-a');
@@ -92,13 +102,18 @@ class AuthorizationStateStoreTest extends TestCase {
 		$startedA = $userA->start();
 		$startedB = $userB->start();
 
-		$consumedA = $userA->consume();
-		$consumedB = $userB->consume();
+		$consumedA = $userA->consume($startedA->state);
+		$consumedB = $userB->consume($startedB->state);
 
-		$this->assertSame($startedA->state, $consumedA->state);
-		$this->assertSame($startedA->nonce, $consumedA->nonce);
-		$this->assertSame($startedB->state, $consumedB->state);
-		$this->assertSame($startedB->nonce, $consumedB->nonce);
+		$this->assertSame($startedA->nonce, $consumedA?->nonce);
+		$this->assertSame($startedB->nonce, $consumedB?->nonce);
+	}
+
+	public function testConsumeReturnsNullWhenTheCachedValueIsNotTheExpectedShape(): void {
+		$cache = new InMemoryCache;
+		$cache->set('henderjon.oidc.flow.the-cache-key.some-state', 'not-an-array', 600);
+
+		$this->assertNull($this->makeStore()->consume('some-state'));
 	}
 
 }

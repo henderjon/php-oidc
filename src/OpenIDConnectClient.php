@@ -45,10 +45,13 @@ final class OpenIDConnectClient implements
 		OpenIDConnectClientConfig $config,
 		IncomingAuthorizationResponse $response,
 	): AuthenticationResult {
-		$flow = $this->stateStore->consume();
+		$flow = $this->consumeFlow($response);
 
 		$this->assertNoProviderError($response);
-		$this->assertStateMatches($response, $flow);
+
+		if( $flow === null ) {
+			throw new AuthenticationFailedException('Unable to verify state');
+		}
 
 		if( $response->code === null ) {
 			throw new AuthenticationFailedException('Callback is missing the authorization code');
@@ -77,10 +80,13 @@ final class OpenIDConnectClient implements
 		OpenIDConnectClientConfig $config,
 		IncomingAuthorizationResponse $response,
 	): AuthenticationResult {
-		$flow = $this->stateStore->consume();
+		$flow = $this->consumeFlow($response);
 
 		$this->assertNoProviderError($response);
-		$this->assertStateMatches($response, $flow);
+
+		if( $flow === null ) {
+			throw new AuthenticationFailedException('Unable to verify state');
+		}
 
 		if( $response->idToken === null ) {
 			throw new AuthenticationFailedException('Callback is missing the id_token');
@@ -167,12 +173,13 @@ final class OpenIDConnectClient implements
 	}
 
 	/**
-	 * @throws AuthenticationFailedException
+	 * Consumes the attempt identified by the callback's `state`, if any. Returns null
+	 * when there is no state to look up, or no attempt matches it - the caller must
+	 * fail closed either way; it is not this method's job to decide which message to
+	 * throw, since a provider error should be reported ahead of a generic state failure.
 	 */
-	private function assertStateMatches( IncomingAuthorizationResponse $response, FlowState $flow ): void {
-		if( $flow->state === null || $response->state !== $flow->state ) {
-			throw new AuthenticationFailedException('Unable to verify state');
-		}
+	private function consumeFlow( IncomingAuthorizationResponse $response ): ?FlowState {
+		return $response->state !== null ? $this->stateStore->consume($response->state) : null;
 	}
 
 	/**
@@ -182,7 +189,7 @@ final class OpenIDConnectClient implements
 	private function verifyAndValidateIdToken(
 		OpenIDConnectClientConfig $config,
 		string $idToken,
-		?string $expectedNonce,
+		string $expectedNonce,
 		?string $accessToken,
 		array|string|null $audience,
 	): Claims {
@@ -196,14 +203,6 @@ final class OpenIDConnectClient implements
 		}
 
 		$this->claimsValidator->validateIssuer($claims, $issuer);
-
-		// A nonce is always generated and sent by buildRedirect() for every flow, so a missing
-		// $expectedNonce here means the state store lost it (or never had it) - that must fail
-		// closed, not silently skip the check, same as the audience fix below.
-		if( $expectedNonce === null ) {
-			throw new AuthenticationFailedException('Unable to verify state');
-		}
-
 		$this->claimsValidator->validateNonce($claims, $expectedNonce);
 
 		// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just

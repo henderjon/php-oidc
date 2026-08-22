@@ -14,24 +14,28 @@ use Psr\SimpleCache\CacheInterface;
  * they want (a real cache, or a plain in-memory one in tests) instead of
  * subclassing anything.
  *
- * One store tracks exactly one in-flight attempt at a time. When the
- * injected cache is shared across users - the common case for a load
- * balanced application backed by something like memcache - pass a
- * `cacheKeySuffix` derived from the current user's session, not a static
- * value, or two users authenticating at the same time will overwrite each
- * other's state, nonce, and code_verifier. A static suffix only separates
- * one SSO integration from another; it does nothing to separate concurrent
- * users of the same integration.
+ * Each attempt gets its own cache entry, keyed by the random `state` that
+ * attempt generated - not a shared slot. `start()` returns that state as
+ * part of the FlowState, and the caller sends it out with the redirect;
+ * `consume()` takes the state the provider echoed back and looks up that
+ * exact entry. This is what lets any number of attempts - concurrent users
+ * sharing one cache, or one user with two tabs open - run at once without
+ * overwriting each other, and it is why `consume()` needs the state handed
+ * back to it rather than reading a fixed key.
+ *
+ * `cacheKeySuffix` is now just a namespace, for keeping one integration's
+ * keys visually distinct from another's when they share a cache (or cache
+ * dump) - not a correctness requirement. Two stores with the same suffix,
+ * or no suffix at all, will not collide with each other; the state itself
+ * already guarantees that.
  */
 final class AuthorizationStateStore {
 
-	private const STATE_KEY = 'henderjon.oidc.state';
-	private const NONCE_KEY = 'henderjon.oidc.nonce';
-	private const CODE_VERIFIER_KEY = 'henderjon.oidc.code_verifier';
+	private const FLOW_KEY_PREFIX = 'henderjon.oidc.flow';
 
 	public function __construct(
 		private readonly CacheInterface $cache,
-		private readonly string $cacheKeySuffix = "", // scope this to the current user's session when the cache is shared across users
+		private readonly string $cacheKeySuffix = "",
 		private readonly int $ttlSeconds = 600,
 	) {
 	}
@@ -43,34 +47,34 @@ final class AuthorizationStateStore {
 		$state = $this->randomToken($length);
 		$nonce = $this->randomToken($length);
 
-		$this->cache->set($this->stateKey(), $state, $this->ttlSeconds);
-		$this->cache->set($this->nonceKey(), $nonce, $this->ttlSeconds);
-
-		if( $codeVerifier !== null ) {
-			$this->cache->set($this->codeVerifierKey(), $codeVerifier, $this->ttlSeconds);
-		}
+		$this->cache->set($this->flowKey($state), [
+			'nonce'         => $nonce,
+			'code_verifier' => $codeVerifier,
+		], $this->ttlSeconds);
 
 		return new FlowState($state, $nonce, $codeVerifier);
 	}
 
 	/**
-	 * Reads and clears the persisted state/nonce. Any field that was never
-	 * stored, or was already consumed, comes back null.
+	 * Looks up and clears the attempt started under the given state. Returns
+	 * null if no such attempt exists - it was never started, already
+	 * consumed, expired, or the cached entry is not the shape this class
+	 * wrote - the caller must treat all of those the same way: reject the
+	 * callback.
 	 */
-	public function consume(): FlowState {
-		$state = $this->cache->get($this->stateKey());
-		$nonce = $this->cache->get($this->nonceKey());
-		$codeVerifier = $this->cache->get($this->codeVerifierKey());
+	public function consume(string $state): ?FlowState {
+		$key  = $this->flowKey($state);
+		$flow = $this->cache->get($key);
 
-		$this->cache->delete($this->stateKey());
-		$this->cache->delete($this->nonceKey());
-		$this->cache->delete($this->codeVerifierKey());
+		$this->cache->delete($key);
 
-		return new FlowState(
-			is_string($state) ? $state : null,
-			is_string($nonce) ? $nonce : null,
-			is_string($codeVerifier) ? $codeVerifier : null,
-		);
+		if( !is_array($flow) || !is_string($flow['nonce'] ?? null) ) {
+			return null;
+		}
+
+		$codeVerifier = $flow['code_verifier'] ?? null;
+
+		return new FlowState($state, $flow['nonce'], is_string($codeVerifier) ? $codeVerifier : null);
 	}
 
 	/**
@@ -80,16 +84,8 @@ final class AuthorizationStateStore {
 		return bin2hex(random_bytes($length));
 	}
 
-	private function stateKey(): string {
-		return self::STATE_KEY . ".{$this->cacheKeySuffix}";
-	}
-
-	private function nonceKey(): string {
-		return self::NONCE_KEY . ".{$this->cacheKeySuffix}";
-	}
-
-	private function codeVerifierKey(): string {
-		return self::CODE_VERIFIER_KEY . ".{$this->cacheKeySuffix}";
+	private function flowKey(string $state): string {
+		return self::FLOW_KEY_PREFIX . ".{$this->cacheKeySuffix}.{$state}";
 	}
 
 }

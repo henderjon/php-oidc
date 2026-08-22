@@ -224,35 +224,61 @@ class OpenIDConnectClientTest extends TestCase {
 		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([ 'code' => 'the-code', 'state' => $params['state'] ]));
 	}
 
-	public function testCompleteAuthorizationCodeFlowFailsClosedWhenTheStateStoreLostTheNonce(): void {
-		$fixture = new RsaKeyFixture;
+	public function testCompleteAuthorizationCodeFlowFailsClosedWhenTheStoredFlowIsCorrupted(): void {
 		$fetcher = new FakeHttpFetcher;
-		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
-		$cache  = new InMemoryCache;
-		$client = $this->makeClient($fetcher, $cache);
+		$cache   = new InMemoryCache;
+		$client  = $this->makeClient($fetcher, $cache);
 
 		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
 		$params   = $this->queryParams($redirect->url);
 
-		// Simulate the state store losing just the nonce entry (e.g. an eviction under a
-		// non-session-scoped cache) while the state entry survives.
-		$cache->delete('henderjon.oidc.nonce.the-cache-key');
-
-		$idToken = $fixture->sign([
-			'iss' => self::ISSUER,
-			'aud' => self::CLIENT_ID,
-			'sub' => 'user-1',
-			// No nonce claim needed here - the check must fail before this claim is even read,
-			// since $expectedNonce itself came back null.
-		]);
-		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
-			'access_token' => 'the-access-token',
-			'id_token'     => $idToken,
-		], JSON_THROW_ON_ERROR), 200));
+		// Simulate a malformed cache entry (e.g. written by an incompatible version, or a
+		// key collision) rather than a clean miss - consume() must still fail closed instead
+		// of trusting a value that is not the shape it wrote.
+		$cache->set("henderjon.oidc.flow.the-cache-key.{$params['state']}", 'not-an-array', 600);
 
 		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('Unable to verify state');
 
 		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([ 'code' => 'the-code', 'state' => $params['state'] ]));
+	}
+
+	public function testTwoConcurrentAuthorizationAttemptsOnTheSameSessionDoNotCollide(): void {
+		$fetcher = new FakeHttpFetcher;
+		$client  = $this->makeClient($fetcher);
+
+		$firstParams  = $this->queryParams($client->buildAuthorizationCodeRedirect($this->config())->url);
+		$secondParams = $this->queryParams($client->buildAuthorizationCodeRedirect($this->config())->url);
+
+		$this->assertNotSame($firstParams['state'], $secondParams['state']);
+
+		// No id_token in the response, so completion always fails past this point for both
+		// calls - that failure (not "Unable to verify state") is what proves each call made
+		// it through its own state/nonce lookup.
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+		], JSON_THROW_ON_ERROR), 200));
+
+		// Complete the second tab first. If the two attempts shared one slot, this would
+		// have already consumed (or overwritten) the first tab's entry.
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'code'  => 'the-code',
+				'state' => $secondParams['state'],
+			]));
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertNotSame('Unable to verify state', $e->getMessage());
+		}
+
+		// The first tab's attempt must still be there and independently completable.
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'code'  => 'the-code',
+				'state' => $firstParams['state'],
+			]));
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertNotSame('Unable to verify state', $e->getMessage());
+		}
 	}
 
 	public function testCompleteAuthorizationCodeFlowWithWrongStateFails(): void {
