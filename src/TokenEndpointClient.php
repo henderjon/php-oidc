@@ -61,14 +61,14 @@ final class TokenEndpointClient {
 
 		$decoded = json_decode($response->body, true);
 
-		if( !is_array($decoded) ) {
-			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON");
+		if( $response->status !== 200 ) {
+			$error = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : "HTTP {$response->status}";
+
+			throw new TokenRequestException("Token request failed: {$error}", $response->status, $response->body);
 		}
 
-		if( $response->status !== 200 ) {
-			$error = is_string($decoded['error'] ?? null) ? $decoded['error'] : "HTTP {$response->status}";
-
-			throw new TokenRequestException("Token request failed: {$error}");
+		if( !is_array($decoded) ) {
+			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body);
 		}
 
 		return new TokenResult($decoded);

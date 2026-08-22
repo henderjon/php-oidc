@@ -69,13 +69,31 @@ class TokenEndpointClientTest extends TestCase {
 		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config());
 	}
 
+	public function testThrowsOnNonSuccessStatusWithNonJsonBodyStillReportsTheStatusAndBody(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('invalid_client', 400));
+
+		try {
+			$this->makeClient($fetcher)->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException $e ) {
+			$this->assertStringContainsString('400', $e->getMessage());
+			$this->assertSame(400, $e->getHttpStatus());
+			$this->assertSame('invalid_client', $e->getRawBody());
+		}
+	}
+
 	public function testThrowsOnInvalidJson(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('not json', 200));
 
-		$this->expectException(TokenRequestException::class);
-
-		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config());
+		try {
+			$this->makeClient($fetcher)->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException $e ) {
+			$this->assertSame(200, $e->getHttpStatus());
+			$this->assertSame('not json', $e->getRawBody());
+		}
 	}
 
 	public function testPublicClientOmitsAuthorizationHeader(): void {
