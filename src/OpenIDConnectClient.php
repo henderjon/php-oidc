@@ -1,0 +1,226 @@
+<?php
+
+namespace Henderjon\Oidc;
+
+use Henderjon\Oidc\Exceptions\AuthenticationFailedException;
+use Henderjon\Oidc\Exceptions\HttpTransportException;
+use Henderjon\Oidc\Exceptions\UserInfoRequestException;
+use Henderjon\Oidc\Interfaces\TokenGrantClientInterface;
+use Henderjon\Oidc\Interfaces\UserInfoClientInterface;
+use Psr\Clock\ClockInterface;
+use Psr\SimpleCache\CacheInterface;
+
+/**
+ * The real engine behind every capability interface in this module.
+ * Composes (never extends) a handful of small, independently-testable
+ * collaborators - nothing here talks to curl, JWKS, or a cache directly.
+ *
+ * UserInfoClientInterface already extends AuthorizationFlowClientInterface,
+ * so implementing it here covers both without listing the base interface
+ * separately.
+ */
+final class OpenIDConnectClient implements
+	TokenGrantClientInterface,
+	UserInfoClientInterface {
+
+	private const DEFAULT_SCOPE = 'openid';
+
+	private AuthorizationStateStore $stateStore;
+	private ProviderMetadataResolver $providerMetadataResolver;
+	private IdTokenVerifier $idTokenVerifier;
+	private ClaimsValidator $claimsValidator;
+	private TokenEndpointClient $tokenEndpointClient;
+
+	public function __construct(
+		CacheInterface $stateCache,
+		string $cacheKey = "",
+		private readonly HttpFetcherInterface $httpFetcher = new CurlHttpFetcher,
+		ClockInterface $clock = new CurrentClock,
+	) {
+		$this->stateStore               = new AuthorizationStateStore($stateCache, $cacheKey);
+		$this->providerMetadataResolver = new ProviderMetadataResolver($this->httpFetcher);
+		$this->idTokenVerifier          = new IdTokenVerifier($this->httpFetcher, $clock);
+		$this->claimsValidator          = new ClaimsValidator;
+		$this->tokenEndpointClient      = new TokenEndpointClient($this->httpFetcher, $this->providerMetadataResolver);
+	}
+
+	public function buildAuthorizationCodeRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect {
+		return $this->buildRedirect($config, responseType: 'code');
+	}
+
+	public function completeAuthorizationCodeFlow(
+		OpenIDConnectClientConfig $config,
+		IncomingAuthorizationResponse $response,
+	): AuthenticationResult {
+		$flow = $this->stateStore->consume();
+
+		$this->assertNoProviderError($response);
+		$this->assertStateMatches($response, $flow);
+
+		if( $response->code === null ) {
+			throw new AuthenticationFailedException('Callback is missing the authorization code');
+		}
+
+		$tokenResult = $this->tokenEndpointClient->exchangeAuthorizationCode($config, $response->code);
+
+		if( $tokenResult->idToken === null ) {
+			throw new AuthenticationFailedException('Token response is missing id_token');
+		}
+
+		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience);
+
+		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken);
+	}
+
+	public function buildImplicitFlowRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect {
+		return $this->buildRedirect($config, responseType: 'id_token');
+	}
+
+	public function completeImplicitFlow(
+		OpenIDConnectClientConfig $config,
+		IncomingAuthorizationResponse $response,
+	): AuthenticationResult {
+		$flow = $this->stateStore->consume();
+
+		$this->assertNoProviderError($response);
+		$this->assertStateMatches($response, $flow);
+
+		if( $response->idToken === null ) {
+			throw new AuthenticationFailedException('Callback is missing the id_token');
+		}
+
+		$claims = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience);
+
+		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
+	}
+
+	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [] ): TokenResult {
+		return $this->tokenEndpointClient->requestClientCredentialsToken($config, $scopes);
+	}
+
+	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken ): Claims {
+		$endpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::USERINFO_ENDPOINT);
+
+		try {
+			$response = $this->httpFetcher->fetch($endpoint, null, [
+				'Authorization' => "Bearer {$accessToken}",
+				'Accept'        => 'application/json',
+			], $config->verifyTls);
+		} catch( HttpTransportException $e ) {
+			throw new UserInfoRequestException("Unable to reach userinfo endpoint {$endpoint}", previous: $e);
+		}
+
+		if( $response->status !== 200 ) {
+			throw new UserInfoRequestException("Userinfo request failed with HTTP {$response->status}");
+		}
+
+		if( $response->contentType === 'application/jwt' ) {
+			return $this->verifySignedUserInfo($config, $response->body);
+		}
+
+		$decoded = json_decode($response->body, true);
+
+		if( !is_array($decoded) ) {
+			throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned invalid JSON");
+		}
+
+		return new Claims($decoded);
+	}
+
+	private function buildRedirect( OpenIDConnectClientConfig $config, string $responseType ): AuthorizationRedirect {
+		$authorizationEndpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
+		$flow                  = $this->stateStore->start();
+
+		$params = array_merge($config->extraAuthParams, [
+			'response_type' => $responseType,
+			'client_id'     => $config->clientId,
+			'redirect_uri'  => $config->redirectUrl,
+			'scope'         => implode(' ', array_unique([ self::DEFAULT_SCOPE, ...$config->scopes ])),
+			'state'         => $flow->state,
+			'nonce'         => $flow->nonce,
+		]);
+
+		return new AuthorizationRedirect($this->appendQuery($authorizationEndpoint, $params));
+	}
+
+	/**
+	 * @param array<string,string> $params
+	 */
+	private function appendQuery( string $url, array $params ): string {
+		$separator = str_contains($url, '?') ? '&' : '?';
+
+		return $url . $separator . http_build_query($params);
+	}
+
+	/**
+	 * @throws AuthenticationFailedException
+	 */
+	private function assertNoProviderError( IncomingAuthorizationResponse $response ): void {
+		$summary = $response->errorSummary();
+
+		if( $summary !== null ) {
+			throw new AuthenticationFailedException("Provider returned an error: {$summary}");
+		}
+	}
+
+	/**
+	 * @throws AuthenticationFailedException
+	 */
+	private function assertStateMatches( IncomingAuthorizationResponse $response, FlowState $flow ): void {
+		if( $flow->state === null || $response->state !== $flow->state ) {
+			throw new AuthenticationFailedException('Unable to verify state');
+		}
+	}
+
+	/**
+	 * @param list<string>|string|null $audience
+	 * @throws AuthenticationFailedException
+	 */
+	private function verifyAndValidateIdToken(
+		OpenIDConnectClientConfig $config,
+		string $idToken,
+		?string $expectedNonce,
+		?string $accessToken,
+		array|string|null $audience,
+	): Claims {
+		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
+		$claims  = $this->idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $accessToken, $config->verifyTls);
+
+		$issuer = $config->issuer ?? $config->providerUrl;
+
+		if( $issuer === null ) {
+			throw new AuthenticationFailedException('No issuer configured to validate the ID token against');
+		}
+
+		$this->claimsValidator->validateIssuer($claims, $issuer);
+
+		// A nonce is always generated and sent by buildRedirect() for every flow, so a missing
+		// $expectedNonce here means the state store lost it (or never had it) - that must fail
+		// closed, not silently skip the check, same as the audience fix below.
+		if( $expectedNonce === null ) {
+			throw new AuthenticationFailedException('Unable to verify state');
+		}
+
+		$this->claimsValidator->validateNonce($claims, $expectedNonce);
+
+		// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just
+		// defaults to clientId unless the config overrides it with a distinct expected audience.
+		$this->claimsValidator->validateAudience($claims, $audience ?? $config->clientId);
+
+		return $claims;
+	}
+
+	/**
+	 * @throws UserInfoRequestException
+	 */
+	private function verifySignedUserInfo( OpenIDConnectClientConfig $config, string $jwt ): Claims {
+		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
+
+		try {
+			return $this->idTokenVerifier->verify($jwt, $jwksUri, $config->clientSecret, verifyTls: $config->verifyTls);
+		} catch( AuthenticationFailedException $e ) {
+			throw new UserInfoRequestException('Signed userinfo response failed verification', previous: $e);
+		}
+	}
+
+}
