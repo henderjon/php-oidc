@@ -14,6 +14,8 @@ use PHPUnit\Framework\TestCase;
 class IdTokenVerifierTest extends TestCase {
 
 	private const JWKS_URI = 'https://issuer.example.com/jwks';
+	private const CLIENT_SECRET       = 'test-client-secret-0123456789abcdef';
+	private const WRONG_CLIENT_SECRET = 'wrong-client-secret-0123456789abcdef';
 
 	private function fetcherWithJwks( RsaKeyFixture $fixture ): FakeHttpFetcher {
 		$fetcher = new FakeHttpFetcher;
@@ -43,39 +45,39 @@ class IdTokenVerifierTest extends TestCase {
 	}
 
 	public function testVerifyHs256TokenAgainstClientSecret(): void {
-		$idToken  = JWT::encode([ 'sub' => 'user-1' ], 'the-client-secret', 'HS256');
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
 
-		$claims = $verifier->verify($idToken, self::JWKS_URI, 'the-client-secret');
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
 
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
 
 	public function testVerifyHs256TokenWithWrongSecretFails(): void {
-		$idToken  = JWT::encode([ 'sub' => 'user-1' ], 'the-real-secret', 'HS256');
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
 
 		$this->expectException(AuthenticationFailedException::class);
 
-		$verifier->verify($idToken, self::JWKS_URI, 'the-wrong-secret');
+		$verifier->verify($idToken, self::JWKS_URI, self::WRONG_CLIENT_SECRET);
 	}
 
 	public function testVerifyExpiredTokenFails(): void {
-		$idToken  = JWT::encode([ 'sub' => 'user-1', 'exp' => 1000 ], 'the-client-secret', 'HS256');
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'exp' => 1000 ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher, new FixedClock(new \DateTimeImmutable('@2000')), leewaySeconds: 0);
 
 		$this->expectException(AuthenticationFailedException::class);
 
-		$verifier->verify($idToken, self::JWKS_URI, 'the-client-secret');
+		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
 	}
 
 	public function testInjectedClockControlsExpiryEvaluationInsteadOfWallClock(): void {
 		// exp is 1000, real wall-clock time() is far past that - but the injected clock says "now" is 999,
 		// which is still before exp. If the injected clock were not actually used, this would throw.
-		$idToken  = JWT::encode([ 'sub' => 'user-1', 'exp' => 1000 ], 'the-client-secret', 'HS256');
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'exp' => 1000 ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher, new FixedClock(new \DateTimeImmutable('@999')), leewaySeconds: 0);
 
-		$claims = $verifier->verify($idToken, self::JWKS_URI, 'the-client-secret');
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
 
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
@@ -154,28 +156,28 @@ class IdTokenVerifierTest extends TestCase {
 		$digest       = hash('sha256', $accessToken, true);
 		$expectedHash = JWT::urlsafeB64Encode(substr($digest, 0, 16));
 
-		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => $expectedHash ], 'the-client-secret', 'HS256');
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => $expectedHash ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
 
-		$claims = $verifier->verify($idToken, self::JWKS_URI, 'the-client-secret', accessToken: $accessToken);
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, accessToken: $accessToken);
 
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
 
 	public function testVerifyWithMismatchedAccessTokenHashFails(): void {
-		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => 'not-the-right-hash' ], 'the-client-secret', 'HS256');
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => 'not-the-right-hash' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
 
 		$this->expectException(AuthenticationFailedException::class);
 
-		$verifier->verify($idToken, self::JWKS_URI, 'the-client-secret', accessToken: 'the-access-token');
+		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, accessToken: 'the-access-token');
 	}
 
 	public function testVerifyWithAtHashButNoAccessTokenSkipsTheCheck(): void {
-		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => 'irrelevant' ], 'the-client-secret', 'HS256');
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => 'irrelevant' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
 
-		$claims = $verifier->verify($idToken, self::JWKS_URI, 'the-client-secret');
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
 
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
