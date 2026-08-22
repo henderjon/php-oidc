@@ -109,22 +109,13 @@ class OpenIDConnectClientTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
 		$client = $this->makeClient($fetcher);
-		$config = $this->config();
-		$config = new OpenIDConnectClientConfig(
-			clientId: $config->clientId,
-			clientSecret: $config->clientSecret,
-			redirectUrl: $config->redirectUrl,
-			issuer: $config->issuer,
-			endpointOverrides: $config->endpointOverrides,
-			pkce: PkceMode::Required,
-		);
+		$config = $this->config()->withPkce(PkceMode::Required);
 
 		$redirect = $client->buildAuthorizationCodeRedirect($config);
 		$params   = $this->queryParams($redirect->url);
 
-		$this->assertNotNull($params['code_challenge'] ?? null);
 		$this->assertSame('S256', $params['code_challenge_method']);
-		$this->assertGreaterThanOrEqual(43, strlen($params['code_challenge']));
+		$this->assertSame(43, strlen($params['code_challenge']));
 
 		$idToken = $fixture->sign([
 			'iss'   => self::ISSUER,
@@ -143,11 +134,67 @@ class OpenIDConnectClientTest extends TestCase {
 		]));
 
 		parse_str((string)$fetcher->requests[0]['body'], $tokenParams);
-		$this->assertIsString($tokenParams['code_verifier'] ?? null);
-		$this->assertSame(
-			$params['code_challenge'],
-			rtrim(strtr(base64_encode(hash('sha256', $tokenParams['code_verifier'], true)), '+/', '-_'), '='),
-		);
+		$this->assertSame($params['code_challenge'], Pkce::challengeFor($tokenParams['code_verifier']));
+		$this->assertSame('user-1', $result->claims->get('sub'));
+	}
+
+	public function testDisabledPkceOmitsCodeChallengeFromRedirect(): void {
+		$fetcher = new FakeHttpFetcher;
+		$client  = $this->makeClient($fetcher);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$this->assertArrayNotHasKey('code_challenge', $params);
+		$this->assertArrayNotHasKey('code_challenge_method', $params);
+	}
+
+	public function testRequiredPkceFailsClosedWhenTheVerifierIsMissingAtCompletion(): void {
+		$fetcher = new FakeHttpFetcher;
+		$client  = $this->makeClient($fetcher);
+
+		// Built without PKCE, so no verifier was ever stored - simulates the verifier
+		// having been evicted from the cache by the time the callback comes back.
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('Unable to verify PKCE code verifier');
+
+		$client->completeAuthorizationCodeFlow($this->config()->withPkce(PkceMode::Required), new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+	}
+
+	public function testOptionalPkceProceedsWithoutAVerifierWhenNoneWasStored(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+
+		// Same simulated eviction as the Required case above, but Optional must fail open.
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'sub'   => 'user-1',
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$result = $client->completeAuthorizationCodeFlow($this->config()->withPkce(PkceMode::Optional), new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+
+		parse_str((string)$fetcher->requests[0]['body'], $tokenParams);
+		$this->assertArrayNotHasKey('code_verifier', $tokenParams);
 		$this->assertSame('user-1', $result->claims->get('sub'));
 	}
 

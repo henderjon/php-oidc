@@ -121,4 +121,11 @@ final class OpenIDConnectClientConfig {
 		);
 	}
 
+	public function withPkce( PkceMode $pkce ): self {
+		return new self(
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $pkce,
+		);
+	}
+
 }

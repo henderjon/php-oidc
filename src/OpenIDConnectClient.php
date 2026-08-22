@@ -126,7 +126,7 @@ final class OpenIDConnectClient implements
 
 	private function buildRedirect( OpenIDConnectClientConfig $config, string $responseType ): AuthorizationRedirect {
 		$authorizationEndpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
-		$codeVerifier          = $responseType === 'code' && $config->pkce !== PkceMode::Disabled ? $this->createCodeVerifier() : null;
+		$codeVerifier          = $responseType === 'code' && $config->pkce !== PkceMode::Disabled ? Pkce::generateVerifier() : null;
 		$flow                  = $this->stateStore->start(codeVerifier: $codeVerifier);
 
 		$params = array_merge($config->extraAuthParams, [
@@ -139,19 +139,11 @@ final class OpenIDConnectClient implements
 		]);
 
 		if( $codeVerifier !== null ) {
-			$params['code_challenge']        = $this->codeChallenge($codeVerifier);
+			$params['code_challenge']        = Pkce::challengeFor($codeVerifier);
 			$params['code_challenge_method'] = 'S256';
 		}
 
 		return new AuthorizationRedirect($this->appendQuery($authorizationEndpoint, $params));
-	}
-
-	private function createCodeVerifier(): string {
-		return rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
-	}
-
-	private function codeChallenge( string $codeVerifier ): string {
-		return rtrim(strtr(base64_encode(hash('sha256', $codeVerifier, true)), '+/', '-_'), '=');
 	}
 
 	/**

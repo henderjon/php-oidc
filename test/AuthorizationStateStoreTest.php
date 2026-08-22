@@ -45,6 +45,33 @@ class AuthorizationStateStoreTest extends TestCase {
 
 		$this->assertNull($consumed->state);
 		$this->assertNull($consumed->nonce);
+		$this->assertNull($consumed->codeVerifier);
+	}
+
+	public function testStartWithoutACodeVerifierLeavesItNull(): void {
+		$flow = $this->makeStore()->start();
+
+		$this->assertNull($flow->codeVerifier);
+	}
+
+	public function testConsumeReturnsTheCodeVerifierThatWasStarted(): void {
+		$store   = $this->makeStore();
+		$started = $store->start(codeVerifier: 'the-code-verifier');
+
+		$consumed = $store->consume();
+
+		$this->assertSame('the-code-verifier', $started->codeVerifier);
+		$this->assertSame('the-code-verifier', $consumed->codeVerifier);
+	}
+
+	public function testConsumeClearsTheStoredCodeVerifier(): void {
+		$store = $this->makeStore();
+		$store->start(codeVerifier: 'the-code-verifier');
+
+		$store->consume();
+		$second = $store->consume();
+
+		$this->assertNull($second->codeVerifier);
 	}
 
 	public function testEachStartProducesADifferentStateAndNonce(): void {
