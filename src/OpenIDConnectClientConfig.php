@@ -34,41 +34,42 @@ final class OpenIDConnectClientConfig {
 		public readonly array $endpointOverrides = [],
 		public readonly array $extraAuthParams = [],
 		public readonly bool $verifyTls = true,
+		public readonly PkceMode $pkce = PkceMode::Disabled,
 	) {
 	}
 
 	public function withClientId( string $clientId ): self {
 		return new self(
 			$clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
 		);
 	}
 
 	public function withClientSecret( string $clientSecret ): self {
 		return new self(
 			$this->clientId, $clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
 		);
 	}
 
 	public function withRedirectUrl( string $redirectUrl ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
 		);
 	}
 
 	public function withProviderUrl( ?string $providerUrl ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
 		);
 	}
 
 	public function withIssuer( ?string $issuer ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
 		);
 	}
 
@@ -79,7 +80,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			array_values(array_unique([ ...$this->scopes, ...$scopes ])),
-			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls,
+			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
 		);
 	}
 
@@ -89,7 +90,7 @@ final class OpenIDConnectClientConfig {
 	public function withAudience( array|string|null $audience ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls,
+			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
 		);
 	}
 
@@ -99,7 +100,7 @@ final class OpenIDConnectClientConfig {
 	public function withEndpointOverrides( array $endpointOverrides ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->verifyTls,
+			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->verifyTls, $this->pkce,
 		);
 	}
 
@@ -109,14 +110,14 @@ final class OpenIDConnectClientConfig {
 	public function withExtraAuthParams( array $extraAuthParams ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->verifyTls,
+			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->verifyTls, $this->pkce,
 		);
 	}
 
 	public function withVerifyTls( bool $verifyTls ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $verifyTls,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $verifyTls, $this->pkce,
 		);
 	}
 

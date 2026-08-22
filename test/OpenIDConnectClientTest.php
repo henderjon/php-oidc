@@ -104,6 +104,53 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame($idToken, $result->idToken);
 	}
 
+	public function testRequiredPkceCompletesAuthorizationCodeFlow(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+		$config = $this->config();
+		$config = new OpenIDConnectClientConfig(
+			clientId: $config->clientId,
+			clientSecret: $config->clientSecret,
+			redirectUrl: $config->redirectUrl,
+			issuer: $config->issuer,
+			endpointOverrides: $config->endpointOverrides,
+			pkce: PkceMode::Required,
+		);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$this->assertNotNull($params['code_challenge'] ?? null);
+		$this->assertSame('S256', $params['code_challenge_method']);
+		$this->assertGreaterThanOrEqual(43, strlen($params['code_challenge']));
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'sub'   => 'user-1',
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$result = $client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+
+		parse_str((string)$fetcher->requests[0]['body'], $tokenParams);
+		$this->assertIsString($tokenParams['code_verifier'] ?? null);
+		$this->assertSame(
+			$params['code_challenge'],
+			rtrim(strtr(base64_encode(hash('sha256', $tokenParams['code_verifier'], true)), '+/', '-_'), '='),
+		);
+		$this->assertSame('user-1', $result->claims->get('sub'));
+	}
+
 	public function testCompleteAuthorizationCodeFlowWithWrongAudienceFailsEvenWithNoAudienceOverrideConfigured(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;

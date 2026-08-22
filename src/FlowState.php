@@ -11,6 +11,7 @@ final class FlowState {
 	public function __construct(
 		public readonly ?string $state,
 		public readonly ?string $nonce,
+		public readonly ?string $codeVerifier = null,
 	) {
 	}
 

@@ -54,7 +54,11 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Callback is missing the authorization code');
 		}
 
-		$tokenResult = $this->tokenEndpointClient->exchangeAuthorizationCode($config, $response->code);
+		if( $config->pkce === PkceMode::Required && $flow->codeVerifier === null ) {
+			throw new AuthenticationFailedException('Unable to verify PKCE code verifier');
+		}
+
+		$tokenResult = $this->tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier);
 
 		if( $tokenResult->idToken === null ) {
 			throw new AuthenticationFailedException('Token response is missing id_token');
@@ -122,7 +126,8 @@ final class OpenIDConnectClient implements
 
 	private function buildRedirect( OpenIDConnectClientConfig $config, string $responseType ): AuthorizationRedirect {
 		$authorizationEndpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
-		$flow                  = $this->stateStore->start();
+		$codeVerifier          = $responseType === 'code' && $config->pkce !== PkceMode::Disabled ? $this->createCodeVerifier() : null;
+		$flow                  = $this->stateStore->start(codeVerifier: $codeVerifier);
 
 		$params = array_merge($config->extraAuthParams, [
 			'response_type' => $responseType,
@@ -133,7 +138,20 @@ final class OpenIDConnectClient implements
 			'nonce'         => $flow->nonce,
 		]);
 
+		if( $codeVerifier !== null ) {
+			$params['code_challenge']        = $this->codeChallenge($codeVerifier);
+			$params['code_challenge_method'] = 'S256';
+		}
+
 		return new AuthorizationRedirect($this->appendQuery($authorizationEndpoint, $params));
+	}
+
+	private function createCodeVerifier(): string {
+		return rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
+	}
+
+	private function codeChallenge( string $codeVerifier ): string {
+		return rtrim(strtr(base64_encode(hash('sha256', $codeVerifier, true)), '+/', '-_'), '=');
 	}
 
 	/**

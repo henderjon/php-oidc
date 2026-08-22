@@ -22,6 +22,7 @@ final class AuthorizationStateStore {
 
 	private const STATE_KEY = 'henderjon.oidc.state';
 	private const NONCE_KEY = 'henderjon.oidc.nonce';
+	private const CODE_VERIFIER_KEY = 'henderjon.oidc.code_verifier';
 
 	public function __construct(
 		private readonly CacheInterface $cache,
@@ -33,14 +34,18 @@ final class AuthorizationStateStore {
 	/**
 	 * @param int<1,max> $length
 	 */
-	public function start(int $length = 16): FlowState {
+	public function start(int $length = 16, ?string $codeVerifier = null): FlowState {
 		$state = $this->randomToken($length);
 		$nonce = $this->randomToken($length);
 
 		$this->cache->set($this->stateKey(), $state, $this->ttlSeconds);
 		$this->cache->set($this->nonceKey(), $nonce, $this->ttlSeconds);
 
-		return new FlowState($state, $nonce);
+		if( $codeVerifier !== null ) {
+			$this->cache->set($this->codeVerifierKey(), $codeVerifier, $this->ttlSeconds);
+		}
+
+		return new FlowState($state, $nonce, $codeVerifier);
 	}
 
 	/**
@@ -50,13 +55,16 @@ final class AuthorizationStateStore {
 	public function consume(): FlowState {
 		$state = $this->cache->get($this->stateKey());
 		$nonce = $this->cache->get($this->nonceKey());
+		$codeVerifier = $this->cache->get($this->codeVerifierKey());
 
 		$this->cache->delete($this->stateKey());
 		$this->cache->delete($this->nonceKey());
+		$this->cache->delete($this->codeVerifierKey());
 
 		return new FlowState(
 			is_string($state) ? $state : null,
 			is_string($nonce) ? $nonce : null,
+			is_string($codeVerifier) ? $codeVerifier : null,
 		);
 	}
 
@@ -73,6 +81,10 @@ final class AuthorizationStateStore {
 
 	private function nonceKey(): string {
 		return self::NONCE_KEY . ".{$this->cacheKeySuffix}";
+	}
+
+	private function codeVerifierKey(): string {
+		return self::CODE_VERIFIER_KEY . ".{$this->cacheKeySuffix}";
 	}
 
 }

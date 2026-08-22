@@ -23,12 +23,18 @@ final class TokenEndpointClient {
 	/**
 	 * @throws TokenRequestException
 	 */
-	public function exchangeAuthorizationCode( OpenIDConnectClientConfig $config, string $code ): TokenResult {
-		return $this->request($config, [
+	public function exchangeAuthorizationCode( OpenIDConnectClientConfig $config, string $code, ?string $codeVerifier = null ): TokenResult {
+		$params = [
 			'grant_type'   => 'authorization_code',
 			'code'         => $code,
 			'redirect_uri' => $config->redirectUrl,
-		]);
+		];
+
+		if( $codeVerifier !== null ) {
+			$params['code_verifier'] = $codeVerifier;
+		}
+
+		return $this->request($config, $params);
 	}
 
 	/**
