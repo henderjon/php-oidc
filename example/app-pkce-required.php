@@ -51,8 +51,14 @@ $config = new OpenIDConnectClientConfig(
 	pkce: PkceMode::Required,
 );
 
+// A real application shares one cache across every user, so the suffix must come from
+// the current user's session (a cookie-backed session ID, for example) rather than a
+// static string - otherwise two users authenticating at once would overwrite each
+// other's state, nonce, and code_verifier. This stands in for that session ID.
+$sessionId = bin2hex(random_bytes(8));
+
 $cache = new InMemoryCache();
-$client = (new OpenIDConnectClientFactory($http))->make($cache, 'example-app');
+$client = (new OpenIDConnectClientFactory($http))->make($cache, $sessionId);
 
 // A normal round trip: the redirect carries a code_challenge, and the verifier that
 // produced it travels back to the provider on the token exchange.
@@ -83,7 +89,7 @@ echo 'code_verifier sent with the token exchange: ' . (isset($tokenParams['code_
 // directly instead of waiting for a real cache eviction.
 $redirect = $client->buildAuthorizationCodeRedirect($config);
 parse_str((string)parse_url($redirect->url, PHP_URL_QUERY), $params);
-$cache->delete('henderjon.oidc.code_verifier.example-app');
+$cache->delete("henderjon.oidc.code_verifier.{$sessionId}");
 
 $requestsBefore = count($http->requests);
 

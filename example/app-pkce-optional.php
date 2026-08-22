@@ -51,8 +51,14 @@ $config = new OpenIDConnectClientConfig(
 	pkce: PkceMode::Optional,
 );
 
+// A real application shares one cache across every user, so the suffix must come from
+// the current user's session (a cookie-backed session ID, for example) rather than a
+// static string - otherwise two users authenticating at once would overwrite each
+// other's state, nonce, and code_verifier. This stands in for that session ID.
+$sessionId = bin2hex(random_bytes(8));
+
 $cache = new InMemoryCache();
-$client = (new OpenIDConnectClientFactory($http))->make($cache, 'example-app');
+$client = (new OpenIDConnectClientFactory($http))->make($cache, $sessionId);
 
 // Optional still sends a code_challenge on every redirect, same as Required - the two
 // modes only differ in what happens if the verifier goes missing by completion time.
@@ -66,7 +72,7 @@ echo "code_challenge: {$params['code_challenge']}\n\n";
 // Simulate the same eviction as the Required example (evicted from the cache, TTL
 // expired, or the redirect and completion configs disagree). Optional proceeds anyway
 // and lets the token endpoint decide, instead of failing before ever contacting it.
-$cache->delete('henderjon.oidc.code_verifier.example-app');
+$cache->delete("henderjon.oidc.code_verifier.{$sessionId}");
 
 try {
 	$client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([

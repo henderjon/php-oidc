@@ -14,9 +14,14 @@ use Psr\SimpleCache\CacheInterface;
  * they want (a real cache, or a plain in-memory one in tests) instead of
  * subclassing anything.
  *
- * One store tracks exactly one in-flight attempt at a time - scope a
- * separate cache instance (or cacheKeySuffix) per SSO integration if you
- * need more than one in flight concurrently.
+ * One store tracks exactly one in-flight attempt at a time. When the
+ * injected cache is shared across users - the common case for a load
+ * balanced application backed by something like memcache - pass a
+ * `cacheKeySuffix` derived from the current user's session, not a static
+ * value, or two users authenticating at the same time will overwrite each
+ * other's state, nonce, and code_verifier. A static suffix only separates
+ * one SSO integration from another; it does nothing to separate concurrent
+ * users of the same integration.
  */
 final class AuthorizationStateStore {
 
@@ -26,7 +31,7 @@ final class AuthorizationStateStore {
 
 	public function __construct(
 		private readonly CacheInterface $cache,
-		private readonly string $cacheKeySuffix = "", // optional; use if using a global cache where name collisions are possible (READ: not session based)
+		private readonly string $cacheKeySuffix = "", // scope this to the current user's session when the cache is shared across users
 		private readonly int $ttlSeconds = 600,
 	) {
 	}
