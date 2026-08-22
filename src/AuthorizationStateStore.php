@@ -25,7 +25,7 @@ final class AuthorizationStateStore {
 
 	public function __construct(
 		private readonly CacheInterface $cache,
-		private readonly string $cacheKey = "", // optional; use if using a global cache where name collisions are possible (READ: not session based)
+		private readonly string $cacheKeySuffix = "", // optional; use if using a global cache where name collisions are possible (READ: not session based)
 		private readonly int $ttlSeconds = 600,
 	) {
 	}
@@ -68,11 +68,11 @@ final class AuthorizationStateStore {
 	}
 
 	private function stateKey(): string {
-		return self::STATE_KEY . ".{$this->cacheKey}";
+		return self::STATE_KEY . ".{$this->cacheKeySuffix}";
 	}
 
 	private function nonceKey(): string {
-		return self::NONCE_KEY . ".{$this->cacheKey}";
+		return self::NONCE_KEY . ".{$this->cacheKeySuffix}";
 	}
 
 }
