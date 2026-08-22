@@ -17,5 +17,5 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-      - run: composer update --prefer-dist --no-interaction
+      - run: composer install --prefer-dist --no-interaction --no-progress
       - run: vendor/bin/phpunit
