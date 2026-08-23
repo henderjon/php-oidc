@@ -37,7 +37,7 @@ class OpenIDConnectClientFactory {
 			$providerMetadataResolver,
 			new IdTokenVerifier($this->httpFetcher, $this->clock),
 			new ClaimsValidator,
-			new TokenEndpointClient($this->httpFetcher, $providerMetadataResolver),
+			new TokenEndpointClient($this->httpFetcher, $providerMetadataResolver, $this->logger),
 			$this->httpFetcher,
 			$this->logger,
 		);

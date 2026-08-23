@@ -2,9 +2,12 @@
 
 namespace Oidc;
 
+use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\TokenRequestException;
+use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\FakeHttpFetcher;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 class TokenEndpointClientTest extends TestCase {
 
@@ -19,8 +22,8 @@ class TokenEndpointClientTest extends TestCase {
 		);
 	}
 
-	private function makeClient( FakeHttpFetcher $fetcher ): TokenEndpointClient {
-		return new TokenEndpointClient($fetcher, new ProviderMetadataResolver($fetcher));
+	private function makeClient( FakeHttpFetcher $fetcher, ?ArrayLogger $logger = null ): TokenEndpointClient {
+		return new TokenEndpointClient($fetcher, new ProviderMetadataResolver($fetcher), $logger ?? new ArrayLogger);
 	}
 
 	public function testExchangeAuthorizationCode(): void {
@@ -61,12 +64,56 @@ class TokenEndpointClientTest extends TestCase {
 
 	public function testThrowsOnNonSuccessStatusWithErrorField(): void {
 		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'error' => 'invalid_grant' ], JSON_THROW_ON_ERROR), 400));
 
-		$this->expectException(TokenRequestException::class);
-		$this->expectExceptionMessage('invalid_grant');
+		try {
+			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException $e ) {
+			$this->assertStringContainsString('invalid_grant', $e->getMessage());
+		}
 
-		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config());
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame(self::TOKEN_ENDPOINT, $records[0]['context']['endpoint']);
+		$this->assertSame(400, $records[0]['context']['http_status']);
+		$this->assertSame('invalid_grant', $records[0]['context']['provider_error']);
+	}
+
+	public function testLogsTransportFailureDetailsWithoutRequestParameters(): void {
+		$fetcher   = new FakeHttpFetcher;
+		$logger    = new ArrayLogger;
+		$transport = new HttpTransportException('timed out');
+		$fetcher->failWith(self::TOKEN_ENDPOINT, $transport);
+
+		try {
+			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame(self::TOKEN_ENDPOINT, $records[0]['context']['endpoint']);
+		$this->assertNull($records[0]['context']['http_status']);
+		$this->assertSame($transport, $records[0]['context']['exception']);
+		$this->assertArrayNotHasKey('params', $records[0]['context']);
+	}
+
+	public function testLogsResponseContentTypeOnFailure(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('invalid_client', 401, 'text/plain'));
+
+		try {
+			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame('text/plain', $records[0]['context']['content_type']);
 	}
 
 	public function testThrowsOnNonSuccessStatusWithNonJsonBodyStillReportsTheStatusAndBody(): void {
