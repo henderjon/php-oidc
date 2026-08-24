@@ -189,9 +189,13 @@ class TokenEndpointClientTest extends TestCase {
 	}
 
 	public function testLogsResponseContentTypeOnFailure(): void {
+		// A wrong-but-JSON-labelled content type, so this exercises the unsuccessful-status
+		// path specifically - not the separate unexpected-content-type rejection, which a
+		// non-JSON content type like text/plain would hit first instead (see
+		// testThrowsOnUnexpectedContentType below).
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;
-		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('invalid_client', 401, 'text/plain'));
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('invalid_client', 401, 'application/json'));
 
 		try {
 			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
@@ -200,7 +204,24 @@ class TokenEndpointClientTest extends TestCase {
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
-		$this->assertSame('text/plain', $records[0]['context']['content_type']);
+		$this->assertSame('OIDC: token endpoint returned an unsuccessful response', $records[0]['message']);
+		$this->assertSame('application/json', $records[0]['context']['content_type']);
+	}
+
+	public function testThrowsOnUnexpectedContentType(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('<html>not a token response</html>', 200, 'text/html'));
+
+		try {
+			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame('OIDC: token endpoint returned an unexpected content type', $records[0]['message']);
+		$this->assertSame('text/html', $records[0]['context']['content_type']);
 	}
 
 	public function testThrowsOnNonSuccessStatusWithNonJsonBodyStillReportsTheStatusAndBody(): void {

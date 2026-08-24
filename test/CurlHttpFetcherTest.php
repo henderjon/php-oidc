@@ -2,6 +2,7 @@
 
 namespace Oidc;
 
+use donatj\MockWebServer\DelayedResponse;
 use donatj\MockWebServer\MockWebServer;
 use donatj\MockWebServer\Response;
 use Oidc\Exceptions\HttpTransportException;
@@ -169,7 +170,7 @@ class CurlHttpFetcherTest extends TestCase {
 		$this->assertSame([], $logger->records);
 	}
 
-	public function testDisablingTlsVerificationLogsANoticeOnEveryRequest(): void {
+	public function testDisablingTlsVerificationLogsAnAlertOnEveryRequest(): void {
 		self::$server->setResponseOfPath('/first', new Response('first'));
 		self::$server->setResponseOfPath('/second', new Response('second'));
 
@@ -180,10 +181,78 @@ class CurlHttpFetcherTest extends TestCase {
 
 		// A prominent diagnostic means every request, not a one-time notice easy to lose in a
 		// large log stream - two requests must produce two log records, not one.
-		$records = $logger->recordsAt(LogLevel::NOTICE);
+		$records = $logger->recordsAt(LogLevel::ALERT);
 		$this->assertCount(2, $records);
 		$this->assertSame($this->url('first'), $records[0]['context']['url']);
 		$this->assertSame($this->url('second'), $records[1]['context']['url']);
+	}
+
+	public function testResponseAtOrUnderTheMaxSizeSucceeds(): void {
+		self::$server->setResponseOfPath('/discovery', new Response('0123456789'));
+
+		$fetcher  = new CurlHttpFetcher(maxResponseBytes: 10);
+		$response = $fetcher->fetch($this->url('discovery'), null);
+
+		$this->assertSame('0123456789', $response->body);
+	}
+
+	public function testResponseOverTheMaxSizeThrows(): void {
+		self::$server->setResponseOfPath('/discovery', new Response('01234567890'));
+
+		$fetcher = new CurlHttpFetcher(maxResponseBytes: 10);
+
+		$this->expectException(HttpTransportException::class);
+		$this->expectExceptionMessage('exceeded the maximum allowed size of 10 bytes');
+
+		$fetcher->fetch($this->url('discovery'), null);
+	}
+
+	public function testMaxSizeIsEnforcedPerCallNotCumulativelyAcrossAReusedHandle(): void {
+		self::$server->setResponseOfPath('/first', new Response('0123456789'));
+		self::$server->setResponseOfPath('/second', new Response('0123456789'));
+
+		// Ten bytes each, twenty combined - if the byte count carried over across calls on
+		// this reused handle instead of resetting per call, the second fetch would wrongly
+		// look like it exceeded a 10-byte cap.
+		$fetcher = new CurlHttpFetcher(maxResponseBytes: 10);
+
+		$this->assertSame('0123456789', $fetcher->fetch($this->url('first'), null)->body);
+		$this->assertSame('0123456789', $fetcher->fetch($this->url('second'), null)->body);
+	}
+
+	public function testExceedingTheMaxSizeLogsAnError(): void {
+		self::$server->setResponseOfPath('/discovery', new Response('01234567890'));
+
+		$logger  = new ArrayLogger;
+		$fetcher = new CurlHttpFetcher(maxResponseBytes: 10, logger: $logger);
+
+		try {
+			$fetcher->fetch($this->url('discovery'), null);
+			$this->fail('Expected HttpTransportException to be thrown');
+		} catch( HttpTransportException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame($this->url('discovery'), $records[0]['context']['url']);
+		$this->assertSame(10, $records[0]['context']['max_response_bytes']);
+	}
+
+	public function testTimeoutLogsAnError(): void {
+		self::$server->setResponseOfPath('/slow', new DelayedResponse(new Response('{}'), 2_000_000));
+
+		$logger  = new ArrayLogger;
+		$fetcher = new CurlHttpFetcher(timeoutSeconds: 1, logger: $logger);
+
+		try {
+			$fetcher->fetch($this->url('slow'), null);
+			$this->fail('Expected HttpTransportException to be thrown');
+		} catch( HttpTransportException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame($this->url('slow'), $records[0]['context']['url']);
 	}
 
 }

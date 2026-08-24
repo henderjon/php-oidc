@@ -26,12 +26,12 @@ echo "Default: TLS verification is always on, nothing is logged.\n";
 (new CurlHttpFetcher(logger: new StdoutLogger))->fetch($url, null);
 echo "(no output above - that is the point)\n\n";
 
-echo "disableTlsVerificationForLocalDevelopmentOnly: true - every request logs a notice:\n";
+echo "disableTlsVerificationForLocalDevelopmentOnly: true - every request logs an alert:\n";
 $insecureFetcher = new CurlHttpFetcher(disableTlsVerificationForLocalDevelopmentOnly: true, logger: new StdoutLogger);
 $insecureFetcher->fetch($url, null);
 $insecureFetcher->fetch($url, null);
-echo "(two requests, two notices - not a one-time message easy to miss in a log stream. Logged at\n";
-echo "notice rather than something more severe, since this is expected noise for as long as local\n";
-echo "development needs it active - a caller can filter this level down or silence it entirely.)\n";
+echo "(two requests, two alerts - not a one-time message easy to miss in a log stream. Every request\n";
+echo "made while this is active is actively unauthenticated, which is why it stands out from the\n";
+echo "warning/notice level fail-open decisions logged elsewhere in this library.)\n";
 
 $server->stop();

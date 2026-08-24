@@ -161,7 +161,7 @@ class IdTokenVerifierTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('HS256', $records[0]['context']['alg']);
 		$this->assertSame([ 'RS256' ], $records[0]['context']['allowed_algorithms']);
@@ -219,7 +219,7 @@ class IdTokenVerifierTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('RS256', $records[0]['context']['alg']);
 		$this->assertSame('RSA', $records[0]['context']['expected_kty']);
@@ -289,6 +289,96 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
+	public function testVerifyThrowsOnUnexpectedJwksContentType(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse('<html>not a jwks document</html>', 200, 'text/html'));
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
+
+		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: JWKS endpoint returned an unexpected content type', $records[0]['message']);
+		$this->assertSame('text/html', $records[0]['context']['content_type']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testVerifyAcceptsJwkSetJsonContentTypeForJwks(): void {
+		$fixture = new RsaKeyFixture;
+		$idToken = $fixture->sign([ 'sub' => 'user-1' ]);
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200, 'application/jwk-set+json'));
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, 'unused');
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyRejectsJwksExceedingTheMaximumKeyCount(): void {
+		$keys = [];
+
+		for( $i = 0; $i < 51; $i++ ) {
+			$keys[] = [ 'kty' => 'RSA', 'kid' => "key-{$i}", 'n' => 'unused', 'e' => 'unused' ];
+		}
+
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode([ 'keys' => $keys ], JSON_THROW_ON_ERROR), 200));
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
+
+		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: JWKS document exceeds the maximum number of keys', $records[0]['message']);
+		$this->assertSame(51, $records[0]['context']['key_count']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testVerifyRejectsAnOversizedIdToken(): void {
+		// No response configured for JWKS_URI - FakeHttpFetcher throws a bare RuntimeException
+		// for any URL it was not told to answer. Getting AuthenticationFailedException instead
+		// proves the length check runs before anything about the token is even looked at.
+		$verifier      = new IdTokenVerifier(new FakeHttpFetcher);
+		$oversizedToken = str_repeat('a', 16 * 1024 + 1);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$verifier->verify($oversizedToken, self::JWKS_URI, 'unused');
+	}
+
+	public function testVerifyRejectsAnOversizedIdTokenLogsTheLength(): void {
+		$logger        = new ArrayLogger;
+		$verifier      = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
+		$oversizedToken = str_repeat('a', 16 * 1024 + 1);
+
+		try {
+			$verifier->verify($oversizedToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token exceeds the maximum allowed length', $records[0]['message']);
+		$this->assertSame(16 * 1024 + 1, $records[0]['context']['length']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testVerifyWithMatchingAccessTokenHashPasses(): void {
 		$accessToken  = 'the-access-token';
 		$digest       = hash('sha256', $accessToken, true);
@@ -332,7 +422,7 @@ class IdTokenVerifierTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('A256GCM', $records[0]['context']['header']['enc']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
@@ -350,7 +440,7 @@ class IdTokenVerifierTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame([ 'typ' => 'JWT' ], $records[0]['context']['header']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
@@ -375,7 +465,7 @@ class IdTokenVerifierTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('unknown-kid', $records[0]['context']['kid']);
 		$this->assertSame([ RsaKeyFixture::KEY_ID, 'other-key' ], $records[0]['context']['available_kids']);
@@ -397,7 +487,7 @@ class IdTokenVerifierTest extends TestCase {
 			$this->assertNotNull($e->getPrevious());
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertInstanceOf(\Exception::class, $records[0]['context']['exception']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
@@ -414,7 +504,7 @@ class IdTokenVerifierTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('HS256', $records[0]['context']['alg']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
@@ -445,7 +535,7 @@ class IdTokenVerifierTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$this->assertNull($logger->recordsAt(LogLevel::WARNING)[0]['context']['state']);
+		$this->assertNull($logger->recordsAt(LogLevel::ERROR)[0]['context']['state']);
 	}
 
 }

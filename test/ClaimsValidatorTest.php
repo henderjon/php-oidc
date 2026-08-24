@@ -123,7 +123,7 @@ class ClaimsValidatorTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('https://other.example.com', $records[0]['context']['expected']);
 		$this->assertSame('https://issuer.example.com', $records[0]['context']['actual']);
@@ -141,7 +141,7 @@ class ClaimsValidatorTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame([ 'the-client-id' ], $records[0]['context']['expected']);
 		$this->assertSame([ 'someone-elses-client-id' ], $records[0]['context']['actual']);
@@ -159,7 +159,7 @@ class ClaimsValidatorTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('the-nonce', $records[0]['context']['expected']);
 		$this->assertSame('a-different-nonce', $records[0]['context']['actual']);
@@ -187,7 +187,7 @@ class ClaimsValidatorTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$this->assertNull($logger->recordsAt(LogLevel::WARNING)[0]['context']['state']);
+		$this->assertNull($logger->recordsAt(LogLevel::ERROR)[0]['context']['state']);
 	}
 
 }

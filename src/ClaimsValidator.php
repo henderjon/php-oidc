@@ -54,7 +54,7 @@ final class ClaimsValidator {
 		$actual = $claims->get('iss');
 
 		if( $actual !== $expectedIssuer ) {
-			$this->logger->warning('OIDC: ID token issuer does not match the expected issuer', [
+			$this->logger->error('OIDC: ID token issuer does not match the expected issuer', [
 				'expected' => $expectedIssuer,
 				'actual'   => $actual,
 				'state'    => $this->state,
@@ -77,7 +77,7 @@ final class ClaimsValidator {
 		$expected = $this->toStringList($expectedAudience);
 
 		if( array_intersect($expected, $actual) === [] ) {
-			$this->logger->warning('OIDC: ID token audience does not match any of the expected values', [
+			$this->logger->error('OIDC: ID token audience does not match any of the expected values', [
 				'expected' => $expected,
 				'actual'   => $actual,
 				'state'    => $this->state,
@@ -113,7 +113,7 @@ final class ClaimsValidator {
 		$actual = $claims->get('nonce');
 
 		if( $actual !== $expectedNonce ) {
-			$this->logger->warning('OIDC: ID token nonce does not match the expected value', [
+			$this->logger->error('OIDC: ID token nonce does not match the expected value', [
 				'expected' => $expectedNonce,
 				'actual'   => $actual,
 				'state'    => $this->state,

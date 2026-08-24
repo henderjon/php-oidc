@@ -245,6 +245,28 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
+	public function testResolveThrowsOnUnexpectedContentType(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse('<html>not a discovery document</html>', 200, 'text/html'),
+		);
+		$logger   = new ArrayLogger;
+		$resolver = (new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger))->withState('the-state');
+
+		try {
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: provider configuration endpoint returned an unexpected content type', $records[0]['message']);
+		$this->assertSame('text/html', $records[0]['context']['content_type']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testResolveThrowsOnInvalidJson(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse('not json', 200));

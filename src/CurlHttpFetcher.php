@@ -22,20 +22,34 @@ use Psr\Log\NullLogger;
  * setting. Every single request made while it is active logs a diagnostic - not a one-time
  * notice easy to lose in a large log stream - because for as long as it is on, every request
  * this instance makes is vulnerable to a network-position attacker intercepting or forging
- * responses, including ones carrying bearer credentials. Logged at `notice`, not a more
- * severe level: this is expected, intentional noise for as long as local development needs
- * it active, not an error - and `notice` gives a caller an easy level to filter down or
- * silence entirely for that stretch of time, without needing to silence anything more
- * severe to do it.
+ * responses, including ones carrying bearer credentials. Logged at `alert`: unlike the
+ * fail-open decisions elsewhere in this library that stay at `warning`/`notice`, this one
+ * means every request this instance makes is actively unauthenticated, which warrants
+ * standing out from routine operational noise for as long as it is active.
+ *
+ * The response body is bounded by `$maxResponseBytes` regardless of how fast or slow the
+ * connection is - `CURLOPT_TIMEOUT` alone only bounds wall-clock time, so a fast connection
+ * could otherwise still push an unbounded amount of data within that window. Enforced with a
+ * `CURLOPT_WRITEFUNCTION` callback rather than `CURLOPT_MAXFILESIZE`, since the latter relies
+ * on the server declaring `Content-Length` up front and does not reliably apply to chunked
+ * HTTP responses. `CURLOPT_LOW_SPEED_LIMIT`/`CURLOPT_LOW_SPEED_TIME` add a second, narrower
+ * check on top: a connection that stalls to a crawl fails fast instead of only being caught
+ * once the full timeout elapses.
  */
 final class CurlHttpFetcher implements HttpFetcherInterface {
 
 	private const USER_AGENT = 'henderjon-php-oidc';
 
+	/** A connection sustaining less than this many bytes/second for LOW_SPEED_TIME_SECONDS is treated as stalled. */
+	private const LOW_SPEED_LIMIT_BYTES_PER_SECOND = 1;
+
+	private const LOW_SPEED_TIME_SECONDS = 10;
+
 	private ?\CurlHandle $handle = null;
 
 	public function __construct(
 		private readonly int $timeoutSeconds = 30,
+		private readonly int $maxResponseBytes = 5 * 1024 * 1024,
 		private readonly bool $disableTlsVerificationForLocalDevelopmentOnly = false,
 		private readonly LoggerInterface $logger = new NullLogger,
 	) {
@@ -46,13 +60,33 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 	 */
 	public function fetch( string $url, ?string $body, array $headers = [] ): FetchResponse {
 		if( $this->disableTlsVerificationForLocalDevelopmentOnly ) {
-			$this->logger->notice('OIDC: TLS certificate and hostname verification is disabled for this request - never use this outside local development', [ 'url' => $url ]);
+			$this->logger->alert('OIDC: TLS certificate and hostname verification is disabled for this request - never use this outside local development', [ 'url' => $url ]);
 		}
 
 		$handle = $this->getHandle();
 
 		curl_setopt($handle, CURLOPT_URL, $url);
 		curl_setopt($handle, CURLOPT_HTTPHEADER, $this->formatHeaders($headers));
+
+		$buffer        = '';
+		$exceededLimit = false;
+
+		// Reset per call, same as CURLOPT_URL above - the buffer and flag it closes over must
+		// not carry over from whatever the last call through this reused handle collected.
+		curl_setopt($handle, CURLOPT_WRITEFUNCTION, function ( \CurlHandle $ch, string $chunk ) use ( &$buffer, &$exceededLimit ): int {
+			if( strlen($buffer) + strlen($chunk) > $this->maxResponseBytes ) {
+				$exceededLimit = true;
+
+				// Any return value shorter than strlen($chunk) tells curl the write failed,
+				// aborting the transfer immediately rather than buffering the rest of an
+				// oversized response before rejecting it after the fact.
+				return 0;
+			}
+
+			$buffer .= $chunk;
+
+			return strlen($chunk);
+		});
 
 		if( $body === null ) {
 			// CURLOPT_HTTPGET does not clear a CURLOPT_CUSTOMREQUEST left over from a prior POST
@@ -66,18 +100,36 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 			curl_setopt($handle, CURLOPT_POSTFIELDS, $body);
 		}
 
-		$response = curl_exec($handle);
+		$succeeded = curl_exec($handle);
 
-		if( $response === false ) {
+		if( $succeeded === false ) {
+			if( $exceededLimit ) {
+				$this->logger->error('OIDC: response exceeded the maximum allowed size and was aborted', [
+					'url'                => $url,
+					'max_response_bytes' => $this->maxResponseBytes,
+				]);
+
+				throw new HttpTransportException(sprintf('Response from %s exceeded the maximum allowed size of %d bytes', $url, $this->maxResponseBytes));
+			}
+
+			// CURLE_OPERATION_TIMEDOUT covers connect timeout, total timeout, and a low-speed
+			// abort alike - curl gives no distinct code for which one specifically fired, only
+			// its own message text (included below), which is not a stable API to parse
+			// further than that.
+			if( curl_errno($handle) === CURLE_OPERATION_TIMEDOUT ) {
+				$this->logger->error('OIDC: request was aborted by a connect, total, or low-speed timeout', [
+					'url'   => $url,
+					'error' => curl_error($handle),
+				]);
+			}
+
 			throw new HttpTransportException(sprintf('Request to %s failed: %s', $url, curl_error($handle)));
 		}
-
-		\assert(is_string($response));
 
 		$contentType = curl_getinfo($handle, CURLINFO_CONTENT_TYPE);
 
 		return new FetchResponse(
-			body: $response,
+			body: $buffer,
 			status: (int)curl_getinfo($handle, CURLINFO_HTTP_CODE),
 			contentType: is_string($contentType) ? $this->stripParameters($contentType) : null,
 		);
@@ -103,9 +155,10 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 	private function getHandle(): \CurlHandle {
 		if( $this->handle === null ) {
 			$this->handle = curl_init() ?: throw new \RuntimeException('Unable to initialize curl');
-			curl_setopt($this->handle, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($this->handle, CURLOPT_CONNECTTIMEOUT, $this->timeoutSeconds);
 			curl_setopt($this->handle, CURLOPT_TIMEOUT, $this->timeoutSeconds);
+			curl_setopt($this->handle, CURLOPT_LOW_SPEED_LIMIT, self::LOW_SPEED_LIMIT_BYTES_PER_SECOND);
+			curl_setopt($this->handle, CURLOPT_LOW_SPEED_TIME, self::LOW_SPEED_TIME_SECONDS);
 			curl_setopt($this->handle, CURLOPT_USERAGENT, self::USER_AGENT);
 
 			// Fixed for this instance's whole lifetime, not per request - see the class

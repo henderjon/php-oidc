@@ -44,6 +44,19 @@ use Psr\Log\NullLogger;
  */
 final class IdTokenVerifier {
 
+	// Real-world JWKS documents rotate through a handful of keys at most; JWK::parseKeySet()
+	// parses every entry unconditionally regardless of which one is actually needed, so an
+	// unreasonably large key set is expensive to process even once the response itself is
+	// within CurlHttpFetcher's own byte cap.
+	private const MAX_JWKS_KEYS = 50;
+
+	// A real ID token's claims are a handful of standard fields plus whatever a provider
+	// adds - well under this in practice. This is checked before any work (splitting,
+	// decoding) is done on the token string, and applies regardless of how the token
+	// arrived: the implicit flow's id_token comes from the browser via
+	// IncomingAuthorizationResponse, never through CurlHttpFetcher's own byte cap at all.
+	private const MAX_ID_TOKEN_LENGTH_BYTES = 16 * 1024;
+
 	public function __construct(
 		private readonly HttpFetcherInterface $httpFetcher,
 		private readonly ClockInterface $clock = new CurrentClock,
@@ -63,11 +76,9 @@ final class IdTokenVerifier {
 	}
 
 	/**
+	 * @param list<string> $allowedAlgorithms See OpenIDConnectClientConfig::$allowedAlgorithms.
 	 * @throws AuthenticationFailedException
 	 * @throws ProviderDiscoveryException
-	 */
-	/**
-	 * @param list<string> $allowedAlgorithms See OpenIDConnectClientConfig::$allowedAlgorithms.
 	 */
 	public function verify(
 		string $idToken,
@@ -76,10 +87,20 @@ final class IdTokenVerifier {
 		array $allowedAlgorithms = [ 'RS256' ],
 		?string $accessToken = null,
 	): Claims {
+		if( strlen($idToken) > self::MAX_ID_TOKEN_LENGTH_BYTES ) {
+			$this->logger->error('OIDC: ID token exceeds the maximum allowed length', [
+				'length' => strlen($idToken),
+				'max'    => self::MAX_ID_TOKEN_LENGTH_BYTES,
+				'state'  => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('ID token exceeds the maximum allowed length');
+		}
+
 		$header = $this->decodeHeader($idToken);
 
 		if( isset($header['enc']) ) {
-			$this->logger->warning('OIDC: ID token is encrypted (JWE), which is not supported', [ 'header' => $header, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token is encrypted (JWE), which is not supported', [ 'header' => $header, 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('Encrypted ID tokens (JWE) are not supported');
 		}
@@ -87,7 +108,7 @@ final class IdTokenVerifier {
 		$alg = $header['alg'] ?? null;
 
 		if( !is_string($alg) || $alg === '' ) {
-			$this->logger->warning('OIDC: ID token is missing its alg header', [ 'header' => $header, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token is missing its alg header', [ 'header' => $header, 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('ID token is missing its alg header');
 		}
@@ -118,13 +139,13 @@ final class IdTokenVerifier {
 	 */
 	private function assertAlgorithmAllowed( string $alg, array $allowedAlgorithms, string $clientSecret ): void {
 		if( $alg === 'none' ) {
-			$this->logger->warning('OIDC: ID token declares the "none" algorithm', [ 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token declares the "none" algorithm', [ 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('ID token algorithm "none" is not allowed');
 		}
 
 		if( !in_array($alg, $allowedAlgorithms, true) ) {
-			$this->logger->warning('OIDC: ID token algorithm is not in the configured allowlist', [
+			$this->logger->error('OIDC: ID token algorithm is not in the configured allowlist', [
 				'alg'                => $alg,
 				'allowed_algorithms' => $allowedAlgorithms,
 				'state'              => $this->state,
@@ -134,7 +155,7 @@ final class IdTokenVerifier {
 		}
 
 		if( str_starts_with($alg, 'HS') && $clientSecret === '' ) {
-			$this->logger->warning('OIDC: ID token uses an HMAC algorithm but no client secret is configured', [ 'alg' => $alg, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token uses an HMAC algorithm but no client secret is configured', [ 'alg' => $alg, 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException("ID token algorithm \"{$alg}\" requires a client secret");
 		}
@@ -157,7 +178,7 @@ final class IdTokenVerifier {
 			// happens to reveal about why decoding failed) lives only in the log, matching
 			// every other failure in this class and in ClaimsValidator. `previous` still
 			// carries the original exception for anything inspecting the chain directly.
-			$this->logger->warning('OIDC: ID token signature verification failed', [ 'exception' => $e, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token signature verification failed', [ 'exception' => $e, 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('ID token verification failed', previous: $e);
 		} finally {
@@ -188,7 +209,7 @@ final class IdTokenVerifier {
 		$expected = JWT::urlsafeB64Encode(substr($digest, 0, intdiv($bitLength, 16)));
 
 		if( !hash_equals($expected, (string)$atHash) ) {
-			$this->logger->warning('OIDC: ID token at_hash does not match the access token', [ 'alg' => $alg, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token at_hash does not match the access token', [ 'alg' => $alg, 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('ID token at_hash does not match the access token');
 		}
@@ -199,7 +220,9 @@ final class IdTokenVerifier {
 	 * @throws ProviderDiscoveryException
 	 */
 	private function resolveAsymmetricKey( string $jwksUri, string $alg, ?string $kid ): Key {
-		$jwks   = $this->fetchJwks($jwksUri);
+		$jwks = $this->fetchJwks($jwksUri);
+		$this->assertKeyCountWithinLimit($jwks, $jwksUri);
+
 		$keySet = JWK::parseKeySet($jwks, $alg);
 
 		$selectedKid = match( true ) {
@@ -209,7 +232,7 @@ final class IdTokenVerifier {
 		};
 
 		if( $selectedKid === null ) {
-			$this->logger->warning('OIDC: unable to find a matching JWKS key for this ID token', [
+			$this->logger->error('OIDC: unable to find a matching JWKS key for this ID token', [
 				'kid'            => $kid,
 				'available_kids' => array_keys($keySet),
 				'state'          => $this->state,
@@ -221,6 +244,27 @@ final class IdTokenVerifier {
 		$this->assertKeyTypeMatchesAlgorithm($jwks, $selectedKid, $alg);
 
 		return $keySet[$selectedKid];
+	}
+
+	/**
+	 * @param array<string,mixed> $jwks
+	 * @throws AuthenticationFailedException
+	 */
+	private function assertKeyCountWithinLimit( array $jwks, string $jwksUri ): void {
+		$keys = is_array($jwks['keys'] ?? null) ? $jwks['keys'] : [];
+
+		if( count($keys) <= self::MAX_JWKS_KEYS ) {
+			return;
+		}
+
+		$this->logger->error('OIDC: JWKS document exceeds the maximum number of keys', [
+			'jwks_uri'  => $jwksUri,
+			'key_count' => count($keys),
+			'max_keys'  => self::MAX_JWKS_KEYS,
+			'state'     => $this->state,
+		]);
+
+		throw new AuthenticationFailedException('JWKS document exceeds the maximum number of keys');
 	}
 
 	/**
@@ -261,7 +305,7 @@ final class IdTokenVerifier {
 			$actualKty = $entry['kty'] ?? null;
 
 			if( $actualKty !== $expectedKty ) {
-				$this->logger->warning('OIDC: JWKS key type does not match the ID token algorithm', [
+				$this->logger->error('OIDC: JWKS key type does not match the ID token algorithm', [
 					'alg'          => $alg,
 					'expected_kty' => $expectedKty,
 					'actual_kty'   => $actualKty,
@@ -299,6 +343,16 @@ final class IdTokenVerifier {
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned HTTP {$response->status}");
 		}
 
+		if( !JsonContentTypePolicy::isAcceptable($response->contentType, [ 'application/jwk-set+json' ]) ) {
+			$this->logger->error('OIDC: JWKS endpoint returned an unexpected content type', [
+				'jwks_uri'     => $jwksUri,
+				'content_type' => $response->contentType,
+				'state'        => $this->state,
+			]);
+
+			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned an unexpected content type");
+		}
+
 		$decoded = json_decode($response->body, true);
 
 		if( !is_array($decoded) ) {
@@ -322,7 +376,7 @@ final class IdTokenVerifier {
 		$segments = explode('.', $idToken);
 
 		if( count($segments) !== 3 ) {
-			$this->logger->warning('OIDC: ID token is not a well-formed JWT', [ 'segment_count' => count($segments), 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token is not a well-formed JWT', [ 'segment_count' => count($segments), 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('ID token is not a well-formed JWT');
 		}
@@ -330,7 +384,7 @@ final class IdTokenVerifier {
 		$decoded = json_decode(JWT::urlsafeB64Decode($segments[0]), true);
 
 		if( !is_array($decoded) ) {
-			$this->logger->warning('OIDC: ID token header is not valid JSON', [ 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token header is not valid JSON', [ 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('ID token header is not valid JSON');
 		}
