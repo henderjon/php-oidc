@@ -89,6 +89,17 @@ class CurlHttpFetcherTest extends TestCase {
 		$fetcher->fetch('http://127.0.0.1:1/unreachable', null);
 	}
 
+	public function testFetchRejectsDisallowedSchemesAtTheCurlLevel(): void {
+		// UrlPolicy is the higher-level gate a caller is expected to check first, but this
+		// class must refuse file://, gopher://, and everything else curl happens to support
+		// on its own too - not rely solely on every caller remembering to check first.
+		$fetcher = new CurlHttpFetcher;
+
+		$this->expectException(HttpTransportException::class);
+
+		$fetcher->fetch('file:///etc/passwd', null);
+	}
+
 	public function testFetchGetAfterPostSendsAnActualGetNotALeftoverPost(): void {
 		self::$server->setResponseOfPath('/token', new Response('{"access_token":"abc"}'));
 		self::$server->setResponseOfPath('/jwks', new Response('{"keys":[]}'));

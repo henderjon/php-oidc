@@ -35,11 +35,141 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertSame([], $fetcher->requests);
 	}
 
+	public function testResolveRejectsAnOverrideThatViolatesTheUrlPolicy(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, $logger);
+		$config   = $this->configWithProviderUrl([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'http://issuer.example.com/token' ]);
+
+		try {
+			$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: endpoint URL does not satisfy the configured URL policy', $records[0]['message']);
+		$this->assertSame(ProviderMetadataResolver::TOKEN_ENDPOINT, $records[0]['context']['endpoint_key']);
+		$this->assertSame('http://issuer.example.com/token', $records[0]['context']['url']);
+	}
+
+	public function testResolveRejectsADiscoveredEndpointThatViolatesTheUrlPolicy(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://issuer.example.com',
+				'token_endpoint' => 'http://attacker.example.net/token',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$resolver = new ProviderMetadataResolver($fetcher);
+
+		$this->expectException(ProviderDiscoveryException::class);
+
+		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+	}
+
+	public function testResolveDoesNotFetchDiscoveryWhenTheDiscoveryUrlItselfViolatesTheUrlPolicy(): void {
+		$fetcher = new FakeHttpFetcher;
+		$config  = new OpenIDConnectClientConfig(
+			clientId: 'client-id',
+			clientSecret: 'client-secret',
+			redirectUrl: 'https://example.com/callback',
+			providerUrl: 'http://issuer.example.com',
+		);
+		$resolver = new ProviderMetadataResolver($fetcher);
+
+		try {
+			$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$this->assertSame([], $fetcher->requests, 'a disallowed discovery URL must never be fetched');
+	}
+
+	public function testResolveAllowsHttpWhenInsecureSchemesAreOptedInto(): void {
+		$fetcher = new FakeHttpFetcher;
+		$config  = new OpenIDConnectClientConfig(
+			clientId: 'client-id',
+			clientSecret: 'client-secret',
+			redirectUrl: 'https://example.com/callback',
+			endpointOverrides: [ ProviderMetadataResolver::TOKEN_ENDPOINT => 'http://issuer.example.com/token' ],
+			allowInsecureSchemes: true,
+		);
+		$resolver = new ProviderMetadataResolver($fetcher);
+
+		$this->assertSame('http://issuer.example.com/token', $resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT));
+	}
+
+	public function testResolveRejectsAHostNotInTheAllowlist(): void {
+		$fetcher = new FakeHttpFetcher;
+		$config  = $this->configWithProviderUrl([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'https://issuer.example.com/token' ])
+			->withAllowedHosts([ 'somewhere-else.example.com' ]);
+		$resolver = new ProviderMetadataResolver($fetcher);
+
+		$this->expectException(ProviderDiscoveryException::class);
+
+		$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+	}
+
+	public function testResolveAllowsAHostInTheAllowlist(): void {
+		$fetcher = new FakeHttpFetcher;
+		$config  = $this->configWithProviderUrl([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'https://issuer.example.com/token' ])
+			->withAllowedHosts([ 'issuer.example.com' ]);
+		$resolver = new ProviderMetadataResolver($fetcher);
+
+		$this->assertSame('https://issuer.example.com/token', $resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT));
+	}
+
+	public function testResolveRejectsAMismatchedIssuerInTheDiscoveryDocument(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://attacker.example.net',
+				'token_endpoint' => 'https://issuer.example.com/token',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, $logger);
+
+		try {
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: provider configuration issuer does not match the URL used to fetch it', $records[0]['message']);
+		$this->assertSame('https://issuer.example.com', $records[0]['context']['expected']);
+		$this->assertSame('https://attacker.example.net', $records[0]['context']['actual']);
+	}
+
+	public function testResolveTreatsATrailingSlashDifferenceInTheIssuerAsAMatch(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://issuer.example.com/',
+				'token_endpoint' => 'https://issuer.example.com/token',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$resolver = new ProviderMetadataResolver($fetcher);
+
+		$this->assertSame('https://issuer.example.com/token', $resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT));
+	}
+
 	public function testResolveFetchesDiscoveryDocumentWhenNoOverride(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(
 			'https://issuer.example.com/.well-known/openid-configuration',
-			new FetchResponse(json_encode([ 'token_endpoint' => 'https://issuer.example.com/token' ], JSON_THROW_ON_ERROR), 200),
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://issuer.example.com',
+				'token_endpoint' => 'https://issuer.example.com/token',
+			], JSON_THROW_ON_ERROR), 200),
 		);
 		$resolver = new ProviderMetadataResolver($fetcher);
 
@@ -53,6 +183,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher->respondTo(
 			'https://issuer.example.com/.well-known/openid-configuration',
 			new FetchResponse(json_encode([
+				'issuer'                 => 'https://issuer.example.com',
 				'token_endpoint'         => 'https://issuer.example.com/token',
 				'authorization_endpoint' => 'https://issuer.example.com/authorize',
 			], JSON_THROW_ON_ERROR), 200),
@@ -79,7 +210,10 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(
 			'https://issuer.example.com/.well-known/openid-configuration',
-			new FetchResponse(json_encode([ 'token_endpoint' => 'https://issuer.example.com/token' ], JSON_THROW_ON_ERROR), 200),
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://issuer.example.com',
+				'token_endpoint' => 'https://issuer.example.com/token',
+			], JSON_THROW_ON_ERROR), 200),
 		);
 		$resolver = new ProviderMetadataResolver($fetcher);
 		$config   = new OpenIDConnectClientConfig(
@@ -131,7 +265,10 @@ class ProviderMetadataResolverTest extends TestCase {
 
 	public function testResolveThrowsWhenEndpointMissingFromDocument(): void {
 		$fetcher = new FakeHttpFetcher;
-		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse(json_encode([], JSON_THROW_ON_ERROR), 200));
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([ 'issuer' => 'https://issuer.example.com' ], JSON_THROW_ON_ERROR), 200),
+		);
 		$logger   = new ArrayLogger;
 		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
@@ -172,7 +309,10 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(
 			'https://issuer.example.com/.well-known/openid-configuration',
-			new FetchResponse(json_encode([ 'token_endpoint' => 'https://issuer.example.com/token' ], JSON_THROW_ON_ERROR), 200),
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://issuer.example.com',
+				'token_endpoint' => 'https://issuer.example.com/token',
+			], JSON_THROW_ON_ERROR), 200),
 		);
 		$logger   = new ArrayLogger;
 		$resolver = new ProviderMetadataResolver($fetcher, $logger);
@@ -187,6 +327,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher->respondTo(
 			'https://issuer.example.com/.well-known/openid-configuration',
 			new FetchResponse(json_encode([
+				'issuer'                 => 'https://issuer.example.com',
 				'token_endpoint'         => 'https://issuer.example.com/token',
 				'authorization_endpoint' => 'https://issuer.example.com/authorize',
 			], JSON_THROW_ON_ERROR), 200),

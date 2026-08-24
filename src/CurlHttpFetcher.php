@@ -88,6 +88,13 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 			curl_setopt($this->handle, CURLOPT_CONNECTTIMEOUT, $this->timeoutSeconds);
 			curl_setopt($this->handle, CURLOPT_TIMEOUT, $this->timeoutSeconds);
 			curl_setopt($this->handle, CURLOPT_USERAGENT, self::USER_AGENT);
+
+			// Never file://, gopher://, ldap://, or anything else curl happens to support -
+			// only the two schemes this library ever legitimately calls. CURLOPT_REDIR_PROTOCOLS
+			// is set for the same reason even though redirects are never followed (see class
+			// docblock) - insurance against that changing later without this being revisited.
+			curl_setopt($this->handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+			curl_setopt($this->handle, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
 		}
 
 		return $this->handle;
