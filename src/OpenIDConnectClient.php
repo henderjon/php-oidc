@@ -7,6 +7,8 @@ use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\UserInfoRequestException;
 use Oidc\Interfaces\TokenGrantClientInterface;
 use Oidc\Interfaces\UserInfoClientInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * The real engine behind every capability interface in this module.
@@ -34,6 +36,7 @@ final class OpenIDConnectClient implements
 		private readonly ClaimsValidator $claimsValidator,
 		private readonly TokenEndpointClient $tokenEndpointClient,
 		private readonly HttpFetcherInterface $httpFetcher,
+		private readonly LoggerInterface $logger = new NullLogger,
 	) {
 	}
 
@@ -58,16 +61,34 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $config->pkce === PkceMode::Required && $flow->codeVerifier === null ) {
+			$this->logger->warning('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state ]);
+
 			throw new AuthenticationFailedException('Unable to verify PKCE code verifier');
 		}
 
-		$tokenResult = $this->tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier);
+		if( $config->pkce === PkceMode::Optional && $flow->codeVerifier === null ) {
+			// Optional fails open by design (see PkceMode), but that is a silent downgrade of
+			// exactly the protection PKCE exists to provide - log it rather than let it pass
+			// with no signal at all.
+			$this->logger->warning('OIDC: PKCE code verifier missing for an Optional flow - proceeding without one', [ 'state' => $flow->state ]);
+		}
+
+		// One scoped resolver, shared by the token exchange below and the JWKS resolution
+		// inside verifyAndValidateIdToken() - both against the same provider, so this keeps
+		// them to one discovery fetch instead of two independently-scoped copies each
+		// fetching it themselves. See TokenEndpointClient::withState().
+		$providerMetadataResolver = $this->providerMetadataResolver->withState($flow->state);
+		$tokenEndpointClient      = $this->tokenEndpointClient->withState($flow->state, $providerMetadataResolver);
+
+		$tokenResult = $tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier);
 
 		if( $tokenResult->idToken === null ) {
+			$this->logger->warning('OIDC: token endpoint response is missing id_token', [ 'state' => $flow->state ]);
+
 			throw new AuthenticationFailedException('Token response is missing id_token');
 		}
 
-		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience);
+		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state);
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken);
 	}
@@ -89,10 +110,13 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->idToken === null ) {
+			$this->logger->warning('OIDC: callback is missing the id_token', [ 'state' => $flow->state ]);
+
 			throw new AuthenticationFailedException('Callback is missing the id_token');
 		}
 
-		$claims = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience);
+		$providerMetadataResolver = $this->providerMetadataResolver->withState($flow->state);
+		$claims                   = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $providerMetadataResolver, $flow->state);
 
 		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
 	}
@@ -131,9 +155,23 @@ final class OpenIDConnectClient implements
 	}
 
 	private function buildRedirect( OpenIDConnectClientConfig $config, string $responseType ): AuthorizationRedirect {
+		// No state exists yet to correlate this resolve() with - it is not generated until
+		// stateStore->start() below, and generating it earlier just to label a discovery
+		// failure would mean writing a cache entry for an attempt that never got as far as
+		// producing a redirect.
 		$authorizationEndpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
 		$codeVerifier          = $responseType === 'code' && $config->pkce !== PkceMode::Disabled ? Pkce::generateVerifier() : null;
-		$flow                  = $this->stateStore->start(codeVerifier: $codeVerifier);
+
+		// A public client (no client secret) has nothing else proving it is who it claims to
+		// be - RFC 9700 treats PKCE as effectively mandatory for exactly this client class.
+		// This does not force it on: deciding that is this config's job, not this library's.
+		if( $responseType === 'code' && $config->pkce === PkceMode::Disabled && $config->clientSecret === '' ) {
+			$this->logger->warning('OIDC: public client is building an authorization redirect with PKCE disabled', [
+				'client_id' => $config->clientId,
+			]);
+		}
+
+		$flow = $this->stateStore->start(codeVerifier: $codeVerifier);
 
 		$params = array_merge($config->extraAuthParams, [
 			'response_type' => $responseType,
@@ -177,9 +215,18 @@ final class OpenIDConnectClient implements
 	 * when there is no state to look up, or no attempt matches it - the caller must
 	 * fail closed either way; it is not this method's job to decide which message to
 	 * throw, since a provider error should be reported ahead of a generic state failure.
+	 * The distinction between "no state at all" and "state did not match" is logged
+	 * (here and in AuthorizationStateStore respectively) rather than reflected in the
+	 * exception, which stays generic for whoever ends up seeing it unhandled.
 	 */
 	private function consumeFlow( IncomingAuthorizationResponse $response ): ?FlowState {
-		return $response->state !== null ? $this->stateStore->consume($response->state) : null;
+		if( $response->state === null ) {
+			$this->logger->warning('OIDC: callback is missing the state parameter', [ 'state' => null ]);
+
+			return null;
+		}
+
+		return $this->stateStore->consume($response->state);
 	}
 
 	/**
@@ -192,9 +239,12 @@ final class OpenIDConnectClient implements
 		string $expectedNonce,
 		?string $accessToken,
 		array|string|null $audience,
+		ProviderMetadataResolver $providerMetadataResolver,
+		string $state,
 	): Claims {
-		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
-		$claims  = $this->idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $accessToken, $config->verifyTls);
+		$jwksUri         = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
+		$idTokenVerifier = $this->idTokenVerifier->withState($state);
+		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $accessToken, $config->verifyTls);
 
 		$issuer = $config->issuer ?? $config->providerUrl;
 
@@ -202,12 +252,13 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('No issuer configured to validate the ID token against');
 		}
 
-		$this->claimsValidator->validateIssuer($claims, $issuer);
-		$this->claimsValidator->validateNonce($claims, $expectedNonce);
+		$claimsValidator = $this->claimsValidator->withState($state);
+		$claimsValidator->validateIssuer($claims, $issuer);
+		$claimsValidator->validateNonce($claims, $expectedNonce);
 
 		// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just
 		// defaults to clientId unless the config overrides it with a distinct expected audience.
-		$this->claimsValidator->validateAudience($claims, $audience ?? $config->clientId);
+		$claimsValidator->validateAudience($claims, $audience ?? $config->clientId);
 
 		return $claims;
 	}

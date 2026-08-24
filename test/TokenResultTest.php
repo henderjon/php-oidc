@@ -3,7 +3,9 @@
 namespace Oidc;
 
 use Oidc\Exceptions\TokenRequestException;
+use Oidc\Fakes\ArrayLogger;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 class TokenResultTest extends TestCase {
 
@@ -45,6 +47,26 @@ class TokenResultTest extends TestCase {
 		$this->expectException(TokenRequestException::class);
 
 		new TokenResult([ 'access_token' => '' ]);
+	}
+
+	public function testLogsInvalidResponseFieldNamesWithoutValues(): void {
+		$logger = new ArrayLogger;
+
+		try {
+			new TokenResult([
+				'access_token' => '',
+				'expires_in'   => '3600',
+			], $logger, 'the-state');
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame([ 'access_token', 'expires_in' ], $records[0]['context']['invalid_fields']);
+		$this->assertArrayNotHasKey('access_token', $records[0]['context']);
+		$this->assertArrayNotHasKey('expires_in', $records[0]['context']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 }

@@ -4,8 +4,10 @@ namespace Oidc;
 
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\FakeHttpFetcher;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 class ProviderMetadataResolverTest extends TestCase {
 
@@ -93,41 +95,127 @@ class ProviderMetadataResolverTest extends TestCase {
 	public function testResolveThrowsOnNonSuccessStatus(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse('not found', 404));
-		$resolver = new ProviderMetadataResolver($fetcher);
+		$logger   = new ArrayLogger;
+		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
-		$this->expectException(ProviderDiscoveryException::class);
+		try {
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
 
-		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: provider configuration endpoint returned an unsuccessful response', $records[0]['message']);
+		$this->assertSame(404, $records[0]['context']['http_status']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testResolveThrowsOnInvalidJson(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse('not json', 200));
-		$resolver = new ProviderMetadataResolver($fetcher);
+		$logger   = new ArrayLogger;
+		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
-		$this->expectException(ProviderDiscoveryException::class);
+		try {
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
 
-		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: provider configuration endpoint returned invalid JSON', $records[0]['message']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testResolveThrowsWhenEndpointMissingFromDocument(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse(json_encode([], JSON_THROW_ON_ERROR), 200));
-		$resolver = new ProviderMetadataResolver($fetcher);
+		$logger   = new ArrayLogger;
+		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
-		$this->expectException(ProviderDiscoveryException::class);
+		try {
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
 
-		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: provider configuration is missing the requested endpoint', $records[0]['message']);
+		$this->assertSame(ProviderMetadataResolver::TOKEN_ENDPOINT, $records[0]['context']['endpoint_key']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testResolveWrapsHttpTransportFailures(): void {
 		$fetcher = new FakeHttpFetcher;
-		$fetcher->failWith('https://issuer.example.com/.well-known/openid-configuration', new HttpTransportException('connection refused'));
-		$resolver = new ProviderMetadataResolver($fetcher);
+		$transport = new HttpTransportException('connection refused');
+		$fetcher->failWith('https://issuer.example.com/.well-known/openid-configuration', $transport);
+		$logger   = new ArrayLogger;
+		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
-		$this->expectException(ProviderDiscoveryException::class);
+		try {
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: unable to fetch provider configuration', $records[0]['message']);
+		$this->assertSame($transport, $records[0]['context']['exception']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testResolveDoesNotLogOnSuccess(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([ 'token_endpoint' => 'https://issuer.example.com/token' ], JSON_THROW_ON_ERROR), 200),
+		);
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, $logger);
 
 		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+
+		$this->assertSame([], $logger->records);
+	}
+
+	public function testWithStateCarriesOverAlreadyDiscoveredDocuments(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'token_endpoint'         => 'https://issuer.example.com/token',
+				'authorization_endpoint' => 'https://issuer.example.com/authorize',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$resolver = new ProviderMetadataResolver($fetcher);
+		$config   = $this->configWithProviderUrl();
+
+		$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$scoped = $resolver->withState('the-state');
+		$scoped->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
+
+		$this->assertCount(1, $fetcher->requests, 'withState() must not throw away memoization already built up before scoping');
+	}
+
+	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse('not found', 404));
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, $logger);
+
+		$resolver->withState('the-state');
+
+		try {
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$this->assertNull($logger->recordsAt(LogLevel::ERROR)[0]['context']['state']);
 	}
 
 }

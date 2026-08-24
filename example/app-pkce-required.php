@@ -86,10 +86,14 @@ echo 'code_verifier sent with the token exchange: ' . (isset($tokenParams['code_
 
 // Required mode fails closed if the verifier is gone by completion time (evicted from the
 // cache, TTL expired, or the redirect and completion configs disagree). Simulate that
-// directly instead of waiting for a real cache eviction.
+// directly instead of waiting for a real cache eviction - overwriting the flow entry in
+// place (rather than deleting it outright) loses only the verifier, not the state/nonce
+// match too, which is a different failure AuthorizationStateStore itself already logs.
 $redirect = $client->buildAuthorizationCodeRedirect($config);
 parse_str((string)parse_url($redirect->url, PHP_URL_QUERY), $params);
-$cache->delete("henderjon.oidc.code_verifier.{$sessionId}");
+$flowKey = "henderjon.oidc.flow.{$sessionId}.{$params['state']}";
+$flow = $cache->get($flowKey);
+$cache->set($flowKey, [ 'nonce' => $flow['nonce'], 'code_verifier' => null ], 600);
 
 $requestsBefore = count($http->requests);
 

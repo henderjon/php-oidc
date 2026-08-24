@@ -70,9 +70,12 @@ echo "code_challenge_method: {$params['code_challenge_method']}\n";
 echo "code_challenge: {$params['code_challenge']}\n\n";
 
 // Simulate the same eviction as the Required example (evicted from the cache, TTL
-// expired, or the redirect and completion configs disagree). Optional proceeds anyway
-// and lets the token endpoint decide, instead of failing before ever contacting it.
-$cache->delete("henderjon.oidc.code_verifier.{$sessionId}");
+// expired, or the redirect and completion configs disagree) - overwriting the flow entry
+// in place so only the verifier is lost, not the state/nonce match too. Optional proceeds
+// anyway and lets the token endpoint decide, instead of failing before ever contacting it.
+$flowKey = "henderjon.oidc.flow.{$sessionId}.{$params['state']}";
+$flow = $cache->get($flowKey);
+$cache->set($flowKey, [ 'nonce' => $flow['nonce'], 'code_verifier' => null ], 600);
 
 try {
 	$client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([

@@ -2,13 +2,15 @@
 
 namespace Oidc;
 
+use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\InMemoryCache;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 class AuthorizationStateStoreTest extends TestCase {
 
-	private function makeStore(): AuthorizationStateStore {
-		return new AuthorizationStateStore(new InMemoryCache, 'the-cache-key');
+	private function makeStore( ?ArrayLogger $logger = null ): AuthorizationStateStore {
+		return new AuthorizationStateStore(new InMemoryCache, 'the-cache-key', logger: $logger ?? new ArrayLogger);
 	}
 
 	public function testStartGeneratesStateAndNonce(): void {
@@ -113,7 +115,50 @@ class AuthorizationStateStoreTest extends TestCase {
 		$cache = new InMemoryCache;
 		$cache->set('henderjon.oidc.flow.the-cache-key.some-state', 'not-an-array', 600);
 
-		$this->assertNull($this->makeStore()->consume('some-state'));
+		$logger = new ArrayLogger;
+		$store  = new AuthorizationStateStore($cache, 'the-cache-key', logger: $logger);
+
+		$this->assertNull($store->consume('some-state'));
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: cached authorization flow entry is not the expected shape', $records[0]['message']);
+		$this->assertSame('some-state', $records[0]['context']['state']);
+		$this->assertSame('string', $records[0]['context']['type']);
+	}
+
+	public function testConsumeLogsWhenNoFlowMatchesTheGivenState(): void {
+		$logger = new ArrayLogger;
+
+		$this->assertNull($this->makeStore($logger)->consume('never-started'));
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
+		$this->assertSame('never-started', $records[0]['context']['state']);
+	}
+
+	public function testConsumeDoesNotLogOnASuccessfulMatch(): void {
+		$logger = new ArrayLogger;
+		$store  = $this->makeStore($logger);
+		$started = $store->start();
+
+		$store->consume($started->state);
+
+		$this->assertSame([], $logger->records);
+	}
+
+	public function testConsumeTruncatesAnOverlongStateBeforeLogging(): void {
+		$logger        = new ArrayLogger;
+		$oversizedState = str_repeat('a', 5000);
+
+		$this->assertNull($this->makeStore($logger)->consume($oversizedState));
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertLessThan(100, strlen($records[0]['context']['state']));
+		$this->assertStringStartsWith(str_repeat('a', 64), $records[0]['context']['state']);
+		$this->assertStringEndsWith('(truncated)', $records[0]['context']['state']);
 	}
 
 }
