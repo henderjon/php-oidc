@@ -6,10 +6,12 @@ use Firebase\JWT\JWT;
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\ProviderDiscoveryException;
+use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\FakeHttpFetcher;
 use Oidc\Fakes\FixedClock;
 use Oidc\Fakes\RsaKeyFixture;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 class IdTokenVerifierTest extends TestCase {
 
@@ -180,6 +182,112 @@ class IdTokenVerifierTest extends TestCase {
 		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
 
 		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyEncryptedTokenLogsTheHeader(): void {
+		$header   = JWT::urlsafeB64Encode(json_encode([ 'alg' => 'RSA-OAEP', 'enc' => 'A256GCM' ], JSON_THROW_ON_ERROR));
+		$payload  = JWT::urlsafeB64Encode('encrypted-payload');
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+
+		try {
+			$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('A256GCM', $records[0]['context']['header']['enc']);
+	}
+
+	public function testVerifyTokenMissingAlgHeaderLogsTheHeader(): void {
+		$header   = JWT::urlsafeB64Encode(json_encode([ 'typ' => 'JWT' ], JSON_THROW_ON_ERROR));
+		$payload  = JWT::urlsafeB64Encode(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR));
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+
+		try {
+			$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame([ 'typ' => 'JWT' ], $records[0]['context']['header']);
+	}
+
+	public function testVerifyThrowsWhenNoJwksKeyMatchesLogsTheAvailableKids(): void {
+		$fixture      = new RsaKeyFixture;
+		$otherFixture = new RsaKeyFixture;
+
+		$mergedJwks = [ 'keys' => [ ...$fixture->jwks()['keys'], ...$this->reKeyed($otherFixture) ] ];
+		$fetcher    = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode($mergedJwks, JSON_THROW_ON_ERROR), 200));
+
+		$idTokenWithUnknownKid = $fixture->sign([ 'sub' => 'user-1' ], keyId: 'unknown-kid');
+
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier($fetcher, logger: $logger);
+
+		try {
+			$verifier->verify($idTokenWithUnknownKid, self::JWKS_URI, 'unused');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('unknown-kid', $records[0]['context']['kid']);
+		$this->assertSame([ RsaKeyFixture::KEY_ID, 'other-key' ], $records[0]['context']['available_kids']);
+	}
+
+	public function testVerifyHs256TokenWithWrongSecretLogsTheExceptionButStaysGeneric(): void {
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, self::WRONG_CLIENT_SECRET);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			// firebase/php-jwt's own message lives only in the log (and in ->getPrevious(),
+			// for anything inspecting the chain directly) - not folded into the message text.
+			$this->assertSame('ID token verification failed', $e->getMessage());
+			$this->assertNotNull($e->getPrevious());
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertInstanceOf(\Exception::class, $records[0]['context']['exception']);
+	}
+
+	public function testVerifyWithMismatchedAccessTokenHashLogsTheAlg(): void {
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => 'not-the-right-hash' ], self::CLIENT_SECRET, 'HS256');
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, accessToken: 'the-access-token');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('HS256', $records[0]['context']['alg']);
+	}
+
+	public function testSuccessfulVerifyDoesNotLogAnything(): void {
+		$fixture  = new RsaKeyFixture;
+		$idToken  = $fixture->sign([ 'iss' => 'https://issuer.example.com', 'sub' => 'user-1' ]);
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier($this->fetcherWithJwks($fixture), logger: $logger);
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused-client-secret');
+
+		$this->assertSame([], $logger->records);
 	}
 
 }

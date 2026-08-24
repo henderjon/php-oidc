@@ -3,14 +3,28 @@
 namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * Validates the OIDC-specific claims that `Firebase\JWT\JWT::decode()`
  * cannot know about on its own: issuer, audience, and nonce. Signature
  * validity and the `exp`/`nbf`/`iat` time claims are already checked by
  * IdTokenVerifier before claims ever reach here.
+ *
+ * A mismatch here is a stronger signal than a missing/wrong `state` - it
+ * means a signature-valid token that simply was not meant for this
+ * exchange, which is exactly what an attack or a misconfigured client
+ * looks like. Every mismatch is logged with the expected and actual
+ * values before the generic AuthenticationFailedException is thrown, so
+ * that signal is not lost unless the caller happens to log the exception.
  */
 final class ClaimsValidator {
+
+	public function __construct(
+		private readonly LoggerInterface $logger = new NullLogger,
+	) {
+	}
 
 	/**
 	 * @throws AuthenticationFailedException
@@ -25,7 +39,14 @@ final class ClaimsValidator {
 	 * @throws AuthenticationFailedException
 	 */
 	public function validateIssuer( Claims $claims, string $expectedIssuer ): void {
-		if( $claims->get('iss') !== $expectedIssuer ) {
+		$actual = $claims->get('iss');
+
+		if( $actual !== $expectedIssuer ) {
+			$this->logger->warning('OIDC: ID token issuer does not match the expected issuer', [
+				'expected' => $expectedIssuer,
+				'actual'   => $actual,
+			]);
+
 			throw new AuthenticationFailedException('ID token issuer does not match the expected issuer');
 		}
 	}
@@ -43,6 +64,11 @@ final class ClaimsValidator {
 		$expected = $this->toStringList($expectedAudience);
 
 		if( array_intersect($expected, $actual) === [] ) {
+			$this->logger->warning('OIDC: ID token audience does not match any of the expected values', [
+				'expected' => $expected,
+				'actual'   => $actual,
+			]);
+
 			throw new AuthenticationFailedException('ID token audience does not match any of the expected values');
 		}
 	}
@@ -70,7 +96,14 @@ final class ClaimsValidator {
 			return;
 		}
 
-		if( $claims->get('nonce') !== $expectedNonce ) {
+		$actual = $claims->get('nonce');
+
+		if( $actual !== $expectedNonce ) {
+			$this->logger->warning('OIDC: ID token nonce does not match the expected value', [
+				'expected' => $expectedNonce,
+				'actual'   => $actual,
+			]);
+
 			throw new AuthenticationFailedException('ID token nonce does not match the expected value');
 		}
 	}

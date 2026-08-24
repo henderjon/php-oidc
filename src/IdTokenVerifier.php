@@ -9,6 +9,8 @@ use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\ProviderDiscoveryException;
 use Psr\Clock\ClockInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * Verifies an ID token's signature (RS256 via JWKS, or HS256 via the
@@ -22,6 +24,13 @@ use Psr\Clock\ClockInterface;
  * detected and rejected before any key material is touched.
  *
  * Issuer/audience/nonce are not this class's concern - see ClaimsValidator.
+ *
+ * Every failure here is a stronger signal than a mismatched `state` or
+ * `nonce` - it means the token itself is malformed, unsigned by a key we
+ * trust, or otherwise not what it claims to be. Each one is logged (the
+ * JOSE header, which carries no secret material, or the specific mismatch)
+ * before the generic AuthenticationFailedException is thrown, so that
+ * signal survives even if the caller never logs the exception itself.
  */
 final class IdTokenVerifier {
 
@@ -29,6 +38,7 @@ final class IdTokenVerifier {
 		private readonly HttpFetcherInterface $httpFetcher,
 		private readonly ClockInterface $clock = new CurrentClock,
 		private readonly int $leewaySeconds = 300,
+		private readonly LoggerInterface $logger = new NullLogger,
 	) {
 	}
 
@@ -46,12 +56,16 @@ final class IdTokenVerifier {
 		$header = $this->decodeHeader($idToken);
 
 		if( isset($header['enc']) ) {
+			$this->logger->warning('OIDC: ID token is encrypted (JWE), which is not supported', [ 'header' => $header ]);
+
 			throw new AuthenticationFailedException('Encrypted ID tokens (JWE) are not supported');
 		}
 
 		$alg = $header['alg'] ?? null;
 
 		if( !is_string($alg) || $alg === '' ) {
+			$this->logger->warning('OIDC: ID token is missing its alg header', [ 'header' => $header ]);
+
 			throw new AuthenticationFailedException('ID token is missing its alg header');
 		}
 
@@ -79,7 +93,13 @@ final class IdTokenVerifier {
 		try {
 			$payload = JWT::decode($idToken, $key);
 		} catch( \Exception $e ) {
-			throw new AuthenticationFailedException('ID token verification failed: ' . $e->getMessage(), previous: $e);
+			// The exception stays generic - firebase/php-jwt's own message (and whatever it
+			// happens to reveal about why decoding failed) lives only in the log, matching
+			// every other failure in this class and in ClaimsValidator. `previous` still
+			// carries the original exception for anything inspecting the chain directly.
+			$this->logger->warning('OIDC: ID token signature verification failed', [ 'exception' => $e ]);
+
+			throw new AuthenticationFailedException('ID token verification failed', previous: $e);
 		} finally {
 			JWT::$timestamp = $originalTimestamp;
 			JWT::$leeway    = $originalLeeway;
@@ -108,6 +128,8 @@ final class IdTokenVerifier {
 		$expected = JWT::urlsafeB64Encode(substr($digest, 0, intdiv($bitLength, 16)));
 
 		if( !hash_equals($expected, (string)$atHash) ) {
+			$this->logger->warning('OIDC: ID token at_hash does not match the access token', [ 'alg' => $alg ]);
+
 			throw new AuthenticationFailedException('ID token at_hash does not match the access token');
 		}
 	}
@@ -126,6 +148,11 @@ final class IdTokenVerifier {
 		if( count($keySet) === 1 ) {
 			return array_values($keySet)[0];
 		}
+
+		$this->logger->warning('OIDC: unable to find a matching JWKS key for this ID token', [
+			'kid'            => $kid,
+			'available_kids' => array_keys($keySet),
+		]);
 
 		throw new AuthenticationFailedException('Unable to find a matching JWKS key for this ID token');
 	}
@@ -162,12 +189,16 @@ final class IdTokenVerifier {
 		$segments = explode('.', $idToken);
 
 		if( count($segments) !== 3 ) {
+			$this->logger->warning('OIDC: ID token is not a well-formed JWT', [ 'segment_count' => count($segments) ]);
+
 			throw new AuthenticationFailedException('ID token is not a well-formed JWT');
 		}
 
 		$decoded = json_decode(JWT::urlsafeB64Decode($segments[0]), true);
 
 		if( !is_array($decoded) ) {
+			$this->logger->warning('OIDC: ID token header is not valid JSON');
+
 			throw new AuthenticationFailedException('ID token header is not valid JSON');
 		}
 

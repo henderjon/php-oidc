@@ -61,12 +61,16 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $config->pkce === PkceMode::Required && $flow->codeVerifier === null ) {
+			$this->logger->warning('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state ]);
+
 			throw new AuthenticationFailedException('Unable to verify PKCE code verifier');
 		}
 
 		$tokenResult = $this->tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier);
 
 		if( $tokenResult->idToken === null ) {
+			$this->logger->warning('OIDC: token endpoint response is missing id_token');
+
 			throw new AuthenticationFailedException('Token response is missing id_token');
 		}
 
@@ -92,6 +96,8 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->idToken === null ) {
+			$this->logger->warning('OIDC: callback is missing the id_token');
+
 			throw new AuthenticationFailedException('Callback is missing the id_token');
 		}
 

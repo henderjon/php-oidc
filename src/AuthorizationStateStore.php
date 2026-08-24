@@ -35,6 +35,14 @@ final class AuthorizationStateStore {
 
 	private const FLOW_KEY_PREFIX = 'henderjon.oidc.flow';
 
+	/**
+	 * `state` reaches consume() straight from the callback, before it is known to
+	 * match anything - so it is still attacker-controlled at the point it gets
+	 * logged. Cap what actually lands in a log record so a crafted callback cannot
+	 * pad every warning this class emits with an arbitrarily large value.
+	 */
+	private const MAX_LOGGED_STATE_LENGTH = 64;
+
 	public function __construct(
 		private readonly CacheInterface $cache,
 		private readonly string $cacheKeySuffix = "",
@@ -75,14 +83,14 @@ final class AuthorizationStateStore {
 		$this->cache->delete($key);
 
 		if( $flow === null ) {
-			$this->logger->warning('OIDC: no pending authorization flow found for the given state', [ 'state' => $state ]);
+			$this->logger->warning('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
 
 			return null;
 		}
 
 		if( !is_array($flow) || !is_string($flow['nonce'] ?? null) ) {
 			$this->logger->warning('OIDC: cached authorization flow entry is not the expected shape', [
-				'state' => $state,
+				'state' => $this->loggableState($state),
 				'type'  => get_debug_type($flow),
 				'keys'  => is_array($flow) ? array_keys($flow) : null,
 			]);
@@ -104,6 +112,12 @@ final class AuthorizationStateStore {
 
 	private function flowKey(string $state): string {
 		return self::FLOW_KEY_PREFIX . ".{$this->cacheKeySuffix}.{$state}";
+	}
+
+	private function loggableState(string $state): string {
+		return strlen($state) > self::MAX_LOGGED_STATE_LENGTH
+			? substr($state, 0, self::MAX_LOGGED_STATE_LENGTH) . '...(truncated)'
+			: $state;
 	}
 
 }

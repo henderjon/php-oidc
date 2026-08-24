@@ -148,4 +148,17 @@ class AuthorizationStateStoreTest extends TestCase {
 		$this->assertSame([], $logger->records);
 	}
 
+	public function testConsumeTruncatesAnOverlongStateBeforeLogging(): void {
+		$logger        = new ArrayLogger;
+		$oversizedState = str_repeat('a', 5000);
+
+		$this->assertNull($this->makeStore($logger)->consume($oversizedState));
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertLessThan(100, strlen($records[0]['context']['state']));
+		$this->assertStringStartsWith(str_repeat('a', 64), $records[0]['context']['state']);
+		$this->assertStringEndsWith('(truncated)', $records[0]['context']['state']);
+	}
+
 }

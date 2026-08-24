@@ -153,20 +153,28 @@ class OpenIDConnectClientTest extends TestCase {
 
 	public function testRequiredPkceFailsClosedWhenTheVerifierIsMissingAtCompletion(): void {
 		$fetcher = new FakeHttpFetcher;
-		$client  = $this->makeClient($fetcher);
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
 
 		// Built without PKCE, so no verifier was ever stored - simulates the verifier
 		// having been evicted from the cache by the time the callback comes back.
 		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
 		$params   = $this->queryParams($redirect->url);
 
-		$this->expectException(AuthenticationFailedException::class);
-		$this->expectExceptionMessage('Unable to verify PKCE code verifier');
+		try {
+			$client->completeAuthorizationCodeFlow($this->config()->withPkce(PkceMode::Required), new IncomingAuthorizationResponse([
+				'code'  => 'the-code',
+				'state' => $params['state'],
+			]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('Unable to verify PKCE code verifier', $e->getMessage());
+		}
 
-		$client->completeAuthorizationCodeFlow($this->config()->withPkce(PkceMode::Required), new IncomingAuthorizationResponse([
-			'code'  => 'the-code',
-			'state' => $params['state'],
-		]));
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: PKCE code verifier missing for a Required flow', $records[0]['message']);
+		$this->assertSame($params['state'], $records[0]['context']['state']);
 	}
 
 	public function testOptionalPkceProceedsWithoutAVerifierWhenNoneWasStored(): void {
@@ -354,6 +362,35 @@ class OpenIDConnectClientTest extends TestCase {
 		]));
 	}
 
+	public function testTokenResponseMissingIdTokenLogsAWarning(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		// No id_token in this response at all - as opposed to one present but malformed,
+		// which TokenResult itself already logs.
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+		], JSON_THROW_ON_ERROR), 200));
+
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'code'  => 'the-code',
+				'state' => $params['state'],
+			]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('Token response is missing id_token', $e->getMessage());
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: token endpoint response is missing id_token', $records[0]['message']);
+	}
+
 	public function testImplicitFlowFullCycle(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;
@@ -376,6 +413,26 @@ class OpenIDConnectClientTest extends TestCase {
 		$result   = $client->completeImplicitFlow($this->config(), $response);
 
 		$this->assertSame('user-1', $result->claims->get('sub'));
+	}
+
+	public function testImplicitFlowCallbackMissingIdTokenLogsAWarning(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$redirect = $client->buildImplicitFlowRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		try {
+			$client->completeImplicitFlow($this->config(), new IncomingAuthorizationResponse([ 'state' => $params['state'] ]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('Callback is missing the id_token', $e->getMessage());
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: callback is missing the id_token', $records[0]['message']);
 	}
 
 	public function testRequestClientCredentialsToken(): void {
