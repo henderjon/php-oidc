@@ -55,7 +55,7 @@ class MockOpenIDConnectClient implements
 		return $this->authenticateOrThrow();
 	}
 
-	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [] ): TokenResult {
+	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [], array $extraParams = [] ): TokenResult {
 		return $this->tokenResult;
 	}
 

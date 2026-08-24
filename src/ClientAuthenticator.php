@@ -11,8 +11,8 @@ namespace Oidc;
 final class ClientAuthenticator {
 
 	/**
-	 * @param array<string,string> $params
-	 * @return array{0: array<string,string>, 1: array<string,string>} [params, headers]
+	 * @param array<string,string|list<string>> $params
+	 * @return array{0: array<string,string|list<string>>, 1: array<string,string>} [params, headers]
 	 */
 	public static function apply( OpenIDConnectClientConfig $config, array $params ): array {
 		$headers = [ 'Content-Type' => 'application/x-www-form-urlencoded' ];

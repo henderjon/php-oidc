@@ -52,8 +52,15 @@ $client = (new OpenIDConnectClientFactory($http))->make(new InMemoryCache(), 'ex
 $redirect = $client->buildAuthorizationCodeRedirect($config);
 echo "Send the browser to:\n{$redirect->url}\n\n";
 
-$token = $client->requestClientCredentialsToken($config, [ 'api.read' ]);
+// extraParams passes provider-specific extensions straight through on the request body -
+// e.g. Auth0-style audience, or an RFC 8707 resource - without this library needing to
+// model every provider's own extensions itself.
+$token = $client->requestClientCredentialsToken($config, [ 'api.read' ], [ 'audience' => 'https://api.example.com' ]);
 echo "Mock client-credentials token: {$token->accessToken}\n\n";
+
+$tokenRequest = end($http->requests);
+parse_str((string)$tokenRequest['body'], $tokenParams);
+echo "audience sent with the token request: {$tokenParams['audience']}\n\n";
 
 echo "Recorded mock requests:\n";
 foreach ($http->requests as $request) {
