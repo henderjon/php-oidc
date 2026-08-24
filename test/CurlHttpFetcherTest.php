@@ -169,7 +169,7 @@ class CurlHttpFetcherTest extends TestCase {
 		$this->assertSame([], $logger->records);
 	}
 
-	public function testDisablingTlsVerificationLogsACriticalDiagnosticOnEveryRequest(): void {
+	public function testDisablingTlsVerificationLogsANoticeOnEveryRequest(): void {
 		self::$server->setResponseOfPath('/first', new Response('first'));
 		self::$server->setResponseOfPath('/second', new Response('second'));
 
@@ -180,7 +180,7 @@ class CurlHttpFetcherTest extends TestCase {
 
 		// A prominent diagnostic means every request, not a one-time notice easy to lose in a
 		// large log stream - two requests must produce two log records, not one.
-		$records = $logger->recordsAt(LogLevel::CRITICAL);
+		$records = $logger->recordsAt(LogLevel::NOTICE);
 		$this->assertCount(2, $records);
 		$this->assertSame($this->url('first'), $records[0]['context']['url']);
 		$this->assertSame($this->url('second'), $records[1]['context']['url']);

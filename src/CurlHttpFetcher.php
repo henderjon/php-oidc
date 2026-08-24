@@ -19,10 +19,14 @@ use Psr\Log\NullLogger;
  * `verifyTls` parameter on `fetch()`. The only way to disable it at all is
  * `$disableTlsVerificationForLocalDevelopmentOnly`, decided once for this instance's whole
  * lifetime rather than per request, with a name that cannot be mistaken for a normal
- * setting. Every single request made while it is active logs a critical diagnostic - not
- * a one-time notice easy to lose in a large log stream - because for as long as it is on,
- * every request this instance makes is vulnerable to a network-position attacker
- * intercepting or forging responses, including ones carrying bearer credentials.
+ * setting. Every single request made while it is active logs a diagnostic - not a one-time
+ * notice easy to lose in a large log stream - because for as long as it is on, every request
+ * this instance makes is vulnerable to a network-position attacker intercepting or forging
+ * responses, including ones carrying bearer credentials. Logged at `notice`, not a more
+ * severe level: this is expected, intentional noise for as long as local development needs
+ * it active, not an error - and `notice` gives a caller an easy level to filter down or
+ * silence entirely for that stretch of time, without needing to silence anything more
+ * severe to do it.
  */
 final class CurlHttpFetcher implements HttpFetcherInterface {
 
@@ -42,7 +46,7 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 	 */
 	public function fetch( string $url, ?string $body, array $headers = [] ): FetchResponse {
 		if( $this->disableTlsVerificationForLocalDevelopmentOnly ) {
-			$this->logger->critical('OIDC: TLS certificate and hostname verification is disabled for this request - never use this outside local development', [ 'url' => $url ]);
+			$this->logger->notice('OIDC: TLS certificate and hostname verification is disabled for this request - never use this outside local development', [ 'url' => $url ]);
 		}
 
 		$handle = $this->getHandle();
