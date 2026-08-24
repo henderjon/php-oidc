@@ -27,6 +27,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertSame([], $config->extraAuthParams);
 		$this->assertTrue($config->verifyTls);
 		$this->assertNull($config->audience);
+		$this->assertSame(PkceMode::Disabled, $config->pkce);
 	}
 
 	public function testWithClientId(): void {
@@ -139,6 +140,14 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertSame('the-audience', $config->withScopes([ 'email' ])->audience);
 		$this->assertSame('the-audience', $config->withVerifyTls(false)->audience);
 		$this->assertSame('the-audience', $config->withIssuer('https://issuer.example.com')->audience);
+	}
+
+	public function testWithPkce(): void {
+		$config = $this->makeConfig();
+		$new    = $config->withPkce(PkceMode::Required);
+
+		$this->assertSame(PkceMode::Disabled, $config->pkce, 'original must be unchanged');
+		$this->assertSame(PkceMode::Required, $new->pkce);
 	}
 
 }

@@ -4,6 +4,8 @@ namespace Oidc;
 
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\TokenRequestException;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * Posts to `token_endpoint` for the two grants this module supports:
@@ -17,18 +19,41 @@ final class TokenEndpointClient {
 	public function __construct(
 		private readonly HttpFetcherInterface $httpFetcher,
 		private readonly ProviderMetadataResolver $providerMetadataResolver,
+		private readonly LoggerInterface $logger = new NullLogger,
+		private readonly ?string $state = null,
 	) {
+	}
+
+	/**
+	 * Returns a copy of this client carrying one flow's correlation id - see
+	 * ClaimsValidator::withState() for why this returns a new instance instead of mutating
+	 * the shared one.
+	 *
+	 * Takes the caller's own already-scoped ProviderMetadataResolver rather than scoping
+	 * `$this->providerMetadataResolver` itself, so both this client's token_endpoint
+	 * resolution and whatever else the caller resolves during the same flow (jwks_uri, for
+	 * one) share one discovery fetch instead of two independently-scoped copies each
+	 * fetching it themselves.
+	 */
+	public function withState( ?string $state, ProviderMetadataResolver $providerMetadataResolver ): self {
+		return new self($this->httpFetcher, $providerMetadataResolver, $this->logger, $state);
 	}
 
 	/**
 	 * @throws TokenRequestException
 	 */
-	public function exchangeAuthorizationCode( OpenIDConnectClientConfig $config, string $code ): TokenResult {
-		return $this->request($config, [
+	public function exchangeAuthorizationCode( OpenIDConnectClientConfig $config, string $code, ?string $codeVerifier = null ): TokenResult {
+		$params = [
 			'grant_type'   => 'authorization_code',
 			'code'         => $code,
 			'redirect_uri' => $config->redirectUrl,
-		]);
+		];
+
+		if( $codeVerifier !== null ) {
+			$params['code_verifier'] = $codeVerifier;
+		}
+
+		return $this->request($config, $params);
 	}
 
 	/**
@@ -56,6 +81,13 @@ final class TokenEndpointClient {
 		try {
 			$response = $this->httpFetcher->fetch($endpoint, http_build_query($params), $headers, $config->verifyTls);
 		} catch( HttpTransportException $e ) {
+			$this->logger->error('OIDC: token endpoint request could not be completed', [
+				'endpoint'    => $endpoint,
+				'http_status' => null,
+				'exception'   => $e,
+				'state'       => $this->state,
+			]);
+
 			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", previous: $e);
 		}
 
@@ -64,14 +96,29 @@ final class TokenEndpointClient {
 		if( $response->status !== 200 ) {
 			$error = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : "HTTP {$response->status}";
 
+			$this->logger->error('OIDC: token endpoint returned an unsuccessful response', [
+				'endpoint'       => $endpoint,
+				'http_status'    => $response->status,
+				'provider_error' => is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null,
+				'content_type'   => $response->contentType,
+				'state'          => $this->state,
+			]);
+
 			throw new TokenRequestException("Token request failed: {$error}", $response->status, $response->body);
 		}
 
 		if( !is_array($decoded) ) {
+			$this->logger->error('OIDC: token endpoint returned invalid JSON', [
+				'endpoint'     => $endpoint,
+				'http_status'  => $response->status,
+				'content_type' => $response->contentType,
+				'state'        => $this->state,
+			]);
+
 			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body);
 		}
 
-		return new TokenResult($decoded);
+		return new TokenResult($decoded, $this->logger, $this->state);
 	}
 
 }

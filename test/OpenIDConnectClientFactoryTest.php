@@ -59,14 +59,16 @@ class OpenIDConnectClientFactoryTest extends TestCase {
 		$first   = $factory->make($cache, 'first-key');
 		$second  = $factory->make($cache, 'second-key');
 
-		$first->buildAuthorizationCodeRedirect($config);
+		$firstRedirect = $first->buildAuthorizationCodeRedirect($config);
+		parse_str((string)parse_url($firstRedirect->url, PHP_URL_QUERY), $firstParams);
 
-		$this->assertTrue($cache->has('henderjon.oidc.state.first-key'));
-		$this->assertFalse($cache->has('henderjon.oidc.state.second-key'));
+		$this->assertTrue($cache->has("henderjon.oidc.flow.first-key.{$firstParams['state']}"));
+		$this->assertFalse($cache->has("henderjon.oidc.flow.second-key.{$firstParams['state']}"));
 
-		$second->buildAuthorizationCodeRedirect($config);
+		$secondRedirect = $second->buildAuthorizationCodeRedirect($config);
+		parse_str((string)parse_url($secondRedirect->url, PHP_URL_QUERY), $secondParams);
 
-		$this->assertTrue($cache->has('henderjon.oidc.state.second-key'));
+		$this->assertTrue($cache->has("henderjon.oidc.flow.second-key.{$secondParams['state']}"));
 	}
 
 }
