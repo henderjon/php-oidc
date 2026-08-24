@@ -13,19 +13,18 @@ final class MockHttpFetcher implements HttpFetcherInterface {
 	/** @var array<string,FetchResponse> */
 	private array $responses = [];
 
-	/** @var list<array{url: string, body: ?string, headers: array<string,string>, verifyTls: bool}> */
+	/** @var list<array{url: string, body: ?string, headers: array<string,string>}> */
 	public array $requests = [];
 
 	public function respondTo(string $url, FetchResponse $response): void {
 		$this->responses[$url] = $response;
 	}
 
-	public function fetch(string $url, ?string $body, array $headers = [], bool $verifyTls = true): FetchResponse {
+	public function fetch(string $url, ?string $body, array $headers = []): FetchResponse {
 		$this->requests[] = [
 			'url' => $url,
 			'body' => $body,
 			'headers' => $headers,
-			'verifyTls' => $verifyTls,
 		];
 
 		if (!isset($this->responses[$url])) {

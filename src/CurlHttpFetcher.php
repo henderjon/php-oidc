@@ -3,6 +3,8 @@
 namespace Oidc;
 
 use Oidc\Exceptions\HttpTransportException;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * The one class in this module that talks to real sockets. Reuses a single
@@ -12,6 +14,19 @@ use Oidc\Exceptions\HttpTransportException;
  * Deliberately does not follow redirects: several calls here carry an
  * Authorization header, and blindly following a redirect would resend it
  * to whatever host the response named.
+ *
+ * TLS verification is not something any individual call can opt out of - there is no
+ * `verifyTls` parameter on `fetch()`. The only way to disable it at all is
+ * `$disableTlsVerificationForLocalDevelopmentOnly`, decided once for this instance's whole
+ * lifetime rather than per request, with a name that cannot be mistaken for a normal
+ * setting. Every single request made while it is active logs a diagnostic - not a one-time
+ * notice easy to lose in a large log stream - because for as long as it is on, every request
+ * this instance makes is vulnerable to a network-position attacker intercepting or forging
+ * responses, including ones carrying bearer credentials. Logged at `notice`, not a more
+ * severe level: this is expected, intentional noise for as long as local development needs
+ * it active, not an error - and `notice` gives a caller an easy level to filter down or
+ * silence entirely for that stretch of time, without needing to silence anything more
+ * severe to do it.
  */
 final class CurlHttpFetcher implements HttpFetcherInterface {
 
@@ -21,18 +36,22 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 
 	public function __construct(
 		private readonly int $timeoutSeconds = 30,
+		private readonly bool $disableTlsVerificationForLocalDevelopmentOnly = false,
+		private readonly LoggerInterface $logger = new NullLogger,
 	) {
 	}
 
 	/**
 	 * @param non-empty-string $url
 	 */
-	public function fetch( string $url, ?string $body, array $headers = [], bool $verifyTls = true ): FetchResponse {
+	public function fetch( string $url, ?string $body, array $headers = [] ): FetchResponse {
+		if( $this->disableTlsVerificationForLocalDevelopmentOnly ) {
+			$this->logger->notice('OIDC: TLS certificate and hostname verification is disabled for this request - never use this outside local development', [ 'url' => $url ]);
+		}
+
 		$handle = $this->getHandle();
 
 		curl_setopt($handle, CURLOPT_URL, $url);
-		curl_setopt($handle, CURLOPT_SSL_VERIFYPEER, $verifyTls);
-		curl_setopt($handle, CURLOPT_SSL_VERIFYHOST, $verifyTls ? 2 : 0);
 		curl_setopt($handle, CURLOPT_HTTPHEADER, $this->formatHeaders($headers));
 
 		if( $body === null ) {
@@ -88,6 +107,11 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 			curl_setopt($this->handle, CURLOPT_CONNECTTIMEOUT, $this->timeoutSeconds);
 			curl_setopt($this->handle, CURLOPT_TIMEOUT, $this->timeoutSeconds);
 			curl_setopt($this->handle, CURLOPT_USERAGENT, self::USER_AGENT);
+
+			// Fixed for this instance's whole lifetime, not per request - see the class
+			// docblock for why there is no per-call way to disable this.
+			curl_setopt($this->handle, CURLOPT_SSL_VERIFYPEER, !$this->disableTlsVerificationForLocalDevelopmentOnly);
+			curl_setopt($this->handle, CURLOPT_SSL_VERIFYHOST, $this->disableTlsVerificationForLocalDevelopmentOnly ? 0 : 2);
 
 			// Never file://, gopher://, ldap://, or anything else curl happens to support -
 			// only the two schemes this library ever legitimately calls. CURLOPT_REDIR_PROTOCOLS

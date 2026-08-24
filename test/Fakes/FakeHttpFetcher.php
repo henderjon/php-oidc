@@ -15,7 +15,7 @@ final class FakeHttpFetcher implements HttpFetcherInterface {
 	/** @var array<string,FetchResponse|\Throwable> */
 	private array $responses = [];
 
-	/** @var list<array{url: string, body: ?string, headers: array<string,string>, verifyTls: bool}> */
+	/** @var list<array{url: string, body: ?string, headers: array<string,string>}> */
 	public array $requests = [];
 
 	public function respondTo( string $url, FetchResponse $response ): void {
@@ -26,8 +26,8 @@ final class FakeHttpFetcher implements HttpFetcherInterface {
 		$this->responses[$url] = $exception;
 	}
 
-	public function fetch( string $url, ?string $body, array $headers = [], bool $verifyTls = true ): FetchResponse {
-		$this->requests[] = [ 'url' => $url, 'body' => $body, 'headers' => $headers, 'verifyTls' => $verifyTls ];
+	public function fetch( string $url, ?string $body, array $headers = [] ): FetchResponse {
+		$this->requests[] = [ 'url' => $url, 'body' => $body, 'headers' => $headers ];
 
 		$configured = $this->responses[$url] ?? null;
 

@@ -75,7 +75,6 @@ final class IdTokenVerifier {
 		string $clientSecret,
 		array $allowedAlgorithms = [ 'RS256' ],
 		?string $accessToken = null,
-		bool $verifyTls = true,
 	): Claims {
 		$header = $this->decodeHeader($idToken);
 
@@ -97,7 +96,7 @@ final class IdTokenVerifier {
 
 		$key = str_starts_with($alg, 'HS')
 			? new Key($clientSecret, $alg)
-			: $this->resolveAsymmetricKey($jwksUri, $alg, is_string($header['kid'] ?? null) ? $header['kid'] : null, $verifyTls);
+			: $this->resolveAsymmetricKey($jwksUri, $alg, is_string($header['kid'] ?? null) ? $header['kid'] : null);
 
 		$claims = $this->decodeAndVerifySignature($idToken, $key);
 
@@ -199,8 +198,8 @@ final class IdTokenVerifier {
 	 * @throws AuthenticationFailedException
 	 * @throws ProviderDiscoveryException
 	 */
-	private function resolveAsymmetricKey( string $jwksUri, string $alg, ?string $kid, bool $verifyTls ): Key {
-		$jwks   = $this->fetchJwks($jwksUri, $verifyTls);
+	private function resolveAsymmetricKey( string $jwksUri, string $alg, ?string $kid ): Key {
+		$jwks   = $this->fetchJwks($jwksUri);
 		$keySet = JWK::parseKeySet($jwks, $alg);
 
 		$selectedKid = match( true ) {
@@ -281,9 +280,9 @@ final class IdTokenVerifier {
 	 * @throws ProviderDiscoveryException
 	 * @return array<string,mixed>
 	 */
-	private function fetchJwks( string $jwksUri, bool $verifyTls ): array {
+	private function fetchJwks( string $jwksUri ): array {
 		try {
-			$response = $this->httpFetcher->fetch($jwksUri, null, verifyTls: $verifyTls);
+			$response = $this->httpFetcher->fetch($jwksUri, null);
 		} catch( HttpTransportException $e ) {
 			$this->logger->error('OIDC: unable to fetch JWKS', [ 'jwks_uri' => $jwksUri, 'exception' => $e, 'state' => $this->state ]);
 

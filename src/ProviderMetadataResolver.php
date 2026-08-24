@@ -117,7 +117,7 @@ final class ProviderMetadataResolver {
 		$this->assertUrlAllowed($url, $config, 'discovery');
 
 		try {
-			$response = $this->httpFetcher->fetch($url, null, verifyTls: $config->verifyTls);
+			$response = $this->httpFetcher->fetch($url, null);
 		} catch( HttpTransportException $e ) {
 			$this->logger->error('OIDC: unable to fetch provider configuration', [
 				'url'       => $url,

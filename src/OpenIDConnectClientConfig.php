@@ -10,6 +10,11 @@ namespace Oidc;
  * statically-known integration (provider URL/issuer/credentials fixed at
  * boot) and a multi-tenant one (issuer/credentials resolved per request
  * from a database row, `providerUrl`/`issuer` passed in fresh each call).
+ *
+ * There is deliberately no TLS-verification toggle here. Every network call this library
+ * makes always verifies certificates and hostnames - the one narrow, loudly-logged exception
+ * for local development lives on CurlHttpFetcher's own constructor instead, decided once per
+ * fetcher instance rather than as a config value that could travel anywhere this config does.
  */
 final class OpenIDConnectClientConfig {
 
@@ -47,7 +52,6 @@ final class OpenIDConnectClientConfig {
 		public readonly array|string|null $audience = null,
 		public readonly array $endpointOverrides = [],
 		public readonly array $extraAuthParams = [],
-		public readonly bool $verifyTls = true,
 		public readonly PkceMode $pkce = PkceMode::Disabled,
 		public readonly bool $allowInsecureSchemes = false,
 		public readonly ?array $allowedHosts = null,
@@ -58,7 +62,7 @@ final class OpenIDConnectClientConfig {
 	public function withClientId( string $clientId ): self {
 		return new self(
 			$clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -66,7 +70,7 @@ final class OpenIDConnectClientConfig {
 	public function withClientSecret( string $clientSecret ): self {
 		return new self(
 			$this->clientId, $clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -74,7 +78,7 @@ final class OpenIDConnectClientConfig {
 	public function withRedirectUrl( string $redirectUrl ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -82,7 +86,7 @@ final class OpenIDConnectClientConfig {
 	public function withProviderUrl( ?string $providerUrl ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -90,7 +94,7 @@ final class OpenIDConnectClientConfig {
 	public function withIssuer( ?string $issuer ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -102,7 +106,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			array_values(array_unique([ ...$this->scopes, ...$scopes ])),
-			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -113,7 +117,7 @@ final class OpenIDConnectClientConfig {
 	public function withAudience( array|string|null $audience ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -124,7 +128,7 @@ final class OpenIDConnectClientConfig {
 	public function withEndpointOverrides( array $endpointOverrides ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -135,15 +139,7 @@ final class OpenIDConnectClientConfig {
 	public function withExtraAuthParams( array $extraAuthParams ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->verifyTls, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
-		);
-	}
-
-	public function withVerifyTls( bool $verifyTls ): self {
-		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -151,7 +147,7 @@ final class OpenIDConnectClientConfig {
 	public function withPkce( PkceMode $pkce ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -159,7 +155,7 @@ final class OpenIDConnectClientConfig {
 	public function withAllowInsecureSchemes( bool $allowInsecureSchemes ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -174,7 +170,7 @@ final class OpenIDConnectClientConfig {
 	public function withAllowedHosts( ?array $allowedHosts ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $allowedHosts, $this->allowedAlgorithms,
 		);
 	}
@@ -189,7 +185,7 @@ final class OpenIDConnectClientConfig {
 	public function withAllowedAlgorithms( array $allowedAlgorithms ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $allowedAlgorithms,
 		);
 	}

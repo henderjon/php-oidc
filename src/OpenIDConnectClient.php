@@ -132,7 +132,7 @@ final class OpenIDConnectClient implements
 			$response = $this->httpFetcher->fetch($endpoint, null, [
 				'Authorization' => "Bearer {$accessToken}",
 				'Accept'        => 'application/json',
-			], $config->verifyTls);
+			]);
 		} catch( HttpTransportException $e ) {
 			throw new UserInfoRequestException("Unable to reach userinfo endpoint {$endpoint}", previous: $e);
 		}
@@ -244,7 +244,7 @@ final class OpenIDConnectClient implements
 	): Claims {
 		$jwksUri         = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
 		$idTokenVerifier = $this->idTokenVerifier->withState($state);
-		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken, $config->verifyTls);
+		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken);
 
 		$issuer = $config->issuer ?? $config->providerUrl;
 
@@ -270,7 +270,7 @@ final class OpenIDConnectClient implements
 		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
 
 		try {
-			return $this->idTokenVerifier->verify($jwt, $jwksUri, $config->clientSecret, allowedAlgorithms: $config->allowedAlgorithms, verifyTls: $config->verifyTls);
+			return $this->idTokenVerifier->verify($jwt, $jwksUri, $config->clientSecret, allowedAlgorithms: $config->allowedAlgorithms);
 		} catch( AuthenticationFailedException $e ) {
 			throw new UserInfoRequestException('Signed userinfo response failed verification', previous: $e);
 		}
