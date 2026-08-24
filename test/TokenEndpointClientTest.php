@@ -23,7 +23,7 @@ class TokenEndpointClientTest extends TestCase {
 	}
 
 	private function makeClient( FakeHttpFetcher $fetcher, ?ArrayLogger $logger = null ): TokenEndpointClient {
-		return new TokenEndpointClient($fetcher, new ProviderMetadataResolver($fetcher), $logger ?? new ArrayLogger);
+		return new TokenEndpointClient($fetcher, new ProviderMetadataResolver($fetcher, new UrlPolicy), $logger ?? new ArrayLogger);
 	}
 
 	/**
@@ -31,7 +31,7 @@ class TokenEndpointClientTest extends TestCase {
 	 * once, shared between the resolver's own use and the client built on top of it.
 	 */
 	private function makeScopedClient( FakeHttpFetcher $fetcher, ArrayLogger $logger, string $state ): TokenEndpointClient {
-		$providerMetadataResolver = (new ProviderMetadataResolver($fetcher, $logger))->withState($state);
+		$providerMetadataResolver = (new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger))->withState($state);
 
 		return (new TokenEndpointClient($fetcher, $providerMetadataResolver, $logger))->withState($state, $providerMetadataResolver);
 	}
@@ -236,7 +236,7 @@ class TokenEndpointClientTest extends TestCase {
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'error' => 'invalid_grant' ], JSON_THROW_ON_ERROR), 400));
 		$client = $this->makeClient($fetcher, $logger);
 
-		$providerMetadataResolver = new ProviderMetadataResolver($fetcher, $logger);
+		$providerMetadataResolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
 		$client->withState('the-state', $providerMetadataResolver->withState('the-state'));
 
 		try {

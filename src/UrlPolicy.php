@@ -17,7 +17,7 @@ namespace Oidc;
  */
 final class UrlPolicy {
 
-	public static function isAllowed( string $url, OpenIDConnectClientConfig $config ): bool {
+	public function isAllowed( string $url, OpenIDConnectClientConfig $config ): bool {
 		$parts  = parse_url($url);
 		$scheme = is_array($parts) ? ($parts['scheme'] ?? null) : null;
 		$host   = is_array($parts) ? ($parts['host'] ?? null) : null;
