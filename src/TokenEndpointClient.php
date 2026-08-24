@@ -105,7 +105,7 @@ final class TokenEndpointClient {
 		[ $params, $headers ] = ClientAuthenticator::apply($config, $params);
 
 		try {
-			$response = $this->httpFetcher->fetch($endpoint, $this->buildRequestBody($params), $headers, $config->verifyTls);
+			$response = $this->httpFetcher->fetch($endpoint, $this->buildRequestBody($params), $headers);
 		} catch( HttpTransportException $e ) {
 			$this->logger->error('OIDC: token endpoint request could not be completed', [
 				'endpoint'    => $endpoint,

@@ -5,7 +5,9 @@ namespace Oidc;
 use donatj\MockWebServer\MockWebServer;
 use donatj\MockWebServer\Response;
 use Oidc\Exceptions\HttpTransportException;
+use Oidc\Fakes\ArrayLogger;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 class CurlHttpFetcherTest extends TestCase {
 
@@ -155,6 +157,33 @@ class CurlHttpFetcherTest extends TestCase {
 
 		$this->assertSame('first', $fetcher->fetch($this->url('first'), null)->body);
 		$this->assertSame('second', $fetcher->fetch($this->url('second'), null)->body);
+	}
+
+	public function testDefaultDoesNotLogAnything(): void {
+		self::$server->setResponseOfPath('/discovery', new Response('{}'));
+
+		$logger  = new ArrayLogger;
+		$fetcher = new CurlHttpFetcher(logger: $logger);
+		$fetcher->fetch($this->url('discovery'), null);
+
+		$this->assertSame([], $logger->records);
+	}
+
+	public function testDisablingTlsVerificationLogsACriticalDiagnosticOnEveryRequest(): void {
+		self::$server->setResponseOfPath('/first', new Response('first'));
+		self::$server->setResponseOfPath('/second', new Response('second'));
+
+		$logger  = new ArrayLogger;
+		$fetcher = new CurlHttpFetcher(disableTlsVerificationForLocalDevelopmentOnly: true, logger: $logger);
+		$fetcher->fetch($this->url('first'), null);
+		$fetcher->fetch($this->url('second'), null);
+
+		// A prominent diagnostic means every request, not a one-time notice easy to lose in a
+		// large log stream - two requests must produce two log records, not one.
+		$records = $logger->recordsAt(LogLevel::CRITICAL);
+		$this->assertCount(2, $records);
+		$this->assertSame($this->url('first'), $records[0]['context']['url']);
+		$this->assertSame($this->url('second'), $records[1]['context']['url']);
 	}
 
 }

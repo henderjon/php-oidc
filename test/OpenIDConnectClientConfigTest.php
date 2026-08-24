@@ -25,7 +25,6 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertSame([], $config->scopes);
 		$this->assertSame([], $config->endpointOverrides);
 		$this->assertSame([], $config->extraAuthParams);
-		$this->assertTrue($config->verifyTls);
 		$this->assertNull($config->audience);
 		$this->assertSame(PkceMode::Disabled, $config->pkce);
 		$this->assertFalse($config->allowInsecureSchemes);
@@ -111,12 +110,6 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		);
 	}
 
-	public function testWithVerifyTls(): void {
-		$new = $this->makeConfig()->withVerifyTls(false);
-
-		$this->assertFalse($new->verifyTls);
-	}
-
 	public function testWithAudience(): void {
 		$config = $this->makeConfig();
 		$new    = $config->withAudience('the-audience');
@@ -141,7 +134,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$config = $this->makeConfig()->withAudience('the-audience');
 
 		$this->assertSame('the-audience', $config->withScopes([ 'email' ])->audience);
-		$this->assertSame('the-audience', $config->withVerifyTls(false)->audience);
+		$this->assertSame('the-audience', $config->withAllowInsecureSchemes(true)->audience);
 		$this->assertSame('the-audience', $config->withIssuer('https://issuer.example.com')->audience);
 	}
 
