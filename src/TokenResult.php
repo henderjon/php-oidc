@@ -37,7 +37,7 @@ final class TokenResult {
 	 * @param array<string,mixed> $response Decoded JSON body from a token endpoint.
 	 * @throws TokenRequestException When the response has no usable `access_token`.
 	 */
-	public function __construct( array $response, LoggerInterface $logger = new NullLogger ) {
+	public function __construct( array $response, LoggerInterface $logger = new NullLogger, ?string $state = null ) {
 		$invalidFields = [];
 
 		if( !isset($response[self::ACCESS_TOKEN]) || !is_string($response[self::ACCESS_TOKEN]) || $response[self::ACCESS_TOKEN] === '' ) {
@@ -51,7 +51,10 @@ final class TokenResult {
 		}
 
 		if( $invalidFields !== [] ) {
-			$logger->error('OIDC: token endpoint returned a malformed token response', [ 'invalid_fields' => $invalidFields ]);
+			$logger->error('OIDC: token endpoint returned a malformed token response', [
+				'invalid_fields' => $invalidFields,
+				'state'          => $state,
+			]);
 		}
 
 		if( in_array(self::ACCESS_TOKEN, $invalidFields, true) ) {

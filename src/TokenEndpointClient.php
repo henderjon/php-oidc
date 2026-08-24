@@ -26,7 +26,12 @@ final class TokenEndpointClient {
 	/**
 	 * @throws TokenRequestException
 	 */
-	public function exchangeAuthorizationCode( OpenIDConnectClientConfig $config, string $code, ?string $codeVerifier = null ): TokenResult {
+	public function exchangeAuthorizationCode(
+		OpenIDConnectClientConfig $config,
+		string $code,
+		?string $codeVerifier = null,
+		?string $state = null,
+	): TokenResult {
 		$params = [
 			'grant_type'   => 'authorization_code',
 			'code'         => $code,
@@ -37,7 +42,7 @@ final class TokenEndpointClient {
 			$params['code_verifier'] = $codeVerifier;
 		}
 
-		return $this->request($config, $params);
+		return $this->request($config, $params, $state);
 	}
 
 	/**
@@ -51,6 +56,8 @@ final class TokenEndpointClient {
 			$params['scope'] = implode(' ', $scopes);
 		}
 
+		// No state: this grant is non-interactive and never touches the state store, so
+		// there is no flow to correlate these logs with.
 		return $this->request($config, $params);
 	}
 
@@ -58,8 +65,8 @@ final class TokenEndpointClient {
 	 * @param array<string,string> $params
 	 * @throws TokenRequestException
 	 */
-	private function request( OpenIDConnectClientConfig $config, array $params ): TokenResult {
-		$endpoint             = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+	private function request( OpenIDConnectClientConfig $config, array $params, ?string $state = null ): TokenResult {
+		$endpoint             = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT, state: $state);
 		[ $params, $headers ] = ClientAuthenticator::apply($config, $params);
 
 		try {
@@ -69,6 +76,7 @@ final class TokenEndpointClient {
 				'endpoint'    => $endpoint,
 				'http_status' => null,
 				'exception'   => $e,
+				'state'       => $state,
 			]);
 
 			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", previous: $e);
@@ -84,6 +92,7 @@ final class TokenEndpointClient {
 				'http_status'    => $response->status,
 				'provider_error' => is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null,
 				'content_type'   => $response->contentType,
+				'state'          => $state,
 			]);
 
 			throw new TokenRequestException("Token request failed: {$error}", $response->status, $response->body);
@@ -94,12 +103,13 @@ final class TokenEndpointClient {
 				'endpoint'     => $endpoint,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
+				'state'        => $state,
 			]);
 
 			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body);
 		}
 
-		return new TokenResult($decoded, $this->logger);
+		return new TokenResult($decoded, $this->logger, $state);
 	}
 
 }

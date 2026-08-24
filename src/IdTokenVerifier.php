@@ -52,11 +52,12 @@ final class IdTokenVerifier {
 		string $clientSecret,
 		?string $accessToken = null,
 		bool $verifyTls = true,
+		?string $state = null,
 	): Claims {
-		$header = $this->decodeHeader($idToken);
+		$header = $this->decodeHeader($idToken, $state);
 
 		if( isset($header['enc']) ) {
-			$this->logger->warning('OIDC: ID token is encrypted (JWE), which is not supported', [ 'header' => $header ]);
+			$this->logger->warning('OIDC: ID token is encrypted (JWE), which is not supported', [ 'header' => $header, 'state' => $state ]);
 
 			throw new AuthenticationFailedException('Encrypted ID tokens (JWE) are not supported');
 		}
@@ -64,18 +65,18 @@ final class IdTokenVerifier {
 		$alg = $header['alg'] ?? null;
 
 		if( !is_string($alg) || $alg === '' ) {
-			$this->logger->warning('OIDC: ID token is missing its alg header', [ 'header' => $header ]);
+			$this->logger->warning('OIDC: ID token is missing its alg header', [ 'header' => $header, 'state' => $state ]);
 
 			throw new AuthenticationFailedException('ID token is missing its alg header');
 		}
 
 		$key = str_starts_with($alg, 'HS')
 			? new Key($clientSecret, $alg)
-			: $this->resolveAsymmetricKey($jwksUri, $alg, is_string($header['kid'] ?? null) ? $header['kid'] : null, $verifyTls);
+			: $this->resolveAsymmetricKey($jwksUri, $alg, is_string($header['kid'] ?? null) ? $header['kid'] : null, $verifyTls, $state);
 
-		$claims = $this->decodeAndVerifySignature($idToken, $key);
+		$claims = $this->decodeAndVerifySignature($idToken, $key, $state);
 
-		$this->verifyAccessTokenHash($claims, $alg, $accessToken);
+		$this->verifyAccessTokenHash($claims, $alg, $accessToken, $state);
 
 		return $claims;
 	}
@@ -83,7 +84,7 @@ final class IdTokenVerifier {
 	/**
 	 * @throws AuthenticationFailedException
 	 */
-	private function decodeAndVerifySignature( string $idToken, Key $key ): Claims {
+	private function decodeAndVerifySignature( string $idToken, Key $key, ?string $state ): Claims {
 		$originalTimestamp = JWT::$timestamp;
 		$originalLeeway    = JWT::$leeway;
 
@@ -97,7 +98,7 @@ final class IdTokenVerifier {
 			// happens to reveal about why decoding failed) lives only in the log, matching
 			// every other failure in this class and in ClaimsValidator. `previous` still
 			// carries the original exception for anything inspecting the chain directly.
-			$this->logger->warning('OIDC: ID token signature verification failed', [ 'exception' => $e ]);
+			$this->logger->warning('OIDC: ID token signature verification failed', [ 'exception' => $e, 'state' => $state ]);
 
 			throw new AuthenticationFailedException('ID token verification failed', previous: $e);
 		} finally {
@@ -111,7 +112,7 @@ final class IdTokenVerifier {
 	/**
 	 * @throws AuthenticationFailedException
 	 */
-	private function verifyAccessTokenHash( Claims $claims, string $alg, ?string $accessToken ): void {
+	private function verifyAccessTokenHash( Claims $claims, string $alg, ?string $accessToken, ?string $state ): void {
 		$atHash = $claims->get('at_hash');
 
 		if( $atHash === null || $accessToken === null ) {
@@ -128,7 +129,7 @@ final class IdTokenVerifier {
 		$expected = JWT::urlsafeB64Encode(substr($digest, 0, intdiv($bitLength, 16)));
 
 		if( !hash_equals($expected, (string)$atHash) ) {
-			$this->logger->warning('OIDC: ID token at_hash does not match the access token', [ 'alg' => $alg ]);
+			$this->logger->warning('OIDC: ID token at_hash does not match the access token', [ 'alg' => $alg, 'state' => $state ]);
 
 			throw new AuthenticationFailedException('ID token at_hash does not match the access token');
 		}
@@ -138,8 +139,8 @@ final class IdTokenVerifier {
 	 * @throws AuthenticationFailedException
 	 * @throws ProviderDiscoveryException
 	 */
-	private function resolveAsymmetricKey( string $jwksUri, string $alg, ?string $kid, bool $verifyTls ): Key {
-		$keySet = JWK::parseKeySet($this->fetchJwks($jwksUri, $verifyTls), $alg);
+	private function resolveAsymmetricKey( string $jwksUri, string $alg, ?string $kid, bool $verifyTls, ?string $state ): Key {
+		$keySet = JWK::parseKeySet($this->fetchJwks($jwksUri, $verifyTls, $state), $alg);
 
 		if( $kid !== null && isset($keySet[$kid]) ) {
 			return $keySet[$kid];
@@ -152,6 +153,7 @@ final class IdTokenVerifier {
 		$this->logger->warning('OIDC: unable to find a matching JWKS key for this ID token', [
 			'kid'            => $kid,
 			'available_kids' => array_keys($keySet),
+			'state'          => $state,
 		]);
 
 		throw new AuthenticationFailedException('Unable to find a matching JWKS key for this ID token');
@@ -161,11 +163,11 @@ final class IdTokenVerifier {
 	 * @throws ProviderDiscoveryException
 	 * @return array<string,mixed>
 	 */
-	private function fetchJwks( string $jwksUri, bool $verifyTls ): array {
+	private function fetchJwks( string $jwksUri, bool $verifyTls, ?string $state ): array {
 		try {
 			$response = $this->httpFetcher->fetch($jwksUri, null, verifyTls: $verifyTls);
 		} catch( HttpTransportException $e ) {
-			$this->logger->error('OIDC: unable to fetch JWKS', [ 'jwks_uri' => $jwksUri, 'exception' => $e ]);
+			$this->logger->error('OIDC: unable to fetch JWKS', [ 'jwks_uri' => $jwksUri, 'exception' => $e, 'state' => $state ]);
 
 			throw new ProviderDiscoveryException("Unable to fetch JWKS from {$jwksUri}", previous: $e);
 		}
@@ -174,6 +176,7 @@ final class IdTokenVerifier {
 			$this->logger->error('OIDC: JWKS endpoint returned an unsuccessful response', [
 				'jwks_uri'    => $jwksUri,
 				'http_status' => $response->status,
+				'state'       => $state,
 			]);
 
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned HTTP {$response->status}");
@@ -185,6 +188,7 @@ final class IdTokenVerifier {
 			$this->logger->error('OIDC: JWKS endpoint returned invalid JSON', [
 				'jwks_uri'    => $jwksUri,
 				'http_status' => $response->status,
+				'state'       => $state,
 			]);
 
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned invalid JSON");
@@ -197,11 +201,11 @@ final class IdTokenVerifier {
 	 * @throws AuthenticationFailedException
 	 * @return array<string,mixed>
 	 */
-	private function decodeHeader( string $idToken ): array {
+	private function decodeHeader( string $idToken, ?string $state ): array {
 		$segments = explode('.', $idToken);
 
 		if( count($segments) !== 3 ) {
-			$this->logger->warning('OIDC: ID token is not a well-formed JWT', [ 'segment_count' => count($segments) ]);
+			$this->logger->warning('OIDC: ID token is not a well-formed JWT', [ 'segment_count' => count($segments), 'state' => $state ]);
 
 			throw new AuthenticationFailedException('ID token is not a well-formed JWT');
 		}
@@ -209,7 +213,7 @@ final class IdTokenVerifier {
 		$decoded = json_decode(JWT::urlsafeB64Decode($segments[0]), true);
 
 		if( !is_array($decoded) ) {
-			$this->logger->warning('OIDC: ID token header is not valid JSON');
+			$this->logger->warning('OIDC: ID token header is not valid JSON', [ 'state' => $state ]);
 
 			throw new AuthenticationFailedException('ID token header is not valid JSON');
 		}

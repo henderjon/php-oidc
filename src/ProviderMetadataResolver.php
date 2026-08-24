@@ -43,17 +43,18 @@ final class ProviderMetadataResolver {
 	/**
 	 * @throws ProviderDiscoveryException
 	 */
-	public function resolve( OpenIDConnectClientConfig $config, string $endpointKey ): string {
+	public function resolve( OpenIDConnectClientConfig $config, string $endpointKey, ?string $state = null ): string {
 		if( isset($config->endpointOverrides[$endpointKey]) ) {
 			return $config->endpointOverrides[$endpointKey];
 		}
 
-		$document = $this->fetchWellKnownConfiguration($config);
+		$document = $this->fetchWellKnownConfiguration($config, $state);
 		$value    = $document[$endpointKey] ?? null;
 
 		if( !is_string($value) || $value === '' ) {
 			$this->logger->error('OIDC: provider configuration is missing the requested endpoint', [
 				'endpoint_key' => $endpointKey,
+				'state'        => $state,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration is missing '{$endpointKey}'");
@@ -66,11 +67,11 @@ final class ProviderMetadataResolver {
 	 * @throws ProviderDiscoveryException
 	 * @return array<string,mixed>
 	 */
-	private function fetchWellKnownConfiguration( OpenIDConnectClientConfig $config ): array {
+	private function fetchWellKnownConfiguration( OpenIDConnectClientConfig $config, ?string $state ): array {
 		$providerUrl = $config->providerUrl ?? $config->issuer;
 
 		if( $providerUrl === null ) {
-			$this->logger->error('OIDC: cannot discover provider configuration without a providerUrl or issuer');
+			$this->logger->error('OIDC: cannot discover provider configuration without a providerUrl or issuer', [ 'state' => $state ]);
 
 			throw new ProviderDiscoveryException('Cannot discover provider configuration without a providerUrl or issuer');
 		}
@@ -87,6 +88,7 @@ final class ProviderMetadataResolver {
 			$this->logger->error('OIDC: unable to fetch provider configuration', [
 				'url'       => $url,
 				'exception' => $e,
+				'state'     => $state,
 			]);
 
 			throw new ProviderDiscoveryException("Unable to fetch provider configuration from {$url}", previous: $e);
@@ -96,6 +98,7 @@ final class ProviderMetadataResolver {
 			$this->logger->error('OIDC: provider configuration endpoint returned an unsuccessful response', [
 				'url'         => $url,
 				'http_status' => $response->status,
+				'state'       => $state,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned HTTP {$response->status}");
@@ -107,6 +110,7 @@ final class ProviderMetadataResolver {
 			$this->logger->error('OIDC: provider configuration endpoint returned invalid JSON', [
 				'url'         => $url,
 				'http_status' => $response->status,
+				'state'       => $state,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned invalid JSON");

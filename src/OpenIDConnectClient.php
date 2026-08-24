@@ -66,15 +66,15 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Unable to verify PKCE code verifier');
 		}
 
-		$tokenResult = $this->tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier);
+		$tokenResult = $this->tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier, $flow->state);
 
 		if( $tokenResult->idToken === null ) {
-			$this->logger->warning('OIDC: token endpoint response is missing id_token');
+			$this->logger->warning('OIDC: token endpoint response is missing id_token', [ 'state' => $flow->state ]);
 
 			throw new AuthenticationFailedException('Token response is missing id_token');
 		}
 
-		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience);
+		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $flow->state);
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken);
 	}
@@ -96,12 +96,12 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->idToken === null ) {
-			$this->logger->warning('OIDC: callback is missing the id_token');
+			$this->logger->warning('OIDC: callback is missing the id_token', [ 'state' => $flow->state ]);
 
 			throw new AuthenticationFailedException('Callback is missing the id_token');
 		}
 
-		$claims = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience);
+		$claims = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $flow->state);
 
 		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
 	}
@@ -140,6 +140,10 @@ final class OpenIDConnectClient implements
 	}
 
 	private function buildRedirect( OpenIDConnectClientConfig $config, string $responseType ): AuthorizationRedirect {
+		// No state exists yet to correlate this resolve() with - it is not generated until
+		// stateStore->start() below, and generating it earlier just to label a discovery
+		// failure would mean writing a cache entry for an attempt that never got as far as
+		// producing a redirect.
 		$authorizationEndpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
 		$codeVerifier          = $responseType === 'code' && $config->pkce !== PkceMode::Disabled ? Pkce::generateVerifier() : null;
 		$flow                  = $this->stateStore->start(codeVerifier: $codeVerifier);
@@ -192,7 +196,7 @@ final class OpenIDConnectClient implements
 	 */
 	private function consumeFlow( IncomingAuthorizationResponse $response ): ?FlowState {
 		if( $response->state === null ) {
-			$this->logger->warning('OIDC: callback is missing the state parameter');
+			$this->logger->warning('OIDC: callback is missing the state parameter', [ 'state' => null ]);
 
 			return null;
 		}
@@ -210,9 +214,10 @@ final class OpenIDConnectClient implements
 		string $expectedNonce,
 		?string $accessToken,
 		array|string|null $audience,
+		string $state,
 	): Claims {
-		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
-		$claims  = $this->idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $accessToken, $config->verifyTls);
+		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI, state: $state);
+		$claims  = $this->idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $accessToken, $config->verifyTls, state: $state);
 
 		$issuer = $config->issuer ?? $config->providerUrl;
 
@@ -220,12 +225,12 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('No issuer configured to validate the ID token against');
 		}
 
-		$this->claimsValidator->validateIssuer($claims, $issuer);
-		$this->claimsValidator->validateNonce($claims, $expectedNonce);
+		$this->claimsValidator->validateIssuer($claims, $issuer, $state);
+		$this->claimsValidator->validateNonce($claims, $expectedNonce, $state);
 
 		// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just
 		// defaults to clientId unless the config overrides it with a distinct expected audience.
-		$this->claimsValidator->validateAudience($claims, $audience ?? $config->clientId);
+		$this->claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $state);
 
 		return $claims;
 	}

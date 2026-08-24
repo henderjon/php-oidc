@@ -99,7 +99,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = new ProviderMetadataResolver($fetcher, $logger);
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT, state: 'the-state');
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -108,6 +108,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: provider configuration endpoint returned an unsuccessful response', $records[0]['message']);
 		$this->assertSame(404, $records[0]['context']['http_status']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testResolveThrowsOnInvalidJson(): void {
@@ -117,7 +118,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = new ProviderMetadataResolver($fetcher, $logger);
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT, state: 'the-state');
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -125,6 +126,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: provider configuration endpoint returned invalid JSON', $records[0]['message']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testResolveThrowsWhenEndpointMissingFromDocument(): void {
@@ -134,7 +136,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = new ProviderMetadataResolver($fetcher, $logger);
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT, state: 'the-state');
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -143,6 +145,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: provider configuration is missing the requested endpoint', $records[0]['message']);
 		$this->assertSame(ProviderMetadataResolver::TOKEN_ENDPOINT, $records[0]['context']['endpoint_key']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testResolveWrapsHttpTransportFailures(): void {
@@ -153,7 +156,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = new ProviderMetadataResolver($fetcher, $logger);
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT, state: 'the-state');
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -162,6 +165,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: unable to fetch provider configuration', $records[0]['message']);
 		$this->assertSame($transport, $records[0]['context']['exception']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testResolveDoesNotLogOnSuccess(): void {

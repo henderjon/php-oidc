@@ -29,22 +29,23 @@ final class ClaimsValidator {
 	/**
 	 * @throws AuthenticationFailedException
 	 */
-	public function validate( Claims $claims, string $expectedIssuer, string $expectedClientId, ?string $expectedNonce ): void {
-		$this->validateIssuer($claims, $expectedIssuer);
-		$this->validateAudience($claims, $expectedClientId);
-		$this->validateNonce($claims, $expectedNonce);
+	public function validate( Claims $claims, string $expectedIssuer, string $expectedClientId, ?string $expectedNonce, ?string $state = null ): void {
+		$this->validateIssuer($claims, $expectedIssuer, $state);
+		$this->validateAudience($claims, $expectedClientId, $state);
+		$this->validateNonce($claims, $expectedNonce, $state);
 	}
 
 	/**
 	 * @throws AuthenticationFailedException
 	 */
-	public function validateIssuer( Claims $claims, string $expectedIssuer ): void {
+	public function validateIssuer( Claims $claims, string $expectedIssuer, ?string $state = null ): void {
 		$actual = $claims->get('iss');
 
 		if( $actual !== $expectedIssuer ) {
 			$this->logger->warning('OIDC: ID token issuer does not match the expected issuer', [
 				'expected' => $expectedIssuer,
 				'actual'   => $actual,
+				'state'    => $state,
 			]);
 
 			throw new AuthenticationFailedException('ID token issuer does not match the expected issuer');
@@ -59,7 +60,7 @@ final class ClaimsValidator {
 	 * @param list<string>|string $expectedAudience
 	 * @throws AuthenticationFailedException
 	 */
-	public function validateAudience( Claims $claims, array|string $expectedAudience ): void {
+	public function validateAudience( Claims $claims, array|string $expectedAudience, ?string $state = null ): void {
 		$actual   = $this->toStringList($claims->get('aud'));
 		$expected = $this->toStringList($expectedAudience);
 
@@ -67,6 +68,7 @@ final class ClaimsValidator {
 			$this->logger->warning('OIDC: ID token audience does not match any of the expected values', [
 				'expected' => $expected,
 				'actual'   => $actual,
+				'state'    => $state,
 			]);
 
 			throw new AuthenticationFailedException('ID token audience does not match any of the expected values');
@@ -91,7 +93,7 @@ final class ClaimsValidator {
 	 *
 	 * @throws AuthenticationFailedException
 	 */
-	public function validateNonce( Claims $claims, ?string $expectedNonce ): void {
+	public function validateNonce( Claims $claims, ?string $expectedNonce, ?string $state = null ): void {
 		if( $expectedNonce === null ) {
 			return;
 		}
@@ -102,6 +104,7 @@ final class ClaimsValidator {
 			$this->logger->warning('OIDC: ID token nonce does not match the expected value', [
 				'expected' => $expectedNonce,
 				'actual'   => $actual,
+				'state'    => $state,
 			]);
 
 			throw new AuthenticationFailedException('ID token nonce does not match the expected value');

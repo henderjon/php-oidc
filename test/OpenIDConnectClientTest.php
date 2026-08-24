@@ -3,6 +3,8 @@
 namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\HttpTransportException;
+use Oidc\Exceptions\ProviderDiscoveryException;
 use Oidc\Exceptions\UserInfoRequestException;
 use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\FakeHttpFetcher;
@@ -212,7 +214,8 @@ class OpenIDConnectClientTest extends TestCase {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
-		$client = $this->makeClient($fetcher);
+		$logger = new ArrayLogger;
+		$client = $this->makeClient($fetcher, logger: $logger);
 
 		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
 		$params   = $this->queryParams($redirect->url);
@@ -228,10 +231,60 @@ class OpenIDConnectClientTest extends TestCase {
 			'id_token'     => $idToken,
 		], JSON_THROW_ON_ERROR), 200));
 
-		$this->expectException(AuthenticationFailedException::class);
-		$this->expectExceptionMessage('audience');
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([ 'code' => 'the-code', 'state' => $params['state'] ]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertStringContainsString('audience', $e->getMessage());
+		}
 
-		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([ 'code' => 'the-code', 'state' => $params['state'] ]));
+		// Proves the correlation id set by buildAuthorizationCodeRedirect() survives the
+		// whole trip through token exchange and out to ClaimsValidator's own log call -
+		// not just that each collaborator accepts a $state parameter in isolation.
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame($params['state'], $records[0]['context']['state']);
+	}
+
+	public function testJwksFetchFailureDuringCompletionLogsTheOriginatingState(): void {
+		$fixture   = new RsaKeyFixture;
+		$fetcher   = new FakeHttpFetcher;
+		$transport = new HttpTransportException('connection refused');
+		$fetcher->failWith(self::JWKS_URI, $transport);
+		$logger = new ArrayLogger;
+		$client = $this->makeClient($fetcher, logger: $logger);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		// A well-formed, real RS256 token - it must get past decodeHeader() so the failure
+		// actually happens at the JWKS fetch, not earlier at header parsing.
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'sub'   => 'user-1',
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'code'  => 'the-code',
+				'state' => $params['state'],
+			]));
+			$this->fail('Expected a ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		// Proves the correlation id reaches all the way down into IdTokenVerifier's own
+		// collaborator (fetchJwks), not just the layers OpenIDConnectClient calls directly.
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: unable to fetch JWKS', $records[0]['message']);
+		$this->assertSame($params['state'], $records[0]['context']['state']);
 	}
 
 	public function testCompleteAuthorizationCodeFlowFailsClosedWhenTheStoredFlowIsCorrupted(): void {
@@ -389,6 +442,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: token endpoint response is missing id_token', $records[0]['message']);
+		$this->assertSame($params['state'], $records[0]['context']['state']);
 	}
 
 	public function testImplicitFlowFullCycle(): void {
@@ -433,6 +487,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: callback is missing the id_token', $records[0]['message']);
+		$this->assertSame($params['state'], $records[0]['context']['state']);
 	}
 
 	public function testRequestClientCredentialsToken(): void {

@@ -118,7 +118,7 @@ class ClaimsValidatorTest extends TestCase {
 		$validator = new ClaimsValidator($logger);
 
 		try {
-			$validator->validateIssuer($this->validClaims(), 'https://other.example.com');
+			$validator->validateIssuer($this->validClaims(), 'https://other.example.com', 'the-state');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -127,6 +127,7 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('https://other.example.com', $records[0]['context']['expected']);
 		$this->assertSame('https://issuer.example.com', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testMismatchedAudienceLogsExpectedAndActual(): void {
@@ -135,7 +136,7 @@ class ClaimsValidatorTest extends TestCase {
 		$claims    = $this->validClaims([ 'aud' => 'someone-elses-client-id' ]);
 
 		try {
-			$validator->validateAudience($claims, 'the-client-id');
+			$validator->validateAudience($claims, 'the-client-id', 'the-state');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -144,6 +145,7 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame([ 'the-client-id' ], $records[0]['context']['expected']);
 		$this->assertSame([ 'someone-elses-client-id' ], $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testMismatchedNonceLogsExpectedAndActual(): void {
@@ -152,7 +154,7 @@ class ClaimsValidatorTest extends TestCase {
 		$claims    = $this->validClaims([ 'nonce' => 'a-different-nonce' ]);
 
 		try {
-			$validator->validateNonce($claims, 'the-nonce');
+			$validator->validateNonce($claims, 'the-nonce', 'the-state');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -161,6 +163,7 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('the-nonce', $records[0]['context']['expected']);
 		$this->assertSame('a-different-nonce', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testValidClaimsDoNotLogAnything(): void {

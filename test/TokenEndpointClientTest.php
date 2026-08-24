@@ -79,6 +79,23 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertSame(self::TOKEN_ENDPOINT, $records[0]['context']['endpoint']);
 		$this->assertSame(400, $records[0]['context']['http_status']);
 		$this->assertSame('invalid_grant', $records[0]['context']['provider_error']);
+		$this->assertNull($records[0]['context']['state'], 'client credentials is non-interactive - there is no flow to correlate with');
+	}
+
+	public function testExchangeAuthorizationCodeLogsTheGivenStateOnFailure(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'error' => 'invalid_grant' ], JSON_THROW_ON_ERROR), 400));
+
+		try {
+			$this->makeClient($fetcher, $logger)->exchangeAuthorizationCode($this->config(), 'the-code', state: 'the-state');
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testLogsTransportFailureDetailsWithoutRequestParameters(): void {
@@ -99,6 +116,7 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertNull($records[0]['context']['http_status']);
 		$this->assertSame($transport, $records[0]['context']['exception']);
 		$this->assertArrayNotHasKey('params', $records[0]['context']);
+		$this->assertNull($records[0]['context']['state']);
 	}
 
 	public function testLogsResponseContentTypeOnFailure(): void {
