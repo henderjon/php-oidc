@@ -47,6 +47,7 @@ final class ProviderMetadataResolver {
 
 	public function __construct(
 		private readonly HttpFetcherInterface $httpFetcher,
+		private readonly UrlPolicy $urlPolicy,
 		private readonly LoggerInterface $logger = new NullLogger,
 		private readonly ?string $state = null,
 	) {
@@ -60,7 +61,7 @@ final class ProviderMetadataResolver {
 	 * still only costs one fetch - scoping must not throw away that memoization.
 	 */
 	public function withState( ?string $state ): self {
-		$scoped = new self($this->httpFetcher, $this->logger, $state);
+		$scoped = new self($this->httpFetcher, $this->urlPolicy, $this->logger, $state);
 		$scoped->discovered = $this->discovered;
 
 		return $scoped;
@@ -158,7 +159,7 @@ final class ProviderMetadataResolver {
 	 * @throws ProviderDiscoveryException
 	 */
 	private function assertUrlAllowed( string $url, OpenIDConnectClientConfig $config, string $endpointKey ): void {
-		if( UrlPolicy::isAllowed($url, $config) ) {
+		if( $this->urlPolicy->isAllowed($url, $config) ) {
 			return;
 		}
 

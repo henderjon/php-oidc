@@ -30,7 +30,7 @@ class OpenIDConnectClientFactory {
 	}
 
 	public function make( CacheInterface $stateCache, string $cacheKeySuffix = "" ): OpenIDConnectClient {
-		$providerMetadataResolver = new ProviderMetadataResolver($this->httpFetcher, $this->logger);
+		$providerMetadataResolver = new ProviderMetadataResolver($this->httpFetcher, new UrlPolicy, $this->logger);
 
 		return new OpenIDConnectClient(
 			new AuthorizationStateStore($stateCache, $cacheKeySuffix, logger: $this->logger),
