@@ -30,6 +30,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertSame(PkceMode::Disabled, $config->pkce);
 		$this->assertFalse($config->allowInsecureSchemes);
 		$this->assertNull($config->allowedHosts);
+		$this->assertSame([ 'RS256' ], $config->allowedAlgorithms);
 	}
 
 	public function testWithClientId(): void {
@@ -172,6 +173,14 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$new = $this->makeConfig()->withAllowedHosts([ 'a.example.com' ])->withAllowedHosts(null);
 
 		$this->assertNull($new->allowedHosts);
+	}
+
+	public function testWithAllowedAlgorithmsReplacesRatherThanMerges(): void {
+		$config = $this->makeConfig()->withAllowedAlgorithms([ 'RS256', 'PS256' ]);
+		$new    = $config->withAllowedAlgorithms([ 'ES256' ]);
+
+		$this->assertSame([ 'RS256', 'PS256' ], $config->allowedAlgorithms, 'original must be unchanged');
+		$this->assertSame([ 'ES256' ], $new->allowedAlgorithms, 'must replace, not merge with the previous list');
 	}
 
 }

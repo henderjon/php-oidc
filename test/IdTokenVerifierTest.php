@@ -50,7 +50,7 @@ class IdTokenVerifierTest extends TestCase {
 		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
 
-		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ]);
 
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
@@ -61,7 +61,7 @@ class IdTokenVerifierTest extends TestCase {
 
 		$this->expectException(AuthenticationFailedException::class);
 
-		$verifier->verify($idToken, self::JWKS_URI, self::WRONG_CLIENT_SECRET);
+		$verifier->verify($idToken, self::JWKS_URI, self::WRONG_CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ]);
 	}
 
 	public function testVerifyExpiredTokenFails(): void {
@@ -70,7 +70,7 @@ class IdTokenVerifierTest extends TestCase {
 
 		$this->expectException(AuthenticationFailedException::class);
 
-		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
+		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ]);
 	}
 
 	public function testInjectedClockControlsExpiryEvaluationInsteadOfWallClock(): void {
@@ -79,7 +79,7 @@ class IdTokenVerifierTest extends TestCase {
 		$idToken  = JWT::encode([ 'sub' => 'user-1', 'exp' => 1000 ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher, new FixedClock(new \DateTimeImmutable('@999')), leewaySeconds: 0);
 
-		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ]);
 
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
@@ -100,6 +100,71 @@ class IdTokenVerifierTest extends TestCase {
 		$this->expectException(AuthenticationFailedException::class);
 
 		$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret');
+	}
+
+	public function testVerifyRejectsAlgorithmNotInTheAllowlist(): void {
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('"HS256" is not allowed');
+
+		// Default allowlist is RS256 only - HS256 must be rejected without it.
+		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
+	}
+
+	public function testVerifyRejectsDisallowedAlgorithmBeforeEverFetchingJwks(): void {
+		$fixture = new RsaKeyFixture;
+		$idToken = $fixture->sign([ 'sub' => 'user-1' ]);
+
+		// No response configured for JWKS_URI - FakeHttpFetcher throws a bare RuntimeException
+		// for any URL it was not told to answer. Getting AuthenticationFailedException instead
+		// proves the allowlist was checked before the JWKS fetch was ever attempted.
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused', allowedAlgorithms: [ 'HS256' ]);
+	}
+
+	public function testVerifyRejectsNoneAlgorithmEvenWhenExplicitlyAllowlisted(): void {
+		$header   = JWT::urlsafeB64Encode(json_encode([ 'alg' => 'none', 'typ' => 'JWT' ], JSON_THROW_ON_ERROR));
+		$payload  = JWT::urlsafeB64Encode(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR));
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('"none" is not allowed');
+
+		$verifier->verify("{$header}.{$payload}.", self::JWKS_URI, 'unused', allowedAlgorithms: [ 'none', 'RS256' ]);
+	}
+
+	public function testVerifyRejectsHmacAlgorithmForAPublicClient(): void {
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('requires a client secret');
+
+		// clientSecret is empty - a public client - even though HS256 is on the allowlist.
+		$verifier->verify($idToken, self::JWKS_URI, '', allowedAlgorithms: [ 'HS256' ]);
+	}
+
+	public function testVerifyRejectsDisallowedAlgorithmLogsTheAllowlist(): void {
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('HS256', $records[0]['context']['alg']);
+		$this->assertSame([ 'RS256' ], $records[0]['context']['allowed_algorithms']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
 	public function testVerifyEncryptedTokenIsRejected(): void {
@@ -172,7 +237,7 @@ class IdTokenVerifierTest extends TestCase {
 		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => $expectedHash ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
 
-		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, accessToken: $accessToken);
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: $accessToken);
 
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
@@ -183,14 +248,14 @@ class IdTokenVerifierTest extends TestCase {
 
 		$this->expectException(AuthenticationFailedException::class);
 
-		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, accessToken: 'the-access-token');
+		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: 'the-access-token');
 	}
 
 	public function testVerifyWithAtHashButNoAccessTokenSkipsTheCheck(): void {
 		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => 'irrelevant' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
 
-		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ]);
 
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
@@ -263,7 +328,7 @@ class IdTokenVerifierTest extends TestCase {
 		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
 
 		try {
-			$verifier->verify($idToken, self::JWKS_URI, self::WRONG_CLIENT_SECRET);
+			$verifier->verify($idToken, self::JWKS_URI, self::WRONG_CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ]);
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
 			// firebase/php-jwt's own message lives only in the log (and in ->getPrevious(),
@@ -284,7 +349,7 @@ class IdTokenVerifierTest extends TestCase {
 		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
 
 		try {
-			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, accessToken: 'the-access-token');
+			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: 'the-access-token');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}

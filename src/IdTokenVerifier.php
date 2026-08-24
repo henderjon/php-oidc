@@ -13,10 +13,20 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 /**
- * Verifies an ID token's signature (RS256 via JWKS, or HS256 via the
+ * Verifies an ID token's signature (asymmetric via JWKS, or HMAC via the
  * client secret) using `firebase/php-jwt`, and - since the token itself is
  * authentic once the signature checks out - its `at_hash` binding to an
  * access token, if both are present.
+ *
+ * The token's own `alg` header never gets to pick its own verification
+ * strategy: `$allowedAlgorithms` (see OpenIDConnectClientConfig::$allowedAlgorithms)
+ * is checked, `none` is unconditionally rejected, and HS* is rejected outright for a
+ * public client (empty client secret) - all before any key material, cached or fetched,
+ * is touched. This is deliberate, not redundant with firebase/php-jwt's own internal
+ * `Key`-vs-header algorithm check: this class builds the `Key` object FROM the header's
+ * own `alg` (there is no other source for it - every JWT verifier has to know what the
+ * token claims before it can verify it), so that internal check alone would be
+ * tautological here without a policy decided independently of the token first.
  *
  * `JWT::decode()` already enforces `exp`/`nbf`/`iat`; the injected clock
  * only exists to make that deterministic in tests instead of racing
@@ -56,10 +66,14 @@ final class IdTokenVerifier {
 	 * @throws AuthenticationFailedException
 	 * @throws ProviderDiscoveryException
 	 */
+	/**
+	 * @param list<string> $allowedAlgorithms See OpenIDConnectClientConfig::$allowedAlgorithms.
+	 */
 	public function verify(
 		string $idToken,
 		string $jwksUri,
 		string $clientSecret,
+		array $allowedAlgorithms = [ 'RS256' ],
 		?string $accessToken = null,
 		bool $verifyTls = true,
 	): Claims {
@@ -79,6 +93,8 @@ final class IdTokenVerifier {
 			throw new AuthenticationFailedException('ID token is missing its alg header');
 		}
 
+		$this->assertAlgorithmAllowed($alg, $allowedAlgorithms, $clientSecret);
+
 		$key = str_starts_with($alg, 'HS')
 			? new Key($clientSecret, $alg)
 			: $this->resolveAsymmetricKey($jwksUri, $alg, is_string($header['kid'] ?? null) ? $header['kid'] : null, $verifyTls);
@@ -88,6 +104,41 @@ final class IdTokenVerifier {
 		$this->verifyAccessTokenHash($claims, $alg, $accessToken);
 
 		return $claims;
+	}
+
+	/**
+	 * `none` is rejected unconditionally, even if a caller's own $allowedAlgorithms
+	 * mistakenly includes it - firebase/php-jwt already refuses to decode it too, but this
+	 * class does not rely solely on that. HS* is rejected outright for a public client
+	 * (empty $clientSecret), also regardless of $allowedAlgorithms: a confidential client's
+	 * secret is presumed genuinely unknown to an attacker, but nothing stands behind an
+	 * empty one, so there is no configuration where HMAC-with-no-secret is sound.
+	 *
+	 * @param list<string> $allowedAlgorithms
+	 * @throws AuthenticationFailedException
+	 */
+	private function assertAlgorithmAllowed( string $alg, array $allowedAlgorithms, string $clientSecret ): void {
+		if( $alg === 'none' ) {
+			$this->logger->warning('OIDC: ID token declares the "none" algorithm', [ 'state' => $this->state ]);
+
+			throw new AuthenticationFailedException('ID token algorithm "none" is not allowed');
+		}
+
+		if( !in_array($alg, $allowedAlgorithms, true) ) {
+			$this->logger->warning('OIDC: ID token algorithm is not in the configured allowlist', [
+				'alg'                => $alg,
+				'allowed_algorithms' => $allowedAlgorithms,
+				'state'              => $this->state,
+			]);
+
+			throw new AuthenticationFailedException("ID token algorithm \"{$alg}\" is not allowed");
+		}
+
+		if( str_starts_with($alg, 'HS') && $clientSecret === '' ) {
+			$this->logger->warning('OIDC: ID token uses an HMAC algorithm but no client secret is configured', [ 'alg' => $alg, 'state' => $this->state ]);
+
+			throw new AuthenticationFailedException("ID token algorithm \"{$alg}\" requires a client secret");
+		}
 	}
 
 	/**
