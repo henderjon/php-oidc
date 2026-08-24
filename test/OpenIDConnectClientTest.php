@@ -264,7 +264,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->assertSame('Unable to verify PKCE code verifier', $e->getMessage());
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: PKCE code verifier missing for a Required flow', $records[0]['message']);
 		$this->assertSame($params['state'], $records[0]['context']['state']);
@@ -338,7 +338,7 @@ class OpenIDConnectClientTest extends TestCase {
 		// Proves the correlation id set by buildAuthorizationCodeRedirect() survives the
 		// whole trip through token exchange and out to ClaimsValidator's own log call -
 		// not just that each collaborator accepts a $state parameter in isolation.
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame($params['state'], $records[0]['context']['state']);
 	}
@@ -459,7 +459,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->assertSame('Unable to verify state', $e->getMessage());
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ALERT);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
 		$this->assertSame('a-forged-state', $records[0]['context']['state']);
@@ -481,7 +481,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->assertSame('Unable to verify state', $e->getMessage());
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: callback is missing the state parameter', $records[0]['message']);
 	}
@@ -536,7 +536,7 @@ class OpenIDConnectClientTest extends TestCase {
 		]));
 	}
 
-	public function testTokenResponseMissingIdTokenLogsAWarning(): void {
+	public function testTokenResponseMissingIdTokenLogsAnError(): void {
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;
 		$client  = $this->makeClient($fetcher, logger: $logger);
@@ -560,7 +560,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->assertSame('Token response is missing id_token', $e->getMessage());
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: token endpoint response is missing id_token', $records[0]['message']);
 		$this->assertSame($params['state'], $records[0]['context']['state']);
@@ -590,7 +590,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame('user-1', $result->claims->get('sub'));
 	}
 
-	public function testImplicitFlowCallbackMissingIdTokenLogsAWarning(): void {
+	public function testImplicitFlowCallbackMissingIdTokenLogsAnError(): void {
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;
 		$client  = $this->makeClient($fetcher, logger: $logger);
@@ -605,7 +605,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->assertSame('Callback is missing the id_token', $e->getMessage());
 		}
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: callback is missing the id_token', $records[0]['message']);
 		$this->assertSame($params['state'], $records[0]['context']['state']);
@@ -656,6 +656,15 @@ class OpenIDConnectClientTest extends TestCase {
 	public function testFetchUserInfoThrowsOnNonSuccessStatus(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse('unauthorized', 401));
+
+		$this->expectException(UserInfoRequestException::class);
+
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token');
+	}
+
+	public function testFetchUserInfoThrowsOnUnexpectedContentType(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse('<html>not userinfo</html>', 200, 'text/html'));
 
 		$this->expectException(UserInfoRequestException::class);
 

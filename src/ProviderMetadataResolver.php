@@ -138,6 +138,16 @@ final class ProviderMetadataResolver {
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned HTTP {$response->status}");
 		}
 
+		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
+			$this->logger->error('OIDC: provider configuration endpoint returned an unexpected content type', [
+				'url'          => $url,
+				'content_type' => $response->contentType,
+				'state'        => $this->state,
+			]);
+
+			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned an unexpected content type");
+		}
+
 		$decoded = json_decode($response->body, true);
 
 		if( !is_array($decoded) ) {

@@ -61,7 +61,7 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $config->pkce === PkceMode::Required && $flow->codeVerifier === null ) {
-			$this->logger->warning('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state ]);
+			$this->logger->error('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state ]);
 
 			throw new AuthenticationFailedException('Unable to verify PKCE code verifier');
 		}
@@ -83,7 +83,7 @@ final class OpenIDConnectClient implements
 		$tokenResult = $tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier);
 
 		if( $tokenResult->idToken === null ) {
-			$this->logger->warning('OIDC: token endpoint response is missing id_token', [ 'state' => $flow->state ]);
+			$this->logger->error('OIDC: token endpoint response is missing id_token', [ 'state' => $flow->state ]);
 
 			throw new AuthenticationFailedException('Token response is missing id_token');
 		}
@@ -110,7 +110,7 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->idToken === null ) {
-			$this->logger->warning('OIDC: callback is missing the id_token', [ 'state' => $flow->state ]);
+			$this->logger->error('OIDC: callback is missing the id_token', [ 'state' => $flow->state ]);
 
 			throw new AuthenticationFailedException('Callback is missing the id_token');
 		}
@@ -143,6 +143,10 @@ final class OpenIDConnectClient implements
 
 		if( $response->contentType === 'application/jwt' ) {
 			return $this->verifySignedUserInfo($config, $response->body);
+		}
+
+		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
+			throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type");
 		}
 
 		$decoded = json_decode($response->body, true);
@@ -221,7 +225,7 @@ final class OpenIDConnectClient implements
 	 */
 	private function consumeFlow( IncomingAuthorizationResponse $response ): ?FlowState {
 		if( $response->state === null ) {
-			$this->logger->warning('OIDC: callback is missing the state parameter', [ 'state' => null ]);
+			$this->logger->error('OIDC: callback is missing the state parameter', [ 'state' => null ]);
 
 			return null;
 		}

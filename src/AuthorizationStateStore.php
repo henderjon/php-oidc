@@ -111,13 +111,13 @@ final class AuthorizationStateStore {
 		$deleted = $this->cache->delete($key);
 
 		if( $flow === null ) {
-			$this->logger->warning('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
+			$this->logger->alert('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
 
 			return null;
 		}
 
 		if( !is_array($flow) || !is_string($flow['nonce'] ?? null) ) {
-			$this->logger->warning('OIDC: cached authorization flow entry is not the expected shape', [
+			$this->logger->error('OIDC: cached authorization flow entry is not the expected shape', [
 				'state' => $this->loggableState($state),
 				'type'  => get_debug_type($flow),
 				'keys'  => is_array($flow) ? array_keys($flow) : null,
