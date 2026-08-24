@@ -7,6 +7,7 @@ use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\ProviderDiscoveryException;
 use Oidc\Fakes\ArrayLogger;
+use Oidc\Fakes\EcKeyFixture;
 use Oidc\Fakes\FakeHttpFetcher;
 use Oidc\Fakes\FixedClock;
 use Oidc\Fakes\RsaKeyFixture;
@@ -164,6 +165,65 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('HS256', $records[0]['context']['alg']);
 		$this->assertSame([ 'RS256' ], $records[0]['context']['allowed_algorithms']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testVerifyEs256TokenAgainstMatchingEcJwks(): void {
+		$fixture = new EcKeyFixture;
+		$idToken = $fixture->sign([ 'sub' => 'user-1' ]);
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, 'unused', allowedAlgorithms: [ 'ES256' ]);
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyRejectsJwksKeyTypeMismatchedWithTokenAlgorithm(): void {
+		$ecFixture = new EcKeyFixture;
+
+		// The JWKS entry is a real EC key with no "alg" of its own (RFC 7517 §4.4 makes it
+		// optional) - it is only selected because its kid matches. The header claims RS256,
+		// which this class would otherwise take at face value when labelling the resolved
+		// Key. The signature is garbage - it must never be reached, since this should be
+		// rejected before decodeAndVerifySignature() runs at all.
+		$header  = JWT::urlsafeB64Encode(json_encode([ 'alg' => 'RS256', 'kid' => EcKeyFixture::KEY_ID, 'typ' => 'JWT' ], JSON_THROW_ON_ERROR));
+		$payload = JWT::urlsafeB64Encode(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR));
+		$idToken = "{$header}.{$payload}." . JWT::urlsafeB64Encode('forged-signature');
+
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($ecFixture->jwksJson(), 200));
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('key type does not match');
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+	}
+
+	public function testVerifyRejectsJwksKeyTypeMismatchLogsTheMismatch(): void {
+		$ecFixture = new EcKeyFixture;
+		$header    = JWT::urlsafeB64Encode(json_encode([ 'alg' => 'RS256', 'kid' => EcKeyFixture::KEY_ID, 'typ' => 'JWT' ], JSON_THROW_ON_ERROR));
+		$payload   = JWT::urlsafeB64Encode(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR));
+		$idToken   = "{$header}.{$payload}." . JWT::urlsafeB64Encode('forged-signature');
+
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($ecFixture->jwksJson(), 200));
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('RS256', $records[0]['context']['alg']);
+		$this->assertSame('RSA', $records[0]['context']['expected_kty']);
+		$this->assertSame('EC', $records[0]['context']['actual_kty']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 

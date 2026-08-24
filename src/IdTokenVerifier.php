@@ -200,23 +200,81 @@ final class IdTokenVerifier {
 	 * @throws ProviderDiscoveryException
 	 */
 	private function resolveAsymmetricKey( string $jwksUri, string $alg, ?string $kid, bool $verifyTls ): Key {
-		$keySet = JWK::parseKeySet($this->fetchJwks($jwksUri, $verifyTls), $alg);
+		$jwks   = $this->fetchJwks($jwksUri, $verifyTls);
+		$keySet = JWK::parseKeySet($jwks, $alg);
 
-		if( $kid !== null && isset($keySet[$kid]) ) {
-			return $keySet[$kid];
+		$selectedKid = match( true ) {
+			$kid !== null && isset($keySet[$kid]) => $kid,
+			count($keySet) === 1                  => array_key_first($keySet),
+			default                                => null,
+		};
+
+		if( $selectedKid === null ) {
+			$this->logger->warning('OIDC: unable to find a matching JWKS key for this ID token', [
+				'kid'            => $kid,
+				'available_kids' => array_keys($keySet),
+				'state'          => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('Unable to find a matching JWKS key for this ID token');
 		}
 
-		if( count($keySet) === 1 ) {
-			return array_values($keySet)[0];
+		$this->assertKeyTypeMatchesAlgorithm($jwks, $selectedKid, $alg);
+
+		return $keySet[$selectedKid];
+	}
+
+	/**
+	 * A JWKS entry's own "alg" is optional (RFC 7517 §4.4) - when it is absent,
+	 * JWK::parseKeySet() labels the resulting Key with whatever algorithm this class asked
+	 * for, which is the token's own (already allowlist-checked) `alg`. That means
+	 * firebase/php-jwt's internal "does the Key's algorithm match the token header"
+	 * check - the one this class's own class docblock explains is otherwise tautological
+	 * here - would trivially pass even if the JWKS entry it resolved to is structurally the
+	 * wrong kind of key for that algorithm (an EC key selected for an RS256 token, say).
+	 * This checks the selected entry's own declared "kty" against the algorithm family
+	 * independently of that internal check, using the raw JWKS document rather than the
+	 * already-parsed Key objects, since a Key exposes only its (possibly tautological)
+	 * algorithm label, not the JWK's original "kty".
+	 *
+	 * @param array<string,mixed> $jwks
+	 * @throws AuthenticationFailedException
+	 */
+	private function assertKeyTypeMatchesAlgorithm( array $jwks, string $selectedKid, string $alg ): void {
+		$expectedKty = match( true ) {
+			str_starts_with($alg, 'RS'), str_starts_with($alg, 'PS') => 'RSA',
+			str_starts_with($alg, 'ES')                              => 'EC',
+			$alg === 'EdDSA'                                         => 'OKP',
+			// Anything else is outside firebase/php-jwt's own supported algorithm list and
+			// will already be rejected by JWT::decode() itself - nothing to check here.
+			default                                                  => null,
+		};
+
+		if( $expectedKty === null ) {
+			return;
 		}
 
-		$this->logger->warning('OIDC: unable to find a matching JWKS key for this ID token', [
-			'kid'            => $kid,
-			'available_kids' => array_keys($keySet),
-			'state'          => $this->state,
-		]);
+		foreach( $jwks['keys'] as $index => $entry ) {
+			if( ( $entry['kid'] ?? (string)$index ) !== $selectedKid ) {
+				continue;
+			}
 
-		throw new AuthenticationFailedException('Unable to find a matching JWKS key for this ID token');
+			$actualKty = $entry['kty'] ?? null;
+
+			if( $actualKty !== $expectedKty ) {
+				$this->logger->warning('OIDC: JWKS key type does not match the ID token algorithm', [
+					'alg'          => $alg,
+					'expected_kty' => $expectedKty,
+					'actual_kty'   => $actualKty,
+					'kid'          => $selectedKid,
+					'state'        => $this->state,
+				]);
+
+				throw new AuthenticationFailedException('JWKS key type does not match the ID token algorithm');
+			}
+
+			return;
+		}
 	}
 
 	/**
