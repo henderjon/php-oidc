@@ -193,13 +193,54 @@ class OpenIDConnectClientTest extends TestCase {
 
 	public function testDisabledPkceOmitsCodeChallengeFromRedirect(): void {
 		$fetcher = new FakeHttpFetcher;
-		$client  = $this->makeClient($fetcher);
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
 
 		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
 		$params   = $this->queryParams($redirect->url);
 
 		$this->assertArrayNotHasKey('code_challenge', $params);
 		$this->assertArrayNotHasKey('code_challenge_method', $params);
+		// A confidential client (has a client secret) isn't the case PKCE exists to guard -
+		// no nudge warning expected here, unlike the public-client case below.
+		$this->assertSame([], $logger->records);
+	}
+
+	public function testPublicClientWithPkceDisabledLogsAWarning(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$client->buildAuthorizationCodeRedirect($this->config()->withClientSecret(''));
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: public client is building an authorization redirect with PKCE disabled', $records[0]['message']);
+		$this->assertSame(self::CLIENT_ID, $records[0]['context']['client_id']);
+	}
+
+	public function testPublicClientWithPkceEnabledDoesNotLogTheDisabledWarning(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$client->buildAuthorizationCodeRedirect($this->config()->withClientSecret('')->withPkce(PkceMode::Required));
+
+		$this->assertSame([], $logger->records);
+	}
+
+	public function testPublicClientBuildingAnImplicitFlowRedirectDoesNotLogThePkceWarning(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$redirect = $client->buildImplicitFlowRedirect($this->config()->withClientSecret(''));
+		$params   = $this->queryParams($redirect->url);
+
+		// PKCE only applies to the authorization code flow - no code to intercept in the
+		// implicit flow, so no code_challenge and no nudge about it being disabled.
+		$this->assertArrayNotHasKey('code_challenge', $params);
+		$this->assertSame([], $logger->records);
 	}
 
 	public function testRequiredPkceFailsClosedWhenTheVerifierIsMissingAtCompletion(): void {
@@ -232,7 +273,8 @@ class OpenIDConnectClientTest extends TestCase {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
-		$client = $this->makeClient($fetcher);
+		$logger = new ArrayLogger;
+		$client = $this->makeClient($fetcher, logger: $logger);
 
 		// Same simulated eviction as the Required case above, but Optional must fail open.
 		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
@@ -257,6 +299,11 @@ class OpenIDConnectClientTest extends TestCase {
 		parse_str((string)$fetcher->requests[0]['body'], $tokenParams);
 		$this->assertArrayNotHasKey('code_verifier', $tokenParams);
 		$this->assertSame('user-1', $result->claims->get('sub'));
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: PKCE code verifier missing for an Optional flow - proceeding without one', $records[0]['message']);
+		$this->assertSame($params['state'], $records[0]['context']['state']);
 	}
 
 	public function testCompleteAuthorizationCodeFlowWithWrongAudienceFailsEvenWithNoAudienceOverrideConfigured(): void {

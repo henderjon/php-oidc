@@ -66,6 +66,13 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Unable to verify PKCE code verifier');
 		}
 
+		if( $config->pkce === PkceMode::Optional && $flow->codeVerifier === null ) {
+			// Optional fails open by design (see PkceMode), but that is a silent downgrade of
+			// exactly the protection PKCE exists to provide - log it rather than let it pass
+			// with no signal at all.
+			$this->logger->warning('OIDC: PKCE code verifier missing for an Optional flow - proceeding without one', [ 'state' => $flow->state ]);
+		}
+
 		// One scoped resolver, shared by the token exchange below and the JWKS resolution
 		// inside verifyAndValidateIdToken() - both against the same provider, so this keeps
 		// them to one discovery fetch instead of two independently-scoped copies each
@@ -154,7 +161,17 @@ final class OpenIDConnectClient implements
 		// producing a redirect.
 		$authorizationEndpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
 		$codeVerifier          = $responseType === 'code' && $config->pkce !== PkceMode::Disabled ? Pkce::generateVerifier() : null;
-		$flow                  = $this->stateStore->start(codeVerifier: $codeVerifier);
+
+		// A public client (no client secret) has nothing else proving it is who it claims to
+		// be - RFC 9700 treats PKCE as effectively mandatory for exactly this client class.
+		// This does not force it on: deciding that is this config's job, not this library's.
+		if( $responseType === 'code' && $config->pkce === PkceMode::Disabled && $config->clientSecret === '' ) {
+			$this->logger->warning('OIDC: public client is building an authorization redirect with PKCE disabled', [
+				'client_id' => $config->clientId,
+			]);
+		}
+
+		$flow = $this->stateStore->start(codeVerifier: $codeVerifier);
 
 		$params = array_merge($config->extraAuthParams, [
 			'response_type' => $responseType,
