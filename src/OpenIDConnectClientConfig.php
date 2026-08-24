@@ -15,13 +15,19 @@ final class OpenIDConnectClientConfig {
 
 	/**
 	 * @param list<string>             $scopes
-	 * @param list<string>|string|null $audience          Expected `aud` value(s), when it must differ from
-	 *                                                     `clientId` - a single expected audience, or several
-	 *                                                     acceptable ones. Null skips the check (see
-	 *                                                     ClaimsValidator::validateAudience()).
-	 * @param array<string,string>     $endpointOverrides Known endpoint values (e.g. `authorization_endpoint`,
-	 *                                                     `jwks_uri`, `token_endpoint`) that skip discovery for that value.
-	 * @param array<string,string>     $extraAuthParams   Additional parameters merged into the authorization request.
+	 * @param list<string>|string|null $audience             Expected `aud` value(s), when it must differ from
+	 *                                                        `clientId` - a single expected audience, or several
+	 *                                                        acceptable ones. Null skips the check (see
+	 *                                                        ClaimsValidator::validateAudience()).
+	 * @param array<string,string>     $endpointOverrides    Known endpoint values (e.g. `authorization_endpoint`,
+	 *                                                        `jwks_uri`, `token_endpoint`) that skip discovery for that value.
+	 * @param array<string,string>     $extraAuthParams      Additional parameters merged into the authorization request.
+	 * @param ?list<string>            $allowedHosts         Hosts every resolved endpoint (override or discovered) must
+	 *                                                        match, checked by UrlPolicy. Null skips the check. Meant for
+	 *                                                        multi-tenant deployments where provider configuration is
+	 *                                                        resolved per request and might be attacker- or
+	 *                                                        tenant-influenced - a single, statically-known integration
+	 *                                                        usually has no need for it.
 	 */
 	public function __construct(
 		public readonly string $clientId,
@@ -35,6 +41,8 @@ final class OpenIDConnectClientConfig {
 		public readonly array $extraAuthParams = [],
 		public readonly bool $verifyTls = true,
 		public readonly PkceMode $pkce = PkceMode::Disabled,
+		public readonly bool $allowInsecureSchemes = false,
+		public readonly ?array $allowedHosts = null,
 	) {
 	}
 
@@ -42,6 +50,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -49,6 +58,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -56,6 +66,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -63,6 +74,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -70,6 +82,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -81,6 +94,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			array_values(array_unique([ ...$this->scopes, ...$scopes ])),
 			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -91,6 +105,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -101,6 +116,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -111,6 +127,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -118,6 +135,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
 		);
 	}
 
@@ -125,6 +143,30 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts,
+		);
+	}
+
+	public function withAllowInsecureSchemes( bool $allowInsecureSchemes ): self {
+		return new self(
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$allowInsecureSchemes, $this->allowedHosts,
+		);
+	}
+
+	/**
+	 * Replaces (does not merge with) the existing allowlist - unlike withScopes() or
+	 * withEndpointOverrides(), this narrows a security boundary rather than adding to a
+	 * list of extras, so two calls silently unioning their hosts would be the wrong default.
+	 *
+	 * @param ?list<string> $allowedHosts Null clears the allowlist (every host allowed again).
+	 */
+	public function withAllowedHosts( ?array $allowedHosts ): self {
+		return new self(
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->verifyTls, $this->pkce,
+			$this->allowInsecureSchemes, $allowedHosts,
 		);
 	}
 

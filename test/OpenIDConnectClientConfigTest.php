@@ -28,6 +28,8 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertTrue($config->verifyTls);
 		$this->assertNull($config->audience);
 		$this->assertSame(PkceMode::Disabled, $config->pkce);
+		$this->assertFalse($config->allowInsecureSchemes);
+		$this->assertNull($config->allowedHosts);
 	}
 
 	public function testWithClientId(): void {
@@ -148,6 +150,28 @@ class OpenIDConnectClientConfigTest extends TestCase {
 
 		$this->assertSame(PkceMode::Disabled, $config->pkce, 'original must be unchanged');
 		$this->assertSame(PkceMode::Required, $new->pkce);
+	}
+
+	public function testWithAllowInsecureSchemes(): void {
+		$config = $this->makeConfig();
+		$new    = $config->withAllowInsecureSchemes(true);
+
+		$this->assertFalse($config->allowInsecureSchemes, 'original must be unchanged');
+		$this->assertTrue($new->allowInsecureSchemes);
+	}
+
+	public function testWithAllowedHostsReplacesRatherThanMerges(): void {
+		$config = $this->makeConfig()->withAllowedHosts([ 'a.example.com' ]);
+		$new    = $config->withAllowedHosts([ 'b.example.com' ]);
+
+		$this->assertSame([ 'a.example.com' ], $config->allowedHosts, 'original must be unchanged');
+		$this->assertSame([ 'b.example.com' ], $new->allowedHosts, 'must replace, not merge with the previous list');
+	}
+
+	public function testWithAllowedHostsCanClearToNull(): void {
+		$new = $this->makeConfig()->withAllowedHosts([ 'a.example.com' ])->withAllowedHosts(null);
+
+		$this->assertNull($new->allowedHosts);
 	}
 
 }

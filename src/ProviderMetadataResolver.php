@@ -19,6 +19,17 @@ use Psr\Log\NullLogger;
  * before the generic ProviderDiscoveryException is thrown, matching
  * TokenEndpointClient's logging for the equivalent failures against the
  * token endpoint.
+ *
+ * Every endpoint value this class ever returns - an override, or one read
+ * out of a fetched discovery document - is checked against UrlPolicy
+ * before it is handed back. This is the one place that check needs to
+ * live: every endpoint this library ever calls (authorization, token,
+ * JWKS, userinfo) is resolved through here, and no caller builds
+ * credentials or sends a bearer token until resolve() returns, so gating
+ * here means neither ever reaches a URL the policy rejects. The discovery
+ * URL itself is checked the same way before it is ever fetched, and the
+ * document's own `issuer` is checked against the URL used to fetch it -
+ * both per OpenID Connect Discovery 1.0 §4.3.
  */
 final class ProviderMetadataResolver {
 
@@ -60,7 +71,10 @@ final class ProviderMetadataResolver {
 	 */
 	public function resolve( OpenIDConnectClientConfig $config, string $endpointKey ): string {
 		if( isset($config->endpointOverrides[$endpointKey]) ) {
-			return $config->endpointOverrides[$endpointKey];
+			$value = $config->endpointOverrides[$endpointKey];
+			$this->assertUrlAllowed($value, $config, $endpointKey);
+
+			return $value;
 		}
 
 		$document = $this->fetchWellKnownConfiguration($config);
@@ -74,6 +88,8 @@ final class ProviderMetadataResolver {
 
 			throw new ProviderDiscoveryException("Provider configuration is missing '{$endpointKey}'");
 		}
+
+		$this->assertUrlAllowed($value, $config, $endpointKey);
 
 		return $value;
 	}
@@ -96,6 +112,8 @@ final class ProviderMetadataResolver {
 		}
 
 		$url = rtrim($providerUrl, '/') . '/.well-known/openid-configuration';
+
+		$this->assertUrlAllowed($url, $config, 'discovery');
 
 		try {
 			$response = $this->httpFetcher->fetch($url, null, verifyTls: $config->verifyTls);
@@ -131,7 +149,54 @@ final class ProviderMetadataResolver {
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned invalid JSON");
 		}
 
+		$this->assertIssuerMatches($decoded, $providerUrl);
+
 		return $this->discovered[$providerUrl] = $decoded;
+	}
+
+	/**
+	 * @throws ProviderDiscoveryException
+	 */
+	private function assertUrlAllowed( string $url, OpenIDConnectClientConfig $config, string $endpointKey ): void {
+		if( UrlPolicy::isAllowed($url, $config) ) {
+			return;
+		}
+
+		$this->logger->error('OIDC: endpoint URL does not satisfy the configured URL policy', [
+			'endpoint_key' => $endpointKey,
+			'url'          => $url,
+			'state'        => $this->state,
+		]);
+
+		throw new ProviderDiscoveryException("Endpoint '{$endpointKey}' resolved to a URL that does not satisfy the configured URL policy");
+	}
+
+	/**
+	 * The issuer a discovery document reports must be identical to the URL used to fetch it
+	 * (OpenID Connect Discovery 1.0 §4.3) - otherwise nothing else in the document can be
+	 * trusted, since a network attacker or a compromised provider could otherwise redirect
+	 * this client's endpoints anywhere. A trailing slash is normalized away first, since
+	 * issuer identifiers are conventionally written without one and providerUrl/issuer are
+	 * plain user-entered config - everything else (scheme, host, port, path) still has to
+	 * match exactly.
+	 *
+	 * @param array<string,mixed> $document
+	 * @throws ProviderDiscoveryException
+	 */
+	private function assertIssuerMatches( array $document, string $providerUrl ): void {
+		$issuer = $document['issuer'] ?? null;
+
+		if( is_string($issuer) && rtrim($issuer, '/') === rtrim($providerUrl, '/') ) {
+			return;
+		}
+
+		$this->logger->error('OIDC: provider configuration issuer does not match the URL used to fetch it', [
+			'expected' => $providerUrl,
+			'actual'   => $issuer,
+			'state'    => $this->state,
+		]);
+
+		throw new ProviderDiscoveryException('Provider configuration issuer does not match the URL used to fetch it');
 	}
 
 }

@@ -112,6 +112,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::ISSUER . '/.well-known/openid-configuration', new FetchResponse(json_encode([
+			'issuer'         => self::ISSUER,
 			'token_endpoint' => self::TOKEN_ENDPOINT,
 			'jwks_uri'       => self::JWKS_URI,
 		], JSON_THROW_ON_ERROR), 200));
@@ -497,6 +498,30 @@ class OpenIDConnectClientTest extends TestCase {
 		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
 			'error' => 'access_denied',
 		]));
+	}
+
+	public function testCompletionNeverSendsCredentialsToATokenEndpointThatViolatesTheUrlPolicy(): void {
+		$fetcher = new FakeHttpFetcher;
+		$config  = $this->config()->withEndpointOverrides([
+			ProviderMetadataResolver::TOKEN_ENDPOINT => 'http://attacker.example.net/token',
+		]);
+		$client = $this->makeClient($fetcher);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		try {
+			$client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+				'code'  => 'the-code',
+				'state' => $params['state'],
+			]));
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		// resolve() rejects the endpoint before TokenEndpointClient ever builds a request, so
+		// the client secret this config carries never went anywhere near that host.
+		$this->assertSame([], $fetcher->requests);
 	}
 
 	public function testCompleteAuthorizationCodeFlowWithoutBuildingARedirectFirstFails(): void {
