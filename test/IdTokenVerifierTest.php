@@ -142,15 +142,25 @@ class IdTokenVerifierTest extends TestCase {
 	}
 
 	public function testVerifyWrapsJwksFetchFailure(): void {
-		$fetcher = new FakeHttpFetcher;
-		$fetcher->failWith(self::JWKS_URI, new HttpTransportException('connection refused'));
-		$verifier = new IdTokenVerifier($fetcher);
+		$fetcher   = new FakeHttpFetcher;
+		$transport = new HttpTransportException('connection refused');
+		$fetcher->failWith(self::JWKS_URI, $transport);
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier($fetcher, logger: $logger);
 
 		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
 
-		$this->expectException(ProviderDiscoveryException::class);
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
 
-		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: unable to fetch JWKS', $records[0]['message']);
+		$this->assertSame(self::JWKS_URI, $records[0]['context']['jwks_uri']);
+		$this->assertSame($transport, $records[0]['context']['exception']);
 	}
 
 	public function testVerifyWithMatchingAccessTokenHashPasses(): void {

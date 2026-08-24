@@ -165,16 +165,28 @@ final class IdTokenVerifier {
 		try {
 			$response = $this->httpFetcher->fetch($jwksUri, null, verifyTls: $verifyTls);
 		} catch( HttpTransportException $e ) {
+			$this->logger->error('OIDC: unable to fetch JWKS', [ 'jwks_uri' => $jwksUri, 'exception' => $e ]);
+
 			throw new ProviderDiscoveryException("Unable to fetch JWKS from {$jwksUri}", previous: $e);
 		}
 
 		if( $response->status !== 200 ) {
+			$this->logger->error('OIDC: JWKS endpoint returned an unsuccessful response', [
+				'jwks_uri'    => $jwksUri,
+				'http_status' => $response->status,
+			]);
+
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned HTTP {$response->status}");
 		}
 
 		$decoded = json_decode($response->body, true);
 
 		if( !is_array($decoded) ) {
+			$this->logger->error('OIDC: JWKS endpoint returned invalid JSON', [
+				'jwks_uri'    => $jwksUri,
+				'http_status' => $response->status,
+			]);
+
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned invalid JSON");
 		}
 
