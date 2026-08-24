@@ -57,11 +57,37 @@ final class TokenEndpointClient {
 	}
 
 	/**
-	 * @param list<string> $scopes
+	 * @param list<string>                       $scopes
+	 * @param array<string,string|list<string>>  $extraParams Provider-specific extensions to
+	 *                                                         the request body. A string value
+	 *                                                         is sent as-is - this covers a
+	 *                                                         single `audience`, but also a
+	 *                                                         provider whose multi-value
+	 *                                                         convention is one space-separated
+	 *                                                         string in that same key (e.g. Ory
+	 *                                                         Hydra's `audience`, the same
+	 *                                                         convention `scope` already uses) -
+	 *                                                         join it yourself before passing it
+	 *                                                         in. A list value is sent as that
+	 *                                                         key repeated bare
+	 *                                                         (`resource=a&resource=b`), which is
+	 *                                                         the different convention RFC 8707
+	 *                                                         specifically wants for `resource`;
+	 *                                                         do not assume it is what any given
+	 *                                                         provider wants for `audience` too.
+	 *                                                         Merged in before `grant_type`/
+	 *                                                         `scope` are set, so neither can be
+	 *                                                         overridden this way, same as
+	 *                                                         `OpenIDConnectClientConfig::$extraAuthParams`
+	 *                                                         on the authorization request.
 	 * @throws TokenRequestException
 	 */
-	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [] ): TokenResult {
-		$params = [ 'grant_type' => 'client_credentials' ];
+	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [], array $extraParams = [] ): TokenResult {
+		$params = array_merge($extraParams, [ 'grant_type' => 'client_credentials' ]);
+
+		// scope is reserved even when $scopes is empty - "no scopes requested" must not leave
+		// an extraParams-supplied scope to leak through unprotected.
+		unset($params['scope']);
 
 		if( $scopes !== [] ) {
 			$params['scope'] = implode(' ', $scopes);
@@ -71,7 +97,7 @@ final class TokenEndpointClient {
 	}
 
 	/**
-	 * @param array<string,string> $params
+	 * @param array<string,string|list<string>> $params
 	 * @throws TokenRequestException
 	 */
 	private function request( OpenIDConnectClientConfig $config, array $params ): TokenResult {
@@ -79,7 +105,7 @@ final class TokenEndpointClient {
 		[ $params, $headers ] = ClientAuthenticator::apply($config, $params);
 
 		try {
-			$response = $this->httpFetcher->fetch($endpoint, http_build_query($params), $headers, $config->verifyTls);
+			$response = $this->httpFetcher->fetch($endpoint, $this->buildRequestBody($params), $headers, $config->verifyTls);
 		} catch( HttpTransportException $e ) {
 			$this->logger->error('OIDC: token endpoint request could not be completed', [
 				'endpoint'    => $endpoint,
@@ -119,6 +145,26 @@ final class TokenEndpointClient {
 		}
 
 		return new TokenResult($decoded, $this->logger, $this->state);
+	}
+
+	/**
+	 * `http_build_query()` cannot produce this shape on its own - it bracket-encodes an array
+	 * value (`resource[0]=a&resource[1]=b`), not the bare-repeated-key form
+	 * (`resource=a&resource=b`) RFC 8707 and most authorization servers expect for a
+	 * multi-valued parameter like `resource`.
+	 *
+	 * @param array<string,string|list<string>> $params
+	 */
+	private function buildRequestBody( array $params ): string {
+		$pairs = [];
+
+		foreach( $params as $key => $value ) {
+			foreach( (array)$value as $item ) {
+				$pairs[] = urlencode($key) . '=' . urlencode($item);
+			}
+		}
+
+		return implode('&', $pairs);
 	}
 
 }

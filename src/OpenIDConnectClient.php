@@ -121,8 +121,8 @@ final class OpenIDConnectClient implements
 		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
 	}
 
-	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [] ): TokenResult {
-		return $this->tokenEndpointClient->requestClientCredentialsToken($config, $scopes);
+	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [], array $extraParams = [] ): TokenResult {
+		return $this->tokenEndpointClient->requestClientCredentialsToken($config, $scopes, $extraParams);
 	}
 
 	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken ): Claims {

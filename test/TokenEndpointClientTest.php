@@ -72,6 +72,65 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertStringNotContainsString('scope=', $fetcher->requests[0]['body']);
 	}
 
+	public function testRequestClientCredentialsTokenSendsExtraParams(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+
+		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config(), extraParams: [ 'audience' => 'https://api.example.com' ]);
+
+		parse_str((string)$fetcher->requests[0]['body'], $body);
+		$this->assertSame('https://api.example.com', $body['audience']);
+	}
+
+	public function testRequestClientCredentialsTokenExtraParamsCannotOverrideGrantType(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+
+		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config(), extraParams: [ 'grant_type' => 'authorization_code' ]);
+
+		parse_str((string)$fetcher->requests[0]['body'], $body);
+		$this->assertSame('client_credentials', $body['grant_type']);
+	}
+
+	public function testRequestClientCredentialsTokenExtraParamsCannotOverrideScope(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+
+		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config(), [ 'read' ], [ 'scope' => 'forged' ]);
+
+		parse_str((string)$fetcher->requests[0]['body'], $body);
+		$this->assertSame('read', $body['scope']);
+	}
+
+	public function testRequestClientCredentialsTokenExtraParamsScopeIsReservedEvenWithNoScopesRequested(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+
+		// No scopes requested at all - a sneaky "scope" in extraParams must not leak through
+		// just because there is no real scope list to compare it against.
+		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config(), [], [ 'scope' => 'forged' ]);
+
+		$this->assertStringNotContainsString('scope=', $fetcher->requests[0]['body']);
+	}
+
+	public function testRequestClientCredentialsTokenSendsARepeatedExtraParamAsBareKeysNotBrackets(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+
+		// RFC 8707 allows repeating `resource` to request a token for multiple resources -
+		// as the bare key repeated (resource=a&resource=b), not http_build_query()'s default
+		// bracket encoding (resource[0]=a&resource[1]=b), which most authorization servers
+		// will not parse as a repeated parameter.
+		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config(), [], [
+			'resource' => [ 'https://api-a.example.com', 'https://api-b.example.com' ],
+		]);
+
+		$body = (string)$fetcher->requests[0]['body'];
+		$this->assertStringNotContainsString('resource%5B', $body, 'must not bracket-encode a repeated parameter');
+		$this->assertStringContainsString('resource=' . urlencode('https://api-a.example.com'), $body);
+		$this->assertStringContainsString('resource=' . urlencode('https://api-b.example.com'), $body);
+	}
+
 	public function testThrowsOnNonSuccessStatusWithErrorField(): void {
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;

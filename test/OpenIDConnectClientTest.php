@@ -620,6 +620,16 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame('the-access-token', $result->accessToken);
 	}
 
+	public function testRequestClientCredentialsTokenPassesExtraParamsThrough(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'the-access-token' ], JSON_THROW_ON_ERROR), 200));
+
+		$this->makeClient($fetcher)->requestClientCredentialsToken($this->config(), extraParams: [ 'audience' => 'https://api.example.com' ]);
+
+		parse_str((string)$fetcher->requests[0]['body'], $body);
+		$this->assertSame('https://api.example.com', $body['audience']);
+	}
+
 	public function testFetchUserInfoJson(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse(json_encode([ 'sub' => 'user-1', 'email' => 'user@example.com' ], JSON_THROW_ON_ERROR), 200, 'application/json'));
