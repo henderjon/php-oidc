@@ -115,10 +115,10 @@ class ClaimsValidatorTest extends TestCase {
 
 	public function testMismatchedIssuerLogsExpectedAndActual(): void {
 		$logger    = new ArrayLogger;
-		$validator = new ClaimsValidator($logger);
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
 
 		try {
-			$validator->validateIssuer($this->validClaims(), 'https://other.example.com', 'the-state');
+			$validator->validateIssuer($this->validClaims(), 'https://other.example.com');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -132,11 +132,11 @@ class ClaimsValidatorTest extends TestCase {
 
 	public function testMismatchedAudienceLogsExpectedAndActual(): void {
 		$logger    = new ArrayLogger;
-		$validator = new ClaimsValidator($logger);
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
 		$claims    = $this->validClaims([ 'aud' => 'someone-elses-client-id' ]);
 
 		try {
-			$validator->validateAudience($claims, 'the-client-id', 'the-state');
+			$validator->validateAudience($claims, 'the-client-id');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -150,11 +150,11 @@ class ClaimsValidatorTest extends TestCase {
 
 	public function testMismatchedNonceLogsExpectedAndActual(): void {
 		$logger    = new ArrayLogger;
-		$validator = new ClaimsValidator($logger);
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
 		$claims    = $this->validClaims([ 'nonce' => 'a-different-nonce' ]);
 
 		try {
-			$validator->validateNonce($claims, 'the-nonce', 'the-state');
+			$validator->validateNonce($claims, 'the-nonce');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -173,6 +173,21 @@ class ClaimsValidatorTest extends TestCase {
 		$validator->validate($this->validClaims(), 'https://issuer.example.com', 'the-client-id', 'the-nonce');
 
 		$this->assertSame([], $logger->records);
+	}
+
+	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
+		$logger    = new ArrayLogger;
+		$validator = new ClaimsValidator($logger);
+
+		$validator->withState('the-state');
+
+		try {
+			$validator->validateIssuer($this->validClaims(), 'https://other.example.com');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$this->assertNull($logger->recordsAt(LogLevel::WARNING)[0]['context']['state']);
 	}
 
 }

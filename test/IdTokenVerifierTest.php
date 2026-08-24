@@ -146,12 +146,12 @@ class IdTokenVerifierTest extends TestCase {
 		$transport = new HttpTransportException('connection refused');
 		$fetcher->failWith(self::JWKS_URI, $transport);
 		$logger   = new ArrayLogger;
-		$verifier = new IdTokenVerifier($fetcher, logger: $logger);
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
 
 		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
 
 		try {
-			$verifier->verify($idToken, self::JWKS_URI, 'unused', state: 'the-state');
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -199,10 +199,10 @@ class IdTokenVerifierTest extends TestCase {
 		$header   = JWT::urlsafeB64Encode(json_encode([ 'alg' => 'RSA-OAEP', 'enc' => 'A256GCM' ], JSON_THROW_ON_ERROR));
 		$payload  = JWT::urlsafeB64Encode('encrypted-payload');
 		$logger   = new ArrayLogger;
-		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
 
 		try {
-			$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret', state: 'the-state');
+			$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -217,10 +217,10 @@ class IdTokenVerifierTest extends TestCase {
 		$header   = JWT::urlsafeB64Encode(json_encode([ 'typ' => 'JWT' ], JSON_THROW_ON_ERROR));
 		$payload  = JWT::urlsafeB64Encode(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR));
 		$logger   = new ArrayLogger;
-		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
 
 		try {
-			$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret', state: 'the-state');
+			$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -242,10 +242,10 @@ class IdTokenVerifierTest extends TestCase {
 		$idTokenWithUnknownKid = $fixture->sign([ 'sub' => 'user-1' ], keyId: 'unknown-kid');
 
 		$logger   = new ArrayLogger;
-		$verifier = new IdTokenVerifier($fetcher, logger: $logger);
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
 
 		try {
-			$verifier->verify($idTokenWithUnknownKid, self::JWKS_URI, 'unused', state: 'the-state');
+			$verifier->verify($idTokenWithUnknownKid, self::JWKS_URI, 'unused');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -260,10 +260,10 @@ class IdTokenVerifierTest extends TestCase {
 	public function testVerifyHs256TokenWithWrongSecretLogsTheExceptionButStaysGeneric(): void {
 		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
 		$logger   = new ArrayLogger;
-		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
 
 		try {
-			$verifier->verify($idToken, self::JWKS_URI, self::WRONG_CLIENT_SECRET, state: 'the-state');
+			$verifier->verify($idToken, self::JWKS_URI, self::WRONG_CLIENT_SECRET);
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
 			// firebase/php-jwt's own message lives only in the log (and in ->getPrevious(),
@@ -281,10 +281,10 @@ class IdTokenVerifierTest extends TestCase {
 	public function testVerifyWithMismatchedAccessTokenHashLogsTheAlg(): void {
 		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => 'not-the-right-hash' ], self::CLIENT_SECRET, 'HS256');
 		$logger   = new ArrayLogger;
-		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
 
 		try {
-			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, accessToken: 'the-access-token', state: 'the-state');
+			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, accessToken: 'the-access-token');
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
 		}
@@ -304,6 +304,23 @@ class IdTokenVerifierTest extends TestCase {
 		$verifier->verify($idToken, self::JWKS_URI, 'unused-client-secret');
 
 		$this->assertSame([], $logger->records);
+	}
+
+	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
+		$header   = JWT::urlsafeB64Encode(json_encode([ 'typ' => 'JWT' ], JSON_THROW_ON_ERROR));
+		$payload  = JWT::urlsafeB64Encode(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR));
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
+
+		$verifier->withState('the-state');
+
+		try {
+			$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$this->assertNull($logger->recordsAt(LogLevel::WARNING)[0]['context']['state']);
 	}
 
 }

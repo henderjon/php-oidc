@@ -108,6 +108,55 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame($idToken, $result->idToken);
 	}
 
+	public function testCompletionResolvesTokenEndpointAndJwksUriFromOneDiscoveryFetch(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::ISSUER . '/.well-known/openid-configuration', new FetchResponse(json_encode([
+			'token_endpoint' => self::TOKEN_ENDPOINT,
+			'jwks_uri'       => self::JWKS_URI,
+		], JSON_THROW_ON_ERROR), 200));
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+
+		$config = new OpenIDConnectClientConfig(
+			clientId: self::CLIENT_ID,
+			clientSecret: self::CLIENT_SECRET,
+			redirectUrl: self::REDIRECT_URL,
+			providerUrl: self::ISSUER,
+			issuer: self::ISSUER,
+		);
+
+		// Seed a pending flow directly, bypassing buildAuthorizationCodeRedirect() entirely -
+		// that method would resolve authorization_endpoint too, muddying the fetch count this
+		// test exists to check: that completion resolves token_endpoint (inside
+		// TokenEndpointClient) and jwks_uri (back in OpenIDConnectClient) from a single scoped
+		// ProviderMetadataResolver, not two independently-scoped copies each fetching discovery
+		// themselves. See TokenEndpointClient::withState().
+		$cache = new InMemoryCache;
+		$flow  = (new AuthorizationStateStore($cache, 'the-cache-key'))->start();
+
+		$client = $this->makeClient($fetcher, $cache);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'sub'   => 'user-1',
+			'nonce' => $flow->nonce,
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$result = $client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $flow->state,
+		]));
+
+		$this->assertSame('user-1', $result->claims->get('sub'));
+		$discoveryRequests = array_filter($fetcher->requests, static fn ( array $r ): bool => str_ends_with($r['url'], '/.well-known/openid-configuration'));
+		$this->assertCount(1, $discoveryRequests);
+	}
+
 	public function testRequiredPkceCompletesAuthorizationCodeFlow(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;

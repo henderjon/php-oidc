@@ -66,7 +66,14 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Unable to verify PKCE code verifier');
 		}
 
-		$tokenResult = $this->tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier, $flow->state);
+		// One scoped resolver, shared by the token exchange below and the JWKS resolution
+		// inside verifyAndValidateIdToken() - both against the same provider, so this keeps
+		// them to one discovery fetch instead of two independently-scoped copies each
+		// fetching it themselves. See TokenEndpointClient::withState().
+		$providerMetadataResolver = $this->providerMetadataResolver->withState($flow->state);
+		$tokenEndpointClient      = $this->tokenEndpointClient->withState($flow->state, $providerMetadataResolver);
+
+		$tokenResult = $tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier);
 
 		if( $tokenResult->idToken === null ) {
 			$this->logger->warning('OIDC: token endpoint response is missing id_token', [ 'state' => $flow->state ]);
@@ -74,7 +81,7 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Token response is missing id_token');
 		}
 
-		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $flow->state);
+		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state);
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken);
 	}
@@ -101,7 +108,8 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Callback is missing the id_token');
 		}
 
-		$claims = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $flow->state);
+		$providerMetadataResolver = $this->providerMetadataResolver->withState($flow->state);
+		$claims                   = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $providerMetadataResolver, $flow->state);
 
 		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
 	}
@@ -214,10 +222,12 @@ final class OpenIDConnectClient implements
 		string $expectedNonce,
 		?string $accessToken,
 		array|string|null $audience,
+		ProviderMetadataResolver $providerMetadataResolver,
 		string $state,
 	): Claims {
-		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI, state: $state);
-		$claims  = $this->idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $accessToken, $config->verifyTls, state: $state);
+		$jwksUri         = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
+		$idTokenVerifier = $this->idTokenVerifier->withState($state);
+		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $accessToken, $config->verifyTls);
 
 		$issuer = $config->issuer ?? $config->providerUrl;
 
@@ -225,12 +235,13 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('No issuer configured to validate the ID token against');
 		}
 
-		$this->claimsValidator->validateIssuer($claims, $issuer, $state);
-		$this->claimsValidator->validateNonce($claims, $expectedNonce, $state);
+		$claimsValidator = $this->claimsValidator->withState($state);
+		$claimsValidator->validateIssuer($claims, $issuer);
+		$claimsValidator->validateNonce($claims, $expectedNonce);
 
 		// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just
 		// defaults to clientId unless the config overrides it with a distinct expected audience.
-		$this->claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $state);
+		$claimsValidator->validateAudience($claims, $audience ?? $config->clientId);
 
 		return $claims;
 	}

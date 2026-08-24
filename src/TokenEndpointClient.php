@@ -20,18 +20,29 @@ final class TokenEndpointClient {
 		private readonly HttpFetcherInterface $httpFetcher,
 		private readonly ProviderMetadataResolver $providerMetadataResolver,
 		private readonly LoggerInterface $logger = new NullLogger,
+		private readonly ?string $state = null,
 	) {
+	}
+
+	/**
+	 * Returns a copy of this client carrying one flow's correlation id - see
+	 * ClaimsValidator::withState() for why this returns a new instance instead of mutating
+	 * the shared one.
+	 *
+	 * Takes the caller's own already-scoped ProviderMetadataResolver rather than scoping
+	 * `$this->providerMetadataResolver` itself, so both this client's token_endpoint
+	 * resolution and whatever else the caller resolves during the same flow (jwks_uri, for
+	 * one) share one discovery fetch instead of two independently-scoped copies each
+	 * fetching it themselves.
+	 */
+	public function withState( ?string $state, ProviderMetadataResolver $providerMetadataResolver ): self {
+		return new self($this->httpFetcher, $providerMetadataResolver, $this->logger, $state);
 	}
 
 	/**
 	 * @throws TokenRequestException
 	 */
-	public function exchangeAuthorizationCode(
-		OpenIDConnectClientConfig $config,
-		string $code,
-		?string $codeVerifier = null,
-		?string $state = null,
-	): TokenResult {
+	public function exchangeAuthorizationCode( OpenIDConnectClientConfig $config, string $code, ?string $codeVerifier = null ): TokenResult {
 		$params = [
 			'grant_type'   => 'authorization_code',
 			'code'         => $code,
@@ -42,7 +53,7 @@ final class TokenEndpointClient {
 			$params['code_verifier'] = $codeVerifier;
 		}
 
-		return $this->request($config, $params, $state);
+		return $this->request($config, $params);
 	}
 
 	/**
@@ -56,8 +67,6 @@ final class TokenEndpointClient {
 			$params['scope'] = implode(' ', $scopes);
 		}
 
-		// No state: this grant is non-interactive and never touches the state store, so
-		// there is no flow to correlate these logs with.
 		return $this->request($config, $params);
 	}
 
@@ -65,8 +74,8 @@ final class TokenEndpointClient {
 	 * @param array<string,string> $params
 	 * @throws TokenRequestException
 	 */
-	private function request( OpenIDConnectClientConfig $config, array $params, ?string $state = null ): TokenResult {
-		$endpoint             = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT, state: $state);
+	private function request( OpenIDConnectClientConfig $config, array $params ): TokenResult {
+		$endpoint             = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
 		[ $params, $headers ] = ClientAuthenticator::apply($config, $params);
 
 		try {
@@ -76,7 +85,7 @@ final class TokenEndpointClient {
 				'endpoint'    => $endpoint,
 				'http_status' => null,
 				'exception'   => $e,
-				'state'       => $state,
+				'state'       => $this->state,
 			]);
 
 			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", previous: $e);
@@ -92,7 +101,7 @@ final class TokenEndpointClient {
 				'http_status'    => $response->status,
 				'provider_error' => is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null,
 				'content_type'   => $response->contentType,
-				'state'          => $state,
+				'state'          => $this->state,
 			]);
 
 			throw new TokenRequestException("Token request failed: {$error}", $response->status, $response->body);
@@ -103,13 +112,13 @@ final class TokenEndpointClient {
 				'endpoint'     => $endpoint,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
-				'state'        => $state,
+				'state'        => $this->state,
 			]);
 
 			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body);
 		}
 
-		return new TokenResult($decoded, $this->logger, $state);
+		return new TokenResult($decoded, $this->logger, $this->state);
 	}
 
 }

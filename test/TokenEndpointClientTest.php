@@ -26,6 +26,16 @@ class TokenEndpointClientTest extends TestCase {
 		return new TokenEndpointClient($fetcher, new ProviderMetadataResolver($fetcher), $logger ?? new ArrayLogger);
 	}
 
+	/**
+	 * Mirrors how OpenIDConnectClient scopes a client: one ProviderMetadataResolver, scoped
+	 * once, shared between the resolver's own use and the client built on top of it.
+	 */
+	private function makeScopedClient( FakeHttpFetcher $fetcher, ArrayLogger $logger, string $state ): TokenEndpointClient {
+		$providerMetadataResolver = (new ProviderMetadataResolver($fetcher, $logger))->withState($state);
+
+		return (new TokenEndpointClient($fetcher, $providerMetadataResolver, $logger))->withState($state, $providerMetadataResolver);
+	}
+
 	public function testExchangeAuthorizationCode(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'the-access-token', 'id_token' => 'the-id-token' ], JSON_THROW_ON_ERROR), 200));
@@ -88,7 +98,7 @@ class TokenEndpointClientTest extends TestCase {
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'error' => 'invalid_grant' ], JSON_THROW_ON_ERROR), 400));
 
 		try {
-			$this->makeClient($fetcher, $logger)->exchangeAuthorizationCode($this->config(), 'the-code', state: 'the-state');
+			$this->makeScopedClient($fetcher, $logger, 'the-state')->exchangeAuthorizationCode($this->config(), 'the-code');
 			$this->fail('Expected a TokenRequestException to be thrown');
 		} catch( TokenRequestException ) {
 		}
@@ -159,6 +169,24 @@ class TokenEndpointClientTest extends TestCase {
 			$this->assertSame(200, $e->getHttpStatus());
 			$this->assertSame('not json', $e->getRawBody());
 		}
+	}
+
+	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'error' => 'invalid_grant' ], JSON_THROW_ON_ERROR), 400));
+		$client = $this->makeClient($fetcher, $logger);
+
+		$providerMetadataResolver = new ProviderMetadataResolver($fetcher, $logger);
+		$client->withState('the-state', $providerMetadataResolver->withState('the-state'));
+
+		try {
+			$client->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$this->assertNull($logger->recordsAt(LogLevel::ERROR)[0]['context']['state']);
 	}
 
 	public function testPublicClientOmitsAuthorizationHeader(): void {

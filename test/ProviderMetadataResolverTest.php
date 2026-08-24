@@ -96,10 +96,10 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse('not found', 404));
 		$logger   = new ArrayLogger;
-		$resolver = new ProviderMetadataResolver($fetcher, $logger);
+		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT, state: 'the-state');
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -115,10 +115,10 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse('not json', 200));
 		$logger   = new ArrayLogger;
-		$resolver = new ProviderMetadataResolver($fetcher, $logger);
+		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT, state: 'the-state');
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -133,10 +133,10 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse(json_encode([], JSON_THROW_ON_ERROR), 200));
 		$logger   = new ArrayLogger;
-		$resolver = new ProviderMetadataResolver($fetcher, $logger);
+		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT, state: 'the-state');
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -153,10 +153,10 @@ class ProviderMetadataResolverTest extends TestCase {
 		$transport = new HttpTransportException('connection refused');
 		$fetcher->failWith('https://issuer.example.com/.well-known/openid-configuration', $transport);
 		$logger   = new ArrayLogger;
-		$resolver = new ProviderMetadataResolver($fetcher, $logger);
+		$resolver = (new ProviderMetadataResolver($fetcher, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT, state: 'the-state');
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -180,6 +180,42 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 
 		$this->assertSame([], $logger->records);
+	}
+
+	public function testWithStateCarriesOverAlreadyDiscoveredDocuments(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'token_endpoint'         => 'https://issuer.example.com/token',
+				'authorization_endpoint' => 'https://issuer.example.com/authorize',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$resolver = new ProviderMetadataResolver($fetcher);
+		$config   = $this->configWithProviderUrl();
+
+		$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$scoped = $resolver->withState('the-state');
+		$scoped->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
+
+		$this->assertCount(1, $fetcher->requests, 'withState() must not throw away memoization already built up before scoping');
+	}
+
+	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse('not found', 404));
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, $logger);
+
+		$resolver->withState('the-state');
+
+		try {
+			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$this->assertNull($logger->recordsAt(LogLevel::ERROR)[0]['context']['state']);
 	}
 
 }
