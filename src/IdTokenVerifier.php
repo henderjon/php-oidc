@@ -28,12 +28,26 @@ use Psr\Log\NullLogger;
  * token claims before it can verify it), so that internal check alone would be
  * tautological here without a policy decided independently of the token first.
  *
- * `JWT::decode()` already enforces `exp`/`nbf`/`iat`; the injected clock
- * only exists to make that deterministic in tests instead of racing
- * against `time()`. Encrypted (JWE) tokens are explicitly unsupported -
- * detected and rejected before any key material is touched.
+ * `JWT::decode()` validates `exp`/`nbf`/`iat` when they are present, but does not require
+ * any of them to exist at all - a token with no `exp` claim sails through with no expiry
+ * check ever applied. Requiring `exp`/`iat` (and `sub`) to actually be there is
+ * ClaimsValidator's job, not this class's - see ClaimsValidator::validateRequiredClaims().
+ * The injected clock exists only to make `JWT::decode()`'s own timing checks deterministic
+ * in tests instead of racing against `time()`.
  *
- * Issuer/audience/nonce are not this class's concern - see ClaimsValidator.
+ * `$leewaySeconds` (default 300, i.e. five minutes) is an explicit, deliberate security
+ * decision, not an arbitrary default: it bounds how far this verifier's clock and the
+ * issuing provider's clock are allowed to disagree before `exp`/`nbf`/`iat` are treated as
+ * violated. Too small a value produces spurious rejections from ordinary clock drift between
+ * this host and the provider; too large a value extends how long a token can be replayed
+ * past its nominal expiry. Five minutes matches common practice for this tradeoff (the same
+ * default several other OIDC client libraries ship with) and can be tightened or loosened
+ * per deployment via the constructor.
+ *
+ * Encrypted (JWE) tokens are explicitly unsupported - detected and rejected before any key
+ * material is touched.
+ *
+ * Issuer/audience/nonce/required-claims are not this class's concern - see ClaimsValidator.
  *
  * Every failure here is a stronger signal than a mismatched `state` or
  * `nonce` - it means the token itself is malformed, unsigned by a key we

@@ -8,9 +8,12 @@ use Psr\Log\NullLogger;
 
 /**
  * Validates the OIDC-specific claims that `Firebase\JWT\JWT::decode()`
- * cannot know about on its own: issuer, audience, and nonce. Signature
- * validity and the `exp`/`nbf`/`iat` time claims are already checked by
- * IdTokenVerifier before claims ever reach here.
+ * cannot know about on its own (issuer, audience, nonce), plus the claims
+ * `JWT::decode()` knows about but does not require: `sub`, `exp`, and
+ * `iat` are validated there only when present - a token that omits them
+ * entirely sails through with no check at all. See
+ * IdTokenVerifier's own docblock for exactly what `JWT::decode()` already
+ * covers.
  *
  * A mismatch here is a stronger signal than a missing/wrong `state` - it
  * means a signature-valid token that simply was not meant for this
@@ -41,10 +44,98 @@ final class ClaimsValidator {
 	/**
 	 * @throws AuthenticationFailedException
 	 */
-	public function validate( Claims $claims, string $expectedIssuer, string $expectedClientId, ?string $expectedNonce ): void {
+	public function validate(
+		Claims $claims,
+		string $expectedIssuer,
+		string $expectedClientId,
+		?string $expectedNonce,
+		?int $maxLifetimeSeconds = null,
+	): void {
+		$this->validateRequiredClaims($claims);
 		$this->validateIssuer($claims, $expectedIssuer);
 		$this->validateAudience($claims, $expectedClientId);
 		$this->validateNonce($claims, $expectedNonce);
+		$this->validateTokenLifetime($claims, $maxLifetimeSeconds);
+	}
+
+	/**
+	 * `sub`, `exp`, and `iat` are all REQUIRED claims in every ID token (OpenID Connect Core
+	 * 1.0 §2) - not optional, and not merely "checked if present" the way `JWT::decode()`
+	 * treats them (see IdTokenVerifier's own docblock). A token omitting any of the three, or
+	 * carrying a non-numeric value for `exp`/`iat`, or claiming to expire before or at the
+	 * moment it says it was issued, is rejected here before anything else about it is trusted.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateRequiredClaims( Claims $claims ): void {
+		$sub = $claims->get('sub');
+
+		if( !is_string($sub) || $sub === '' ) {
+			$this->logger->error('OIDC: ID token is missing the required sub claim', [ 'state' => $this->state ]);
+
+			throw new AuthenticationFailedException('ID token is missing the required sub claim');
+		}
+
+		$exp = $claims->get('exp');
+
+		if( !is_numeric($exp) ) {
+			$this->logger->error('OIDC: ID token is missing the required exp claim, or it is not numeric', [
+				'exp'   => $exp,
+				'state' => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('ID token is missing the required exp claim, or it is not numeric');
+		}
+
+		$iat = $claims->get('iat');
+
+		if( !is_numeric($iat) ) {
+			$this->logger->error('OIDC: ID token is missing the required iat claim, or it is not numeric', [
+				'iat'   => $iat,
+				'state' => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('ID token is missing the required iat claim, or it is not numeric');
+		}
+
+		if( (float)$exp <= (float)$iat ) {
+			$this->logger->error('OIDC: ID token exp is not after its own iat', [
+				'exp'   => $exp,
+				'iat'   => $iat,
+				'state' => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('ID token exp is not after its own iat');
+		}
+	}
+
+	/**
+	 * `exp - iat` bounds how long a token claims to be valid for, from its own issuance -
+	 * independent of clock skew, and independent of whatever leeway the verifier itself
+	 * allows (see IdTokenVerifier::$leewaySeconds, a different concern: clock disagreement,
+	 * not token lifetime). Null skips the check - deliberately opt-in, since a sensible cap
+	 * depends on a given provider's own typical token lifetime, which this library cannot
+	 * guess safely for every integration. Assumes validateRequiredClaims() has already
+	 * confirmed `exp`/`iat` are present and numeric.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateTokenLifetime( Claims $claims, ?int $maxLifetimeSeconds ): void {
+		if( $maxLifetimeSeconds === null ) {
+			return;
+		}
+
+		$lifetime = (float)$claims->get('exp') - (float)$claims->get('iat');
+
+		if( $lifetime > $maxLifetimeSeconds ) {
+			$this->logger->error('OIDC: ID token lifetime exceeds the configured maximum', [
+				'lifetime_seconds'     => $lifetime,
+				'max_lifetime_seconds' => $maxLifetimeSeconds,
+				'state'                => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('ID token lifetime exceeds the configured maximum');
+		}
 	}
 
 	/**

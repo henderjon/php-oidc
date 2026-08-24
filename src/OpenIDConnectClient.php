@@ -257,12 +257,19 @@ final class OpenIDConnectClient implements
 		}
 
 		$claimsValidator = $this->claimsValidator->withState($state);
+
+		// sub/exp/iat presence and basic sanity come before anything else here - a token
+		// missing them entirely is malformed regardless of what it claims about issuer,
+		// audience, or nonce.
+		$claimsValidator->validateRequiredClaims($claims);
 		$claimsValidator->validateIssuer($claims, $issuer);
 		$claimsValidator->validateNonce($claims, $expectedNonce);
 
 		// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just
 		// defaults to clientId unless the config overrides it with a distinct expected audience.
 		$claimsValidator->validateAudience($claims, $audience ?? $config->clientId);
+
+		$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
 
 		return $claims;
 	}

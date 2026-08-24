@@ -17,6 +17,9 @@ class ClaimsValidatorTest extends TestCase {
 			'iss'   => 'https://issuer.example.com',
 			'aud'   => 'the-client-id',
 			'nonce' => 'the-nonce',
+			'sub'   => 'the-subject',
+			'iat'   => 1_700_000_000,
+			'exp'   => 1_700_000_300,
 			...$overrides,
 		]);
 	}
@@ -163,6 +166,155 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('the-nonce', $records[0]['context']['expected']);
 		$this->assertSame('a-different-nonce', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateRequiredClaimsPassesWithAllPresent(): void {
+		$validator = new ClaimsValidator;
+
+		$validator->validateRequiredClaims($this->validClaims());
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateRequiredClaimsRejectsMissingSub(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => null ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('sub');
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsRejectsEmptyStringSub(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => '' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsRejectsMissingExp(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'exp' => null ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('exp');
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsRejectsNonNumericExp(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'exp' => 'not-a-number' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('exp');
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsRejectsMissingIat(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iat' => null ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('iat');
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsRejectsNonNumericIat(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iat' => 'not-a-number' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('iat');
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsRejectsExpNotAfterIat(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iat' => 1_700_000_300, 'exp' => 1_700_000_300 ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('exp');
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsRejectsExpBeforeIat(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iat' => 1_700_000_300, 'exp' => 1_700_000_000 ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsLogsTheMissingSub(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'sub' => null ]);
+
+		try {
+			$validator->validateRequiredClaims($claims);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token is missing the required sub claim', $records[0]['message']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateTokenLifetimeSkipsCheckWhenNull(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iat' => 0, 'exp' => 999_999_999 ]);
+
+		$validator->validateTokenLifetime($claims, null);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateTokenLifetimeAllowsALifetimeWithinTheCap(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iat' => 1_700_000_000, 'exp' => 1_700_000_300 ]);
+
+		$validator->validateTokenLifetime($claims, 600);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateTokenLifetimeRejectsALifetimeOverTheCap(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iat' => 1_700_000_000, 'exp' => 1_700_001_000 ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('lifetime');
+
+		$validator->validateTokenLifetime($claims, 600);
+	}
+
+	public function testValidateTokenLifetimeLogsTheLifetimeAndCap(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'iat' => 1_700_000_000, 'exp' => 1_700_001_000 ]);
+
+		try {
+			$validator->validateTokenLifetime($claims, 600);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame(1000.0, $records[0]['context']['lifetime_seconds']);
+		$this->assertSame(600, $records[0]['context']['max_lifetime_seconds']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 

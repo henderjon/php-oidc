@@ -61,9 +61,15 @@ final class RsaKeyFixture {
 	}
 
 	/**
+	 * Fills in sub/iat/exp when the caller does not care about their exact values - every ID
+	 * token needs them (OpenID Connect Core 1.0 §2), and most tests using this fixture are
+	 * exercising something other than required-claims validation itself.
+	 *
 	 * @param array<string,mixed> $claims
 	 */
 	public function sign( array $claims, ?string $keyId = self::KEY_ID ): string {
+		$claims = [ 'sub' => 'default-test-subject', 'iat' => time(), 'exp' => time() + 3600, ...$claims ];
+
 		return JWT::encode($claims, $this->privateKeyPem, 'RS256', $keyId);
 	}
 
