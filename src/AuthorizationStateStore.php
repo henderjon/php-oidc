@@ -2,6 +2,7 @@
 
 namespace Oidc;
 
+use Oidc\Exceptions\AuthorizationStateException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Psr\SimpleCache\CacheInterface;
@@ -29,7 +30,25 @@ use Psr\SimpleCache\CacheInterface;
  * keys visually distinct from another's when they share a cache (or cache
  * dump) - not a correctness requirement. Two stores with the same suffix,
  * or no suffix at all, will not collide with each other; the state itself
- * already guarantees that.
+ * already guarantees that. Scope it to something session- or user-bound
+ * (see the example applications) if you want a browser session to only
+ * ever be able to consume its own attempt - this class does not enforce
+ * that binding itself, since what "session" means is entirely up to the
+ * host application.
+ *
+ * `consume()` is not atomic: it is a `get()` followed by a `delete()`, and
+ * PSR-16 (`Psr\SimpleCache\CacheInterface`) has no compare-and-delete or
+ * get-and-delete primitive to make that one operation. Two requests racing
+ * to consume the exact same `state` could therefore both read the entry
+ * before either deletes it. This is deliberately not solved here with a
+ * lock or a backend-specific atomic op - both would mean either a new
+ * dependency or code that only works against specific cache backends,
+ * against this library's own dependency-light premise, for a race with a
+ * bounded impact: both racing attempts still have to redeem the same
+ * authorization `code` at the token endpoint, and every OAuth authorization
+ * server enforces that a code is redeemable only once (RFC 6749 §4.1.2).
+ * The race can cause a confusing double local attempt; it cannot itself
+ * produce two valid sessions from one code.
  */
 final class AuthorizationStateStore {
 
@@ -53,15 +72,25 @@ final class AuthorizationStateStore {
 
 	/**
 	 * @param int<1,max> $length
+	 * @throws AuthorizationStateException When the cache write itself fails - fail closed
+	 *         rather than hand back a FlowState pointing at an attempt that was never
+	 *         actually persisted, which `consume()` could never find later no matter what
+	 *         the provider echoes back.
 	 */
 	public function start(int $length = 16, ?string $codeVerifier = null): FlowState {
 		$state = $this->randomToken($length);
 		$nonce = $this->randomToken($length);
 
-		$this->cache->set($this->flowKey($state), [
+		$stored = $this->cache->set($this->flowKey($state), [
 			'nonce'         => $nonce,
 			'code_verifier' => $codeVerifier,
 		], $this->ttlSeconds);
+
+		if( !$stored ) {
+			$this->logger->error('OIDC: failed to persist a new authorization attempt', [ 'state' => $this->loggableState($state) ]);
+
+			throw new AuthorizationStateException('Unable to persist authorization state');
+		}
 
 		return new FlowState($state, $nonce, $codeVerifier);
 	}
@@ -77,10 +106,9 @@ final class AuthorizationStateStore {
 	 * (`corrupted`) is actually distinguishable from that.
 	 */
 	public function consume(string $state): ?FlowState {
-		$key  = $this->flowKey($state);
-		$flow = $this->cache->get($key);
-
-		$this->cache->delete($key);
+		$key     = $this->flowKey($state);
+		$flow    = $this->cache->get($key);
+		$deleted = $this->cache->delete($key);
 
 		if( $flow === null ) {
 			$this->logger->warning('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
@@ -96,6 +124,15 @@ final class AuthorizationStateStore {
 			]);
 
 			return null;
+		}
+
+		if( !$deleted ) {
+			// PSR-16 delete() is as ambiguous as get() about why it failed - "may not have
+			// been cleared" rather than a firm claim, since some backends report false for
+			// a key that was already gone, not only for a real error.
+			$this->logger->notice('OIDC: consumed authorization flow entry may not have been cleared from the cache', [
+				'state' => $this->loggableState($state),
+			]);
 		}
 
 		$codeVerifier = $flow['code_verifier'] ?? null;

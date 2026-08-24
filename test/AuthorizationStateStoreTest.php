@@ -2,7 +2,10 @@
 
 namespace Oidc;
 
+use Oidc\Exceptions\AuthorizationStateException;
 use Oidc\Fakes\ArrayLogger;
+use Oidc\Fakes\DeleteFailingCache;
+use Oidc\Fakes\FailingCache;
 use Oidc\Fakes\InMemoryCache;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
@@ -159,6 +162,61 @@ class AuthorizationStateStoreTest extends TestCase {
 		$this->assertLessThan(100, strlen($records[0]['context']['state']));
 		$this->assertStringStartsWith(str_repeat('a', 64), $records[0]['context']['state']);
 		$this->assertStringEndsWith('(truncated)', $records[0]['context']['state']);
+	}
+
+	public function testConsumeLogsWhenDeleteFailsAfterASuccessfulMatch(): void {
+		$logger = new ArrayLogger;
+		$store  = new AuthorizationStateStore(new DeleteFailingCache, 'the-cache-key', logger: $logger);
+
+		$started = $store->start();
+		$consumed = $store->consume($started->state);
+
+		// The lookup and shape were both fine - only delete()'s own confirmation failed - so
+		// the caller still gets a usable flow back. This must not fail closed on top of the
+		// notice; that would make an unconfirmed delete look like a missing flow instead.
+		$this->assertNotNull($consumed);
+
+		$records = $logger->recordsAt(LogLevel::NOTICE);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: consumed authorization flow entry may not have been cleared from the cache', $records[0]['message']);
+		$this->assertSame($started->state, $records[0]['context']['state']);
+	}
+
+	public function testConsumeWithoutAMatchDoesNotLogAboutDeleteFailing(): void {
+		$logger = new ArrayLogger;
+		$store  = new AuthorizationStateStore(new DeleteFailingCache, 'the-cache-key', logger: $logger);
+
+		$store->consume('never-started');
+
+		// Nothing was found to begin with, so delete() failing here is meaningless - only
+		// the "no pending flow found" warning should fire, not a second one about deletion.
+		$records = $logger->records;
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
+	}
+
+	public function testStartThrowsWhenTheCacheWriteFails(): void {
+		$store = new AuthorizationStateStore(new FailingCache);
+
+		$this->expectException(AuthorizationStateException::class);
+
+		$store->start();
+	}
+
+	public function testStartLogsWhenTheCacheWriteFails(): void {
+		$logger = new ArrayLogger;
+		$store  = new AuthorizationStateStore(new FailingCache, logger: $logger);
+
+		try {
+			$store->start();
+			$this->fail('Expected AuthorizationStateException to be thrown');
+		} catch( AuthorizationStateException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: failed to persist a new authorization attempt', $records[0]['message']);
+		$this->assertIsString($records[0]['context']['state']);
 	}
 
 }
