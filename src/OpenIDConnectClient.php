@@ -88,7 +88,11 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Token response is missing id_token');
 		}
 
-		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state);
+		// requireAtHash: false - this ID token is issued from the token endpoint, where OpenID
+		// Connect Core 1.0 §3.1.3.6 makes at_hash OPTIONAL even though an access token
+		// accompanies it here too. §3.2.2.10's REQUIRED at_hash is specific to the
+		// authorization-endpoint-issued case below.
+		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: false);
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken);
 	}
@@ -115,8 +119,12 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Callback is missing the id_token');
 		}
 
+		// requireAtHash: true - this ID token is issued from the authorization endpoint.
+		// OpenID Connect Core 1.0 §3.2.2.10 makes at_hash REQUIRED, not merely checked-if-
+		// present, whenever an access token accompanies it here. Has no effect when
+		// $response->accessToken is null (a bare `id_token` response, not `id_token token`).
 		$providerMetadataResolver = $this->providerMetadataResolver->withState($flow->state);
-		$claims                   = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $providerMetadataResolver, $flow->state);
+		$claims                   = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: true);
 
 		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
 	}
@@ -281,10 +289,11 @@ final class OpenIDConnectClient implements
 		array|string|null $audience,
 		ProviderMetadataResolver $providerMetadataResolver,
 		string $state,
+		bool $requireAtHash,
 	): Claims {
 		$jwksUri         = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
 		$idTokenVerifier = $this->idTokenVerifier->withState($state);
-		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken);
+		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken, $requireAtHash);
 
 		$issuer = $config->issuer ?? $config->providerUrl;
 
