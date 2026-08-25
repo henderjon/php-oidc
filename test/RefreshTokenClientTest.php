@@ -3,6 +3,7 @@
 namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\TokenRequestException;
 use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\FakeHttpFetcher;
 use Oidc\Fakes\RsaKeyFixture;
@@ -213,6 +214,23 @@ class RefreshTokenClientTest extends TestCase {
 
 		$this->assertStringContainsString('grant_type=refresh_token', $fetcher->requests[0]['body']);
 		$this->assertStringContainsString('refresh_token=the-refresh-token', $fetcher->requests[0]['body']);
+	}
+
+	/**
+	 * A rejected refresh token is a routine, terminal outcome (revoked, expired, already
+	 * rotated out from under the caller) - not a claims problem. It must surface as
+	 * TokenRequestException here, distinct from every AuthenticationFailedException test
+	 * above, so a caller can tell "this session is over, re-authenticate" apart from
+	 * "a validated claim did not match". This never reaches claims validation at all - the
+	 * token endpoint rejects the request before any new ID token exists to inspect.
+	 */
+	public function testRefreshThrowsTokenRequestExceptionOnARejectedRefreshToken(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'error' => 'invalid_grant' ], JSON_THROW_ON_ERROR), 400));
+
+		$this->expectException(TokenRequestException::class);
+
+		$this->makeClient($fetcher)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $this->originalClaims());
 	}
 
 }
