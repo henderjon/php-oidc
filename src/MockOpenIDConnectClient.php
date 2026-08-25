@@ -3,6 +3,7 @@
 namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Interfaces\RefreshTokenClientInterface;
 use Oidc\Interfaces\TokenGrantClientInterface;
 use Oidc\Interfaces\UserInfoClientInterface;
 
@@ -22,7 +23,8 @@ use Oidc\Interfaces\UserInfoClientInterface;
  */
 class MockOpenIDConnectClient implements
 	TokenGrantClientInterface,
-	UserInfoClientInterface {
+	UserInfoClientInterface,
+	RefreshTokenClientInterface {
 
 	public function __construct(
 		public string $redirectUrl = 'https://example.com/mock-authorize',
@@ -61,6 +63,10 @@ class MockOpenIDConnectClient implements
 
 	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken, string $expectedSubject ): Claims {
 		return $this->userInfo;
+	}
+
+	public function refresh( OpenIDConnectClientConfig $config, string $refreshToken, string $originalIdToken, Claims $originalClaims ): AuthenticationResult {
+		return $this->authenticateOrThrow();
 	}
 
 	private function authenticateOrThrow(): AuthenticationResult {

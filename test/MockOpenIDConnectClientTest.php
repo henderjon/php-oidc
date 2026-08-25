@@ -4,6 +4,7 @@ namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Interfaces\AuthorizationFlowClientInterface;
+use Oidc\Interfaces\RefreshTokenClientInterface;
 use Oidc\Interfaces\TokenGrantClientInterface;
 use Oidc\Interfaces\UserInfoClientInterface;
 use PHPUnit\Framework\TestCase;
@@ -20,6 +21,7 @@ class MockOpenIDConnectClientTest extends TestCase {
 		$this->assertInstanceOf(AuthorizationFlowClientInterface::class, $mock);
 		$this->assertInstanceOf(TokenGrantClientInterface::class, $mock);
 		$this->assertInstanceOf(UserInfoClientInterface::class, $mock);
+		$this->assertInstanceOf(RefreshTokenClientInterface::class, $mock);
 	}
 
 	public function testBuildRedirectsReturnTheConfiguredUrl(): void {
@@ -68,6 +70,24 @@ class MockOpenIDConnectClientTest extends TestCase {
 		$mock->userInfo = new Claims([ 'sub' => 'configured-user' ]);
 
 		$this->assertSame('configured-user', $mock->fetchUserInfo($this->config(), 'access-token', 'configured-user')->get('sub'));
+	}
+
+	public function testRefreshReturnsTheConfiguredAuthenticationResult(): void {
+		$mock                       = new MockOpenIDConnectClient;
+		$mock->authenticationResult = new AuthenticationResult('refreshed-id-token', new Claims([ 'sub' => 'refreshed-user' ]));
+
+		$result = $mock->refresh($this->config(), 'refresh-token', 'original-id-token', new Claims([ 'sub' => 'mock-user' ]));
+
+		$this->assertSame('refreshed-user', $result->claims->get('sub'));
+	}
+
+	public function testRefreshThrowsTheConfiguredException(): void {
+		$mock                          = new MockOpenIDConnectClient;
+		$mock->authenticationException = new AuthenticationFailedException('simulated refresh failure');
+
+		$this->expectExceptionObject($mock->authenticationException);
+
+		$mock->refresh($this->config(), 'refresh-token', 'original-id-token', new Claims([ 'sub' => 'mock-user' ]));
 	}
 
 }

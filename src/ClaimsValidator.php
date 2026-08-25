@@ -399,4 +399,82 @@ final class ClaimsValidator {
 		}
 	}
 
+	/**
+	 * OpenID Connect Core 1.0 §12.2: if a refresh response includes a new ID Token, "its sub
+	 * Claim Value MUST be the same as in the ID Token issued when the original authentication
+	 * occurred." validateRequiredClaims() already guarantees `sub` is present on `$claims` by
+	 * the time this runs in the normal validation sequence, so - unlike validateUserInfoSubject()
+	 * - only the comparison itself is needed here, not a separate missing-claim branch.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateRefreshedSubject( Claims $claims, string $originalSubject ): void {
+		$actual = $claims->get('sub');
+
+		if( $actual !== $originalSubject ) {
+			$this->logger->error('OIDC: refreshed ID token subject does not match the original ID token', [
+				'expected' => $originalSubject,
+				'actual'   => $actual,
+				'state'    => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('Refreshed ID token subject does not match the original ID token');
+		}
+	}
+
+	/**
+	 * OpenID Connect Core 1.0 §12.2: "if the ID Token contains an auth_time Claim, its value
+	 * MUST represent the time of the original authentication - not the time that the new ID
+	 * token is issued." Only checked when the refreshed token actually carries one - `auth_time`
+	 * remains OPTIONAL here, same as everywhere else it appears. A refreshed token carrying
+	 * `auth_time` when the original never did has nothing valid to compare against, so that
+	 * case is rejected too, not silently passed.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateRefreshedAuthTime( Claims $claims, mixed $originalAuthTime ): void {
+		$actual = $claims->get('auth_time');
+
+		if( $actual === null ) {
+			return;
+		}
+
+		if( !is_numeric($originalAuthTime) || !is_numeric($actual) || (float)$actual !== (float)$originalAuthTime ) {
+			$this->logger->error('OIDC: refreshed ID token auth_time does not match the original authentication time', [
+				'expected' => $originalAuthTime,
+				'actual'   => $actual,
+				'state'    => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('Refreshed ID token auth_time does not match the original authentication time');
+		}
+	}
+
+	/**
+	 * OpenID Connect Core 1.0 §12.2: a refreshed ID token "SHOULD NOT have a nonce Claim, even
+	 * when the ID Token issued at the time of the original authentication contained nonce;
+	 * however, if it is present, its value MUST be the same as in the ID Token issued at the
+	 * time of the original authentication." The SHOULD NOT is not enforced here - only checked
+	 * when the refreshed token actually carries a nonce, matching the spec's own MUST.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateRefreshedNonce( Claims $claims, ?string $originalNonce ): void {
+		$actual = $claims->get('nonce');
+
+		if( $actual === null ) {
+			return;
+		}
+
+		if( $actual !== $originalNonce ) {
+			$this->logger->error('OIDC: refreshed ID token nonce does not match the original ID token', [
+				'expected' => $originalNonce,
+				'actual'   => $actual,
+				'state'    => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('Refreshed ID token nonce does not match the original ID token');
+		}
+	}
+
 }
