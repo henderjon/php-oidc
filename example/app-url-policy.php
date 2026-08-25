@@ -50,7 +50,11 @@ echo "Trusted provider: got a token ({$token->accessToken})\n\n";
 // does not catch this: it only checks the issuer field against the URL used to fetch
 // discovery, not where the endpoints *inside* that document point. https and a matching
 // issuer are not, by themselves, a guarantee that every endpoint in the document is safe to
-// call - that is exactly what allowedHosts is for, demonstrated below.
+// call.
+//
+// No allowedHosts is set on this config, and no allowAnyHost either - by default, a resolved
+// endpoint still has to stay on the provider's own host (issuer, here) to be followed. The
+// hijacked endpoint is rejected before any request reaches it.
 $http = new MockHttpFetcher;
 $http->respondTo($discoveryEndpoint, new FetchResponse(
 	json_encode([ 'issuer' => $providerUrl, 'token_endpoint' => $hijackedTokenEndpoint ]),
@@ -64,35 +68,38 @@ $http->respondTo($hijackedTokenEndpoint, new FetchResponse(
 ));
 
 $client = (new OpenIDConnectClientFactory($http))->make(new InMemoryCache());
-$token  = $client->requestClientCredentialsToken($config, [ 'api.read' ]);
-echo "Without an allowlist, the hijacked endpoint is still followed: got \"{$token->accessToken}\"\n";
-echo "Requests actually sent:\n";
+
+try {
+	$client->requestClientCredentialsToken($config, [ 'api.read' ]);
+} catch (ProviderDiscoveryException $e) {
+	echo "Hijacked endpoint on a different host, no allowlist needed: rejected before any request reached it ({$e->getMessage()})\n";
+}
+echo 'Requests actually sent: ' . count($http->requests) . " (only the discovery fetch)\n";
 foreach ($http->requests as $request) {
 	echo "- {$request['url']}\n";
 }
 echo "\n";
 
-// The same hijacked document, but this time the config also sets allowedHosts to the hosts
-// this integration actually expects - useful for a multi-tenant app that resolves provider
-// configuration per request and cannot fully trust it. Discovery itself still succeeds
-// (mock-idp.example.test is allowed and the issuer still matches), but the endpoint it
-// returns is not on the allowlist, so it is rejected before any request reaches it.
-$restrictedConfig = $config->withAllowedHosts([ 'mock-idp.example.test' ]);
+// A provider that legitimately splits its endpoints across several hosts (Google's
+// token/JWKS/userinfo endpoints, for instance, each live on a different host than its
+// issuer) needs to say so explicitly - either by listing every host it actually uses, or by
+// opting out of the host check entirely with allowAnyHost. Demonstrated here with the same
+// hijacked document: allowedHosts naming the attacker's host too would "fix" this the same
+// way, but that is exactly the kind of explicit statement this default is designed to force
+// a caller to make, rather than something to demonstrate as a good example.
+$permissiveConfig = $config->withAllowAnyHost(true);
 $http = new MockHttpFetcher;
 $http->respondTo($discoveryEndpoint, new FetchResponse(
 	json_encode([ 'issuer' => $providerUrl, 'token_endpoint' => $hijackedTokenEndpoint ]),
 	200,
 	'application/json',
 ));
+$http->respondTo($hijackedTokenEndpoint, new FetchResponse(
+	json_encode([ 'access_token' => 'attacker-issued-token', 'token_type' => 'Bearer', 'expires_in' => 3600 ]),
+	200,
+	'application/json',
+));
 
 $client = (new OpenIDConnectClientFactory($http))->make(new InMemoryCache());
-
-try {
-	$client->requestClientCredentialsToken($restrictedConfig, [ 'api.read' ]);
-} catch (ProviderDiscoveryException $e) {
-	echo "With allowedHosts set: rejected before any request reached it ({$e->getMessage()})\n";
-}
-echo 'Requests actually sent: ' . count($http->requests) . " (only the discovery fetch)\n";
-foreach ($http->requests as $request) {
-	echo "- {$request['url']}\n";
-}
+$token  = $client->requestClientCredentialsToken($permissiveConfig, [ 'api.read' ]);
+echo "With allowAnyHost(true), the same hijacked endpoint is still followed: got \"{$token->accessToken}\"\n";
