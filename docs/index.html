@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#4F5B93">
+  <title>php-oidc - Package Documentation</title>
+  <style>
+    /* Base */
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      line-height: 1.3;
+      text-align: center;
+      color: #222;
+    }
+
+    pre, code {
+      font-family: Menlo, monospace;
+      font-size: 0.875rem;
+    }
+
+    pre {
+      line-height: 1.4;
+      overflow-x: auto;
+      background: #efefef;
+      padding: 0.625rem;
+      border-radius: 0.3125rem;
+      margin: 1.25rem;
+      text-align: left;
+    }
+
+    pre .comment { color: #006600; }
+    pre .highlight { background: #ffff00; }
+
+    /* Typography */
+    h1, h2, h3, h4 {
+      margin: 1.25rem 0;
+      color: #4F5B93;
+      font-weight: bold;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      line-height: 1;
+    }
+
+    h1 .text-muted { color: #777; }
+
+    h2 {
+      font-size: 1.25rem;
+      background: #ece9f5;
+      padding: 0.5rem;
+      line-height: 1.25;
+      font-weight: normal;
+      overflow-wrap: break-word;
+      clear: right;
+    }
+
+    h2 a { font-weight: bold; }
+
+    h3 {
+      font-size: 1.25rem;
+      line-height: 1.25;
+      overflow-wrap: break-word;
+      margin: 1.25rem 0.3125rem;
+    }
+
+    h4 {
+      font-size: 1rem;
+      margin: 1.25rem 0.3125rem;
+    }
+
+    /* Links */
+    a {
+      color: #4F5B93;
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .container {
+      text-align: left;
+      padding: 0 1.25rem;
+      max-width: 59.38rem;
+      margin: 0;
+    }
+
+    p, li {
+      max-width: 50rem;
+      word-wrap: break-word;
+    }
+
+    p, ul, ol, dl { margin: 1.25rem; }
+    dd { margin: 0 0 0 1.25rem; }
+    dl, dd { font-size: 0.875rem; }
+
+    /* Topbar */
+    #topbar {
+      background: #ece9f5;
+      height: 4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.25rem;
+    }
+
+    .top-heading {
+      font-size: 1.25rem;
+    }
+
+    .top-heading a {
+      color: #222;
+      text-decoration: none;
+    }
+
+    .top-nav a { margin-left: 1rem; }
+
+    /* Buttons */
+    .button {
+      padding: 0.625rem;
+      font-size: 1rem;
+      border-radius: 0.3125rem;
+      border: 1px solid #4F5B93;
+      display: inline-block;
+      margin: 0.3125rem 0.125rem;
+      text-decoration: none;
+    }
+
+    .button-primary {
+      color: white;
+      background: #4F5B93;
+    }
+
+    .button-secondary {
+      color: #222;
+      background: #ece9f5;
+    }
+
+    .button:hover { opacity: 0.9; }
+
+    /* Tables */
+    table {
+      border-collapse: collapse;
+      margin: 1.25rem;
+      width: calc(100% - 2.5rem);
+    }
+
+    table td, table th {
+      padding: 0.625rem;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    table th {
+      background: #ece9f5;
+      color: #4F5B93;
+    }
+
+    table td code, table th code { white-space: nowrap; }
+
+    /* Alerts */
+    .alert { color: #aa0000; }
+
+    .alert-box {
+      background: #f9f9be;
+      padding: 0.625rem;
+      text-align: left;
+      border-radius: 0.3125rem;
+      margin: 1.25rem;
+    }
+
+    .alert-box strong { color: #aa0000; }
+
+    /* Footer */
+    #footer {
+      text-align: left;
+      color: #666;
+      font-size: 0.875rem;
+      margin: 2.5rem 0;
+      max-width: 59.38rem;
+      padding: 0 1.25rem;
+    }
+
+    /* Index */
+    .index-columns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 2.5rem;
+      margin: 1.25rem;
+    }
+
+    .index-columns > div { flex: 1 1 15rem; }
+
+    .index-columns h4 {
+      margin: 1.25rem 0 0.3125rem 0;
+      color: #666;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .index-columns ul {
+      margin: 0 0 0.5rem 0;
+      padding-left: 1.1rem;
+      list-style: none;
+    }
+
+    .index-columns li { margin: 0.2rem 0; }
+
+    .kind-tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-family: Menlo, monospace;
+      color: #666;
+      background: #efefef;
+      border-radius: 0.25rem;
+      padding: 0 0.3rem;
+      margin-right: 0.3rem;
+    }
+
+    /* Section separation */
+    .type-section {
+      border-top: 1px solid #e5e5e5;
+      padding-top: 0.5rem;
+    }
+
+    .method-sig {
+      background: #efefef;
+      border-radius: 0.3125rem;
+      padding: 0.625rem;
+      margin: 0.75rem 1.25rem 0.5rem 1.25rem;
+      font-family: Menlo, monospace;
+      font-size: 0.875rem;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .throws-list {
+      font-size: 0.875rem;
+    }
+
+    .back-to-index {
+      font-size: 0.8rem;
+    }
+
+    /* Toggle/Collapse */
+    .toggleButton,
+    .exampleHeading { cursor: pointer; }
+
+    .exampleHeading .text { color: #4F5B93; }
+
+    .toggle > .collapsed,
+    .toggleVisible > .expanded { display: block; }
+
+    .toggle > .expanded,
+    .toggleVisible > .collapsed { display: none; }
+
+    /* Responsive */
+    @media (max-width: 43.75em) {
+      body { font-size: 0.9375rem; }
+      pre, code { font-size: 0.866rem; }
+      .container, #footer { padding: 0 0.625rem; }
+      p, pre, ul, ol { margin: 0.625rem; }
+      .index-columns { gap: 0 1.25rem; }
+    }
+
+    @media print {
+      #topbar { display: none !important; }
+      h2 {
+        background-color: #ece9f5 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <div class="top-heading">
+      <a href="#overview">php-oidc</a>
+    </div>
+    <div class="top-nav">
+      <a href="#index">Index</a>
+      <a href="https://github.com/henderjon/php-oidc">GitHub</a>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- OVERVIEW -->
+    <div id="overview">
+      <h1>Package Oidc <span class="text-muted">henderjon/php-oidc</span></h1>
+      <p>
+        A small, dependency-light OpenID Connect client for PHP. It covers the Authorization Code
+        flow (with optional PKCE), the Implicit flow, the Client Credentials grant, refresh tokens,
+        and UserInfo - each verified against <a href="https://openid.net/specs/openid-connect-core-1_0.html">OpenID Connect Core 1.0</a>
+        rather than trusting a provider to have gotten it right.
+      </p>
+      <p>
+        Configuration is a single immutable <a href="#OpenIDConnectClientConfig"><code>OpenIDConnectClientConfig</code></a>
+        value rather than a chain of setter calls, so the same shape covers both a statically-known
+        integration and a multi-tenant one resolved per request. Cache, HTTP transport, and clock are
+        all injectable - <code>OpenIDConnectClientFactory</code> assembles the rest.
+      </p>
+
+      <a href="#QuickStart" class="button button-primary">Quick Start</a>
+      <a href="#index" class="button button-secondary">Browse the Index</a>
+
+      <h3>Installation</h3>
+      <pre>composer require henderjon/php-oidc</pre>
+    </div>
+
+    <!-- QUICK START -->
+    <div id="QuickStart" class="toggleVisible">
+      <div class="collapsed">
+        <h2 class="toggleButton">▹ Quick Start</h2>
+      </div>
+      <div class="expanded">
+        <h2 class="toggleButton">▾ Quick Start</h2>
+        <p>A minimal authorization code flow: build a redirect, then complete it on the callback route.</p>
+        <pre>&lt;?php
+
+use Oidc\OpenIDConnectClientConfig;
+use Oidc\OpenIDConnectClientFactory;
+use Oidc\IncomingAuthorizationResponse;
+
+$config = new OpenIDConnectClientConfig(
+    clientId: 'my-client-id',
+    clientSecret: 'my-client-secret',
+    redirectUrl: 'https://app.example.com/oidc/callback',
+    providerUrl: 'https://idp.example.com',
+);
+
+$client = (new OpenIDConnectClientFactory())-&gt;make($psr16Cache);
+
+<span class="comment">// GET /oidc/login</span>
+$redirect = $client-&gt;buildAuthorizationCodeRedirect($config);
+header("Location: {$redirect-&gt;url}");
+
+<span class="comment">// GET /oidc/callback</span>
+$response = new IncomingAuthorizationResponse($_GET);
+$result   = $client-&gt;completeAuthorizationCodeFlow($config, $response);
+
+$subject = $result-&gt;claims-&gt;get('sub');</pre>
+        <p>
+          See the <a href="https://github.com/henderjon/php-oidc/tree/main/example">example/</a>
+          directory for runnable scripts covering PKCE, host and algorithm allowlisting, claim and
+          audience validation, UserInfo, and refresh tokens.
+        </p>
+      </div>
+    </div>
+
+    <!-- INDEX -->
+    <div id="index">
+      <h2>Index</h2>
+      <div class="index-columns">
+        <div>
+          <h4>Getting Started</h4>
+          <ul>
+            <li><a href="#OpenIDConnectClientFactory">OpenIDConnectClientFactory</a></li>
+            <li><a href="#OpenIDConnectClientConfig">OpenIDConnectClientConfig</a></li>
+            <li><a href="#PkceMode">PkceMode</a></li>
+            <li><a href="#ClientAuthMethod">ClientAuthMethod</a></li>
+          </ul>
+          <h4>Interfaces</h4>
+          <ul>
+            <li><a href="#AuthorizationFlowClientInterface">AuthorizationFlowClientInterface</a></li>
+            <li><a href="#UserInfoClientInterface">UserInfoClientInterface</a></li>
+            <li><a href="#TokenGrantClientInterface">TokenGrantClientInterface</a></li>
+            <li><a href="#RefreshTokenClientInterface">RefreshTokenClientInterface</a></li>
+          </ul>
+          <h4>The Client</h4>
+          <ul>
+            <li><a href="#OpenIDConnectClient">OpenIDConnectClient</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Results &amp; Values</h4>
+          <ul>
+            <li><a href="#AuthorizationRedirect">AuthorizationRedirect</a></li>
+            <li><a href="#IncomingAuthorizationResponse">IncomingAuthorizationResponse</a></li>
+            <li><a href="#AuthenticationResult">AuthenticationResult</a></li>
+            <li><a href="#TokenResult">TokenResult</a></li>
+            <li><a href="#Claims">Claims</a></li>
+          </ul>
+          <h4>HTTP Transport</h4>
+          <ul>
+            <li><a href="#HttpFetcherInterface">HttpFetcherInterface</a></li>
+            <li><a href="#CurlHttpFetcher">CurlHttpFetcher</a></li>
+            <li><a href="#FetchResponse">FetchResponse</a></li>
+            <li><a href="#CurrentClock">CurrentClock</a></li>
+          </ul>
+          <h4>Testing</h4>
+          <ul>
+            <li><a href="#MockOpenIDConnectClient">MockOpenIDConnectClient</a></li>
+          </ul>
+          <h4>Exceptions</h4>
+          <ul>
+            <li><a href="#Exceptions">Oidc\Exceptions\*</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- FACTORY -->
+    <div class="type-section" id="OpenIDConnectClientFactory">
+      <h2>type OpenIDConnectClientFactory</h2>
+      <p>
+        Assembles an <a href="#OpenIDConnectClient"><code>OpenIDConnectClient</code></a> and every
+        collaborator it is composed of, from a shared HTTP fetcher, clock, and logger. A caller
+        wiring up one client per integration never reaches for <code>new</code> on the client or its
+        internal collaborators (state store, provider metadata resolver, ID token verifier, claims
+        validator, token endpoint client) itself - those are not part of this library's public API.
+      </p>
+      <div class="method-sig">final class OpenIDConnectClientFactory {
+
+    public function __construct(
+        HttpFetcherInterface $httpFetcher = new CurlHttpFetcher,
+        Psr\Clock\ClockInterface $clock = new CurrentClock,
+        Psr\Log\LoggerInterface $logger = new NullLogger,
+    )
+
+    public function make(
+        Psr\SimpleCache\CacheInterface $stateCache,
+        string $cacheKeySuffix = "",
+    ): OpenIDConnectClient
+
+}</div>
+      <h3>make</h3>
+      <p>
+        Builds one <code>OpenIDConnectClient</code>. <code>$stateCache</code> is a PSR-16 cache used
+        to persist authorization <code>state</code>, <code>nonce</code>, and the PKCE code verifier
+        between the redirect and the callback - session storage is fine for a single-server app; a
+        load-balanced deployment needs something shared, like Memcache or Redis, injected here
+        instead. <code>$cacheKeySuffix</code> namespaces cache keys when one process builds more than
+        one client (e.g. multi-tenant).
+      </p>
+      <p>The logger defaults to a no-op - passing one is opt-in. It only ever receives detail behind a failure that already produces a deliberately generic exception.</p>
+    </div>
+
+    <!-- CONFIG -->
+    <div class="type-section" id="OpenIDConnectClientConfig">
+      <h2>type OpenIDConnectClientConfig</h2>
+      <p>
+        Everything needed to talk to one OpenID Connect provider for one call - a single immutable
+        value instead of a chain of setter calls. The same shape covers both a statically-known
+        integration (provider URL, issuer, and credentials fixed at boot) and a multi-tenant one
+        (issuer/credentials resolved per request from a database row).
+      </p>
+      <div class="alert-box">
+        <strong>No TLS-verification toggle.</strong> Every network call this library makes always
+        verifies certificates and hostnames. The one narrow, loudly-logged exception for local
+        development lives on <a href="#CurlHttpFetcher"><code>CurlHttpFetcher</code></a>'s own
+        constructor instead - decided once per fetcher instance, never as a config value that could
+        travel anywhere this config does.
+      </div>
+      <div class="method-sig">final class OpenIDConnectClientConfig {
+    public function __construct(
+        string $clientId,
+        string $clientSecret,
+        string $redirectUrl,
+        ?string $providerUrl = null,
+        ?string $issuer = null,
+        array $scopes = [],
+        array|string|null $audience = null,
+        array $endpointOverrides = [],
+        array $extraAuthParams = [],
+        PkceMode $pkce = PkceMode::Disabled,
+        bool $allowInsecureSchemes = false,
+        ?array $allowedHosts = null,
+        array $allowedAlgorithms = ['RS256'],
+        ?int $maxTokenLifetimeSeconds = null,
+        bool $allowUntrustedAudiences = false,
+        bool $allowAnyHost = false,
+        ClientAuthMethod $clientAuthMethod = ClientAuthMethod::Basic,
+    )
+}</div>
+
+      <h3>Parameters</h3>
+      <table>
+        <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>clientId</code></td><td><code>string</code></td><td>required</td><td>Sent as <code>client_id</code> on every request.</td></tr>
+          <tr><td><code>clientSecret</code></td><td><code>string</code></td><td>required</td><td>Empty string marks a <strong>public client</strong> - PKCE and client authentication both change behavior accordingly.</td></tr>
+          <tr><td><code>redirectUrl</code></td><td><code>string</code></td><td>required</td><td>Must match the <code>redirect_uri</code> registered with the provider.</td></tr>
+          <tr><td><code>providerUrl</code></td><td><code>?string</code></td><td><code>null</code></td><td>Base URL for <code>.well-known/openid-configuration</code> discovery, and the default <code>issuer</code> when that is not set.</td></tr>
+          <tr><td><code>issuer</code></td><td><code>?string</code></td><td><code>null</code></td><td>Expected <code>iss</code> claim value. Falls back to <code>providerUrl</code>.</td></tr>
+          <tr><td><code>scopes</code></td><td><code>list&lt;string&gt;</code></td><td><code>[]</code></td><td>Merged with the always-included <code>openid</code> scope.</td></tr>
+          <tr><td><code>audience</code></td><td><code>list&lt;string&gt;|string|null</code></td><td><code>null</code></td><td>Expected <code>aud</code> value(s) when it must differ from <code>clientId</code>. Also doubles as the full trusted set unless <code>allowUntrustedAudiences</code> opts out.</td></tr>
+          <tr><td><code>endpointOverrides</code></td><td><code>array&lt;string,string&gt;</code></td><td><code>[]</code></td><td>Known endpoint values (e.g. <code>token_endpoint</code>) that skip discovery for that value.</td></tr>
+          <tr><td><code>extraAuthParams</code></td><td><code>array&lt;string,string&gt;</code></td><td><code>[]</code></td><td>Merged into the authorization request.</td></tr>
+          <tr><td><code>pkce</code></td><td><code><a href="#PkceMode">PkceMode</a></code></td><td><code>Disabled</code></td><td>How strictly RFC 7636 PKCE is enforced on the authorization code flow.</td></tr>
+          <tr><td><code>allowInsecureSchemes</code></td><td><code>bool</code></td><td><code>false</code></td><td>Allows <code>http://</code> endpoints. TLS certificate/hostname verification itself is never affected by this - see <a href="#CurlHttpFetcher"><code>CurlHttpFetcher</code></a>.</td></tr>
+          <tr><td><code>allowedHosts</code></td><td><code>?list&lt;string&gt;</code></td><td><code>null</code></td><td>Bare hostnames every resolved endpoint must match. Null falls back to the host of <code>issuer</code>/<code>providerUrl</code>, unless <code>allowAnyHost</code> is set.</td></tr>
+          <tr><td><code>allowedAlgorithms</code></td><td><code>list&lt;string&gt;</code></td><td><code>['RS256']</code></td><td>ID token signing algorithms accepted. HS* is always rejected outright for a public client, regardless of this list.</td></tr>
+          <tr><td><code>maxTokenLifetimeSeconds</code></td><td><code>?int</code></td><td><code>null</code></td><td>Optional cap on <code>exp - iat</code>, independent of clock-skew leeway.</td></tr>
+          <tr><td><code>allowUntrustedAudiences</code></td><td><code>bool</code></td><td><code>false</code></td><td>Opts out of rejecting <code>aud</code> values outside the trusted set - keeps only the "expected value present" half of the check.</td></tr>
+          <tr><td><code>allowAnyHost</code></td><td><code>bool</code></td><td><code>false</code></td><td>Opts out of the default provider-host restriction when <code>allowedHosts</code> is null - for a provider that splits endpoints across hosts.</td></tr>
+          <tr><td><code>clientAuthMethod</code></td><td><code><a href="#ClientAuthMethod">ClientAuthMethod</a></code></td><td><code>Basic</code></td><td>Which OpenID Connect Core 1.0 §9 method to use for a confidential client. No effect on a public client.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Withers</h3>
+      <p>
+        Every property has a matching <code>with*()</code> method returning a new instance - the
+        original is never mutated. <code>withScopes()</code>, <code>withEndpointOverrides()</code>,
+        and <code>withExtraAuthParams()</code> <strong>merge</strong> with the existing value;
+        <code>withAudience()</code>, <code>withAllowedHosts()</code>, and
+        <code>withAllowedAlgorithms()</code> <strong>replace</strong> it, since those narrow a
+        security boundary rather than add to a list of extras.
+      </p>
+      <div class="method-sig">$config
+    -&gt;withScopes(['email'])              <span class="comment">// merges</span>
+    -&gt;withAudience('https://api.example.com') <span class="comment">// replaces</span>
+    -&gt;withPkce(PkceMode::Required)
+    -&gt;withClientAuthMethod(ClientAuthMethod::Post);</div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- PKCEMODE -->
+    <div class="type-section" id="PkceMode">
+      <h2>enum PkceMode</h2>
+      <p>How strictly RFC 7636 PKCE is enforced on the authorization code flow.</p>
+      <div class="method-sig">enum PkceMode {
+    case Disabled;
+    case Optional;
+    case Required;
+}</div>
+      <dl>
+        <dt><code>Disabled</code></dt>
+        <dd>Never generates a verifier - no <code>code_challenge</code> is sent, and none is sent back at token exchange.</dd>
+        <dt><code>Optional</code></dt>
+        <dd>Sends a <code>code_challenge</code> on every redirect. If the verifier is missing by completion (evicted from cache, TTL expired, or mismatched configs), proceeds without one and lets the token endpoint decide.</dd>
+        <dt><code>Required</code></dt>
+        <dd>Same as <code>Optional</code>, but a missing verifier at completion fails closed with <code>AuthenticationFailedException</code> before the token endpoint is ever contacted.</dd>
+      </dl>
+      <div class="alert-box">
+        A public client (empty <code>clientSecret</code>) has nothing else proving it is who it
+        claims to be - RFC 9700 treats PKCE as effectively mandatory for that client class.
+        This library does not force it on; deciding that is the application's job.
+      </div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- CLIENTAUTHMETHOD -->
+    <div class="type-section" id="ClientAuthMethod">
+      <h2>enum ClientAuthMethod</h2>
+      <p>
+        Which OpenID Connect Core 1.0 §9 Client Authentication method the library uses for a
+        confidential client. Has no effect on a public client - there is no secret to authenticate
+        with under either method, so that case always identifies via a bare <code>client_id</code>
+        in the request body.
+      </p>
+      <div class="method-sig">enum ClientAuthMethod {
+    case Basic;
+    case Post;
+}</div>
+      <dl>
+        <dt><code>Basic</code></dt>
+        <dd>HTTP Basic (RFC 6749 §2.3.1) - the spec default when no method is registered.</dd>
+        <dt><code>Post</code></dt>
+        <dd>Client credentials in the request body instead of the <code>Authorization</code> header.</dd>
+      </dl>
+      <p><code>client_secret_jwt</code> and <code>private_key_jwt</code> are not implemented yet - both need a signed JWT assertion.</p>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- FLOW INTERFACE -->
+    <div class="type-section" id="AuthorizationFlowClientInterface">
+      <h2>interface AuthorizationFlowClientInterface</h2>
+      <p>Interactive login: the authorization code flow (Clever, Google, Azure AD) and the implicit flow (e.g. LTI 1.3). Building a redirect never emits a response itself - it returns the URL and persists state/nonce as a side effect; the caller decides how to redirect.</p>
+
+      <h3>buildAuthorizationCodeRedirect</h3>
+      <div class="method-sig">public function buildAuthorizationCodeRedirect(
+    OpenIDConnectClientConfig $config,
+): AuthorizationRedirect</div>
+      <p>Starts an authorization code flow attempt and returns the URL to send the user-agent to.</p>
+      <ul class="throws-list">
+        <li><code>throws AuthorizationStateException</code></li>
+        <li><code>throws ProviderDiscoveryException</code></li>
+      </ul>
+
+      <h3>completeAuthorizationCodeFlow</h3>
+      <div class="method-sig">public function completeAuthorizationCodeFlow(
+    OpenIDConnectClientConfig $config,
+    IncomingAuthorizationResponse $response,
+): AuthenticationResult</div>
+      <p>Exchanges the callback's authorization code for tokens, verifies the returned ID token's signature and claims, and returns the result.</p>
+      <ul class="throws-list">
+        <li><code>throws AuthenticationFailedException</code></li>
+        <li><code>throws ProviderDiscoveryException</code></li>
+      </ul>
+
+      <h3>buildImplicitFlowRedirect</h3>
+      <div class="method-sig">public function buildImplicitFlowRedirect(
+    OpenIDConnectClientConfig $config,
+): AuthorizationRedirect</div>
+      <p>Same as <code>buildAuthorizationCodeRedirect()</code>, but for the implicit flow (<code>response_type=id_token</code>).</p>
+      <ul class="throws-list">
+        <li><code>throws AuthorizationStateException</code></li>
+        <li><code>throws ProviderDiscoveryException</code></li>
+      </ul>
+
+      <h3>completeImplicitFlow</h3>
+      <div class="method-sig">public function completeImplicitFlow(
+    OpenIDConnectClientConfig $config,
+    IncomingAuthorizationResponse $response,
+): AuthenticationResult</div>
+      <p>Verifies the ID token returned directly on the callback fragment/params. Requires <code>at_hash</code> when an access token accompanies it (OpenID Connect Core 1.0 §3.2.2.10).</p>
+      <ul class="throws-list">
+        <li><code>throws AuthenticationFailedException</code></li>
+        <li><code>throws ProviderDiscoveryException</code></li>
+      </ul>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- USERINFO INTERFACE -->
+    <div class="type-section" id="UserInfoClientInterface">
+      <h2>interface UserInfoClientInterface</h2>
+      <p>
+        Extends <a href="#AuthorizationFlowClientInterface"><code>AuthorizationFlowClientInterface</code></a>
+        rather than standing alone, since nothing fetches UserInfo without having done the
+        authorization flow first. An integration that never fetches UserInfo (e.g. LTI) can
+        type-hint the narrower interface instead.
+      </p>
+      <h3>fetchUserInfo</h3>
+      <div class="method-sig">public function fetchUserInfo(
+    OpenIDConnectClientConfig $config,
+    string $accessToken,
+    string $expectedSubject,
+): Claims</div>
+      <p>
+        <code>$expectedSubject</code> must be the <code>sub</code> claim from the authenticated ID
+        token (<code>AuthenticationResult::$claims-&gt;get('sub')</code>) - OpenID Connect Core 1.0
+        §5.3.2 requires the UserInfo response's <code>sub</code> to be verified against it, to guard
+        against token substitution. When the response is a signed JWT, its <code>iss</code> and
+        <code>aud</code> are also validated; those two checks do not apply to a plain JSON response.
+      </p>
+      <ul class="throws-list">
+        <li><code>throws ProviderDiscoveryException</code></li>
+        <li><code>throws UserInfoRequestException</code></li>
+      </ul>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- TOKEN GRANT INTERFACE -->
+    <div class="type-section" id="TokenGrantClientInterface">
+      <h2>interface TokenGrantClientInterface</h2>
+      <p>Non-interactive token acquisition via the client credentials grant - e.g. a service-to-service integration that needs its own access token without a user in the loop.</p>
+      <h3>requestClientCredentialsToken</h3>
+      <div class="method-sig">public function requestClientCredentialsToken(
+    OpenIDConnectClientConfig $config,
+    array $scopes = [],
+    array $extraParams = [],
+): TokenResult</div>
+      <p>
+        <code>$extraParams</code> passes provider-specific extensions straight through on the
+        request body - not for anything this library already models explicitly. A string value is
+        sent as-is (a single <code>audience</code>, or a provider's space-separated convention); a
+        list value is sent as that key repeated bare (<code>resource=a&amp;resource=b</code>, the
+        RFC 8707 convention for <code>resource</code>).
+      </p>
+      <ul class="throws-list">
+        <li><code>throws ProviderDiscoveryException</code></li>
+        <li><code>throws TokenRequestException</code></li>
+      </ul>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- REFRESH INTERFACE -->
+    <div class="type-section" id="RefreshTokenClientInterface">
+      <h2>interface RefreshTokenClientInterface</h2>
+      <p>
+        Stands alone rather than extending <code>AuthorizationFlowClientInterface</code>: redeeming
+        a refresh token does not require having just completed an interactive flow in the same
+        process - a background job holding a refresh token loaded from a database has no
+        state/nonce, nothing this method needs beyond the refresh token and the original ID token's
+        claims to validate a new one against (OpenID Connect Core 1.0 §12.2).
+      </p>
+      <h3>refresh</h3>
+      <div class="method-sig">public function refresh(
+    OpenIDConnectClientConfig $config,
+    string $refreshToken,
+    string $originalIdToken,
+    Claims $originalClaims,
+): AuthenticationResult</div>
+      <p>
+        <code>$originalIdToken</code> and <code>$originalClaims</code> are the ID token and claims
+        from the authentication this refresh token came from
+        (<code>AuthenticationResult::$idToken</code> / <code>::$claims</code>). The refresh response
+        might not contain a new <code>id_token</code> at all - when it does not, the returned
+        <code>AuthenticationResult</code> carries the original ID token and claims forward
+        unchanged, alongside the new access/refresh tokens. When it does, the new ID token's
+        <code>iss</code>, <code>sub</code>, and <code>aud</code> are validated against the original's,
+        <code>auth_time</code> (if present) must still reflect the original authentication, and
+        <code>nonce</code> (if present) must match the original's.
+      </p>
+      <div class="alert-box">
+        A rotated <code>refresh_token</code> in the response is exactly what the application must
+        persist going forward - do not keep reusing the old one after a rotation.
+      </div>
+      <ul class="throws-list">
+        <li><code>throws AuthenticationFailedException</code></li>
+        <li><code>throws ProviderDiscoveryException</code></li>
+        <li><code>throws TokenRequestException</code></li>
+      </ul>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- CLIENT -->
+    <div class="type-section" id="OpenIDConnectClient">
+      <h2>type OpenIDConnectClient</h2>
+      <p>
+        The object returned by <a href="#OpenIDConnectClientFactory"><code>OpenIDConnectClientFactory::make()</code></a>.
+        Implements every capability interface above -
+        <a href="#TokenGrantClientInterface">TokenGrantClientInterface</a>,
+        <a href="#UserInfoClientInterface">UserInfoClientInterface</a> (which itself extends
+        <a href="#AuthorizationFlowClientInterface">AuthorizationFlowClientInterface</a>), and
+        <a href="#RefreshTokenClientInterface">RefreshTokenClientInterface</a>. Construct it only via
+        the factory or from test code - never with <code>new</code> directly in application code.
+      </p>
+      <p>
+        A consuming application typically type-hints the narrowest interface it actually needs (for
+        example, <code>AuthorizationFlowClientInterface</code> for an integration that never fetches
+        UserInfo) rather than this concrete class, so a test double such as
+        <a href="#MockOpenIDConnectClient"><code>MockOpenIDConnectClient</code></a> can stand in for it.
+      </p>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- AUTHORIZATION REDIRECT -->
+    <div class="type-section" id="AuthorizationRedirect">
+      <h2>type AuthorizationRedirect</h2>
+      <p>A URL to send the user-agent to next - a login redirect. The caller decides how to issue the redirect; this library never emits a response itself.</p>
+      <div class="method-sig">final class AuthorizationRedirect {
+    public function __construct(
+        public readonly string $url,
+    )
+}</div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- INCOMING RESPONSE -->
+    <div class="type-section" id="IncomingAuthorizationResponse">
+      <h2>type IncomingAuthorizationResponse</h2>
+      <p>
+        What a provider sent back to the redirect URL - an authorization code (code flow), an ID
+        token (implicit flow), or an error - parsed from a plain params array instead of reading
+        superglobals directly.
+      </p>
+      <div class="method-sig">final class IncomingAuthorizationResponse {
+    public readonly ?string $code;
+    public readonly ?string $idToken;
+    public readonly ?string $accessToken;
+    public readonly ?string $state;
+    public readonly ?string $error;
+    public readonly ?string $errorDescription;
+
+    public function __construct(array $params) <span class="comment">// $_GET or $_POST</span>
+
+    public function hasError(): bool
+    public function errorSummary(): ?string
+}</div>
+      <p><code>errorSummary()</code> returns a single ready-to-log string combining <code>error</code> and <code>error_description</code> when present, or null when there is no error. <code>error</code>/<code>error_description</code> are truncated to 255 characters - the callback endpoint is public and unauthenticated, so these reach this class straight from the query string with no prior validation.</p>
+      <pre>$response = new IncomingAuthorizationResponse($_GET);
+
+if ($response-&gt;hasError()) {
+    log_error($response-&gt;errorSummary());
+}</pre>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- AUTHENTICATION RESULT -->
+    <div class="type-section" id="AuthenticationResult">
+      <h2>type AuthenticationResult</h2>
+      <p>The outcome of completing an authorization code or implicit flow, or of refreshing one.</p>
+      <div class="method-sig">final class AuthenticationResult {
+    public function __construct(
+        public readonly string $idToken,
+        public readonly Claims $claims,
+        public readonly ?string $accessToken = null,
+        public readonly ?string $refreshToken = null,
+        public readonly ?int $expiresIn = null,
+    )
+}</div>
+      <div class="alert-box">
+        <code>$expiresIn</code> is the access token's own lifetime in seconds (RFC 6749 §5.1's
+        <code>expires_in</code>) - not the ID token's <code>exp</code> claim; two unrelated values,
+        for two unrelated tokens. A caller intending to hold onto the access token across requests
+        should convert it to an absolute timestamp at the moment it is received
+        (<code>time() + $expiresIn</code>), not store the relative seconds - those decay the instant
+        time passes.
+      </div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- TOKEN RESULT -->
+    <div class="type-section" id="TokenResult">
+      <h2>type TokenResult</h2>
+      <p>A token endpoint response - shared by the authorization code exchange and the client credentials grant.</p>
+      <div class="method-sig">final class TokenResult {
+    public readonly string $accessToken;
+    public readonly string $tokenType;   <span class="comment">// defaults to "Bearer"</span>
+    public readonly ?int $expiresIn;
+    public readonly ?string $refreshToken;
+    public readonly ?string $idToken;
+    public readonly ?string $scope;
+}</div>
+      <p>Constructed internally from the decoded JSON token endpoint response; a malformed response (missing or wrongly-typed <code>access_token</code>) throws <code>TokenRequestException</code>. Other malformed fields are logged and ignored rather than failing the whole response.</p>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- CLAIMS -->
+    <div class="type-section" id="Claims">
+      <h2>type Claims</h2>
+      <p>A bag of decoded claims - from a verified ID token or a UserInfo response. One shape for both.</p>
+      <div class="method-sig">final class Claims {
+    public function __construct(\stdClass|array $claims)
+
+    public function get(string $key, mixed $default = null): mixed
+    public function has(string $key): bool
+    public function all(): array
+}</div>
+      <pre>$sub   = $result-&gt;claims-&gt;get('sub');
+$email = $result-&gt;claims-&gt;get('email', default: null);</pre>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- HTTP FETCHER INTERFACE -->
+    <div class="type-section" id="HttpFetcherInterface">
+      <h2>interface HttpFetcherInterface</h2>
+      <p>
+        The seam every collaborator talks through instead of calling curl directly. Implement this
+        to plug in an existing HTTP client instead of <a href="#CurlHttpFetcher"><code>CurlHttpFetcher</code></a>.
+      </p>
+      <div class="method-sig">interface HttpFetcherInterface {
+    public function fetch(
+        string $url,
+        ?string $body,
+        array $headers = [],
+    ): FetchResponse
+}</div>
+      <p>
+        TLS verification is not a per-request concern: an implementation talking to real sockets is
+        expected to always verify certificates and hostnames, full stop. <code>$headers</code> maps
+        header name to value - no raw <code>"Name: value"</code> formatting.
+      </p>
+      <ul class="throws-list">
+        <li><code>throws HttpTransportException</code> when the request cannot be completed at all (connection failure, timeout).</li>
+      </ul>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- CURL HTTP FETCHER -->
+    <div class="type-section" id="CurlHttpFetcher">
+      <h2>type CurlHttpFetcher</h2>
+      <p>
+        The library's own <a href="#HttpFetcherInterface"><code>HttpFetcherInterface</code></a>
+        implementation, and the default used by <a href="#OpenIDConnectClientFactory"><code>OpenIDConnectClientFactory</code></a>.
+        Reuses a single curl handle across calls, never follows redirects (several calls here carry
+        an <code>Authorization</code> header), and bounds the response body by
+        <code>$maxResponseBytes</code> regardless of connection speed.
+      </p>
+      <div class="method-sig">final class CurlHttpFetcher implements HttpFetcherInterface {
+    public function __construct(
+        int $timeoutSeconds = 30,
+        int $maxResponseBytes = 5 * 1024 * 1024,
+        bool $disableTlsVerificationForLocalDevelopmentOnly = false,
+        Psr\Log\LoggerInterface $logger = new NullLogger,
+    )
+}</div>
+      <div class="alert-box">
+        <strong>Never set <code>$disableTlsVerificationForLocalDevelopmentOnly</code> outside local
+        development.</strong> There is no per-request way to disable TLS verification - only this
+        constructor argument, decided once for the instance's whole lifetime, with a name that
+        cannot be mistaken for a normal setting. Every single request made while it is active logs
+        an <code>alert</code>-level diagnostic, because for as long as it is on, every request this
+        instance makes is actively unauthenticated - including ones carrying bearer credentials.
+      </div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- FETCH RESPONSE -->
+    <div class="type-section" id="FetchResponse">
+      <h2>type FetchResponse</h2>
+      <div class="method-sig">final class FetchResponse {
+    public function __construct(
+        public readonly string $body,
+        public readonly int $status,
+        public readonly ?string $contentType = null,
+    )
+}</div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- CURRENT CLOCK -->
+    <div class="type-section" id="CurrentClock">
+      <h2>type CurrentClock</h2>
+      <p>
+        The default clock for <code>OpenIDConnectClientFactory</code> - wraps the system clock via
+        PSR-20's <code>ClockInterface</code>, so tests can inject a fixed one instead.
+      </p>
+      <div class="method-sig">final class CurrentClock implements Psr\Clock\ClockInterface {
+    public function now(): \DateTimeImmutable
+}</div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- MOCK CLIENT -->
+    <div class="type-section" id="MockOpenIDConnectClient">
+      <h2>type MockOpenIDConnectClient</h2>
+      <p>
+        A hand-written fake for a consuming application's own controller tests - no network, no
+        cache, no real cryptography. Every canned result is a public property so a test can override
+        just the ones it cares about before exercising the controller. Defaults to a successful
+        outcome everywhere; set the relevant <code>*Exception</code> property to simulate a failure
+        instead.
+      </p>
+      <div class="method-sig">class MockOpenIDConnectClient implements
+    TokenGrantClientInterface,
+    UserInfoClientInterface,
+    RefreshTokenClientInterface {
+
+    public function __construct(
+        public string $redirectUrl = 'https://example.com/mock-authorize',
+        public AuthenticationResult $authenticationResult = ...,
+        public ?AuthenticationFailedException $authenticationException = null,
+        public TokenResult $tokenResult = ...,
+        public Claims $userInfo = ...,
+    )
+}</div>
+      <pre>$client = new MockOpenIDConnectClient(
+    authenticationException: new AuthenticationFailedException('expired state'),
+);
+
+<span class="comment">// Exercise a controller that type-hints AuthorizationFlowClientInterface
+// and expect it to handle the failure path.</span></pre>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- EXCEPTIONS -->
+    <div class="type-section" id="Exceptions">
+      <h2>namespace Oidc\Exceptions</h2>
+      <p>Every exception this library throws extends <code>OpenIDConnectException</code> (itself a plain <code>\RuntimeException</code>), so a caller that only wants a single catch clause for "something in this library failed" always has one available.</p>
+      <table>
+        <thead><tr><th>Exception</th><th>Thrown when</th></tr></thead>
+        <tbody>
+          <tr><td><code>OpenIDConnectException</code></td><td>Base class for every exception below. Never thrown directly.</td></tr>
+          <tr><td><code>AuthenticationFailedException</code></td><td>A callback carries a provider <code>error</code>, an invalid or expired state/nonce, or an ID token that fails signature or claims validation.</td></tr>
+          <tr><td><code>AuthorizationStateException</code></td><td><code>AuthorizationStateStore</code> cannot persist a new authorization attempt because the underlying cache write itself failed - distinct from a clean miss on lookup (a forged, expired, or already-consumed state), which is a normal outcome, not a failure.</td></tr>
+          <tr><td><code>HttpTransportException</code></td><td>The HTTP transport itself fails (connection failure, timeout), below the level of any specific OIDC operation. Rewrapped by callers into whichever domain exception fits.</td></tr>
+          <tr><td><code>ProviderDiscoveryException</code></td><td>A provider's <code>.well-known/openid-configuration</code> or JWKS document cannot be fetched, parsed, or is missing a required endpoint.</td></tr>
+          <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response. Carries <code>getHttpStatus()</code> and <code>getRawBody()</code>, both null for a transport failure that never reached the server.</td></tr>
+          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response.</td></tr>
+        </tbody>
+      </table>
+      <div class="alert-box">
+        Exception messages in this library are safe to log but are not written for end users.
+        Present a generic, application-chosen message to a user instead of
+        <code>$exception-&gt;getMessage()</code>.
+      </div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+  </div>
+
+  <div id="footer">
+    <p>
+      <a href="https://github.com/henderjon/php-oidc">henderjon/php-oidc</a> - BSD-3-Clause.
+      Documentation generated for the public API surface under <code>Oidc\</code> and
+      <code>Oidc\Exceptions\</code>. Internal collaborators (state store, provider metadata
+      resolver, ID token verifier, claims validator, token endpoint client, and their
+      <code>Oidc\Interfaces\</code>-adjacent helpers) are intentionally not documented here - see
+      <code>OpenIDConnectClientFactory</code>'s own docblock.
+    </p>
+  </div>
+
+  <script>
+    function bindToggle(el) {
+      var toggleButtons = el.querySelectorAll('.toggleButton');
+      toggleButtons.forEach(function (button) {
+        button.addEventListener('click', function (e) {
+          var closestToggle = e.target.closest('.toggle, .toggleVisible');
+          if (closestToggle !== el) {
+            return;
+          }
+
+          if (el.classList.contains('toggle')) {
+            el.classList.remove('toggle');
+            el.classList.add('toggleVisible');
+          } else {
+            el.classList.remove('toggleVisible');
+            el.classList.add('toggle');
+          }
+        });
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('.toggle, .toggleVisible').forEach(function (el) {
+        bindToggle(el);
+      });
+    });
+  </script>
+</body>
+</html>
