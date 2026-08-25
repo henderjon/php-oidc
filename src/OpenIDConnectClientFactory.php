@@ -46,7 +46,7 @@ class OpenIDConnectClientFactory {
 			$claimsValidator,
 			$tokenEndpointClient,
 			$this->httpFetcher,
-			new RefreshTokenClient($providerMetadataResolver, $idTokenVerifier, $claimsValidator, $tokenEndpointClient, $this->logger),
+			new RefreshTokenClient($providerMetadataResolver, $idTokenVerifier, $claimsValidator, $tokenEndpointClient),
 			$this->logger,
 		);
 	}

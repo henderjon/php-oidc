@@ -53,7 +53,6 @@ class RefreshTokenClientTest extends TestCase {
 			new IdTokenVerifier($fetcher, logger: $logger),
 			new ClaimsValidator($logger),
 			new TokenEndpointClient($fetcher, $providerMetadataResolver, $logger),
-			$logger,
 		);
 	}
 

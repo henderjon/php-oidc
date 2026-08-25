@@ -4,8 +4,6 @@ namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Interfaces\RefreshTokenClientInterface;
-use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 
 /**
  * Redeems a refresh token at the Token Endpoint (OpenID Connect Core 1.0 §12). Stands apart
@@ -18,6 +16,11 @@ use Psr\Log\NullLogger;
  * OpenID Connect Core 1.0 §12.2's validation rules apply only when the refresh response
  * actually includes a new `id_token` - the spec is explicit it might not. When it does not,
  * the original ID token and claims are still valid and are carried forward unchanged.
+ *
+ * Takes no LoggerInterface of its own, unlike its sibling collaborators - every failure this
+ * class can produce is already detected and logged by whichever collaborator actually finds
+ * it (TokenEndpointClient, IdTokenVerifier, ClaimsValidator). This class has no failure
+ * condition of its own to log.
  */
 final class RefreshTokenClient implements RefreshTokenClientInterface {
 
@@ -26,7 +29,6 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 		private readonly IdTokenVerifier $idTokenVerifier,
 		private readonly ClaimsValidator $claimsValidator,
 		private readonly TokenEndpointClient $tokenEndpointClient,
-		private readonly LoggerInterface $logger = new NullLogger,
 	) {
 	}
 
@@ -66,10 +68,18 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 	}
 
 	/**
+	 * Mirrors ClaimsValidator::toStringList()'s own normalization, since $originalClaims is
+	 * caller-controlled data (the caller's own stored copy of a previously-validated token),
+	 * the same trust level toStringList() already assumes for its own callers.
+	 *
 	 * @return list<string>|string
 	 */
 	private static function normalizedAudience( mixed $value ): array|string {
-		return is_array($value) || is_string($value) ? $value : '';
+		if( is_array($value) ) {
+			return array_values(array_filter($value, 'is_string'));
+		}
+
+		return is_string($value) ? $value : '';
 	}
 
 }
