@@ -652,6 +652,31 @@ class OpenIDConnectClientTest extends TestCase {
 		]));
 	}
 
+	public function testCompleteAuthorizationCodeFlowWithProviderErrorLogsTheErrorAndDescription(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'error'             => 'access_denied',
+				'error_description' => 'The user denied access',
+			]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$providerErrorRecords = array_values(array_filter(
+			$records,
+			static fn ( array $record ): bool => $record['message'] === 'OIDC: provider returned an error on the callback',
+		));
+
+		$this->assertCount(1, $providerErrorRecords);
+		$this->assertSame('access_denied', $providerErrorRecords[0]['context']['error']);
+		$this->assertSame('The user denied access', $providerErrorRecords[0]['context']['error_description']);
+	}
+
 	public function testCompletionNeverSendsCredentialsToATokenEndpointThatViolatesTheUrlPolicy(): void {
 		$fetcher = new FakeHttpFetcher;
 		$config  = $this->config()->withEndpointOverrides([
