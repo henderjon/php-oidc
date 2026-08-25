@@ -349,6 +349,85 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
+	/**
+	 * firebase/php-jwt's JWK::parseKeySet() throws its own exception (UnexpectedValueException,
+	 * InvalidArgumentException, ...) for a "keys" value that is present but not an array,
+	 * before this class's own key-type check ever runs. Confirmed this directly against
+	 * JWK::parseKeySet() while investigating this fix - it is not merely theoretical.
+	 */
+	public function testVerifyWrapsAStringJwksKeysValue(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode([ 'keys' => 'not-an-array' ], JSON_THROW_ON_ERROR), 200));
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('Unable to parse the JWKS document');
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+	}
+
+	public function testVerifyWrapsANullJwksKeysValue(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode([ 'keys' => null ], JSON_THROW_ON_ERROR), 200));
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('Unable to parse the JWKS document');
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+	}
+
+	public function testVerifyMissingJwksKeysMemberIsWrapped(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode([], JSON_THROW_ON_ERROR), 200));
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('Unable to parse the JWKS document');
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+	}
+
+	public function testVerifyEmptyJwksKeysArrayIsWrapped(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode([ 'keys' => [] ], JSON_THROW_ON_ERROR), 200));
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('Unable to parse the JWKS document');
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+	}
+
+	public function testVerifyLogsAMalformedJwksKeysValueBeforeThrowing(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode([ 'keys' => 'not-an-array' ], JSON_THROW_ON_ERROR), 200));
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
+
+		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: unable to parse the JWKS document', $records[0]['message']);
+		$this->assertSame(self::JWKS_URI, $records[0]['context']['jwks_uri']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testVerifyRejectsAnOversizedIdToken(): void {
 		// No response configured for JWKS_URI - FakeHttpFetcher throws a bare RuntimeException
 		// for any URL it was not told to answer. Getting AuthenticationFailedException instead
