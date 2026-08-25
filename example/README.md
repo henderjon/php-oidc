@@ -18,6 +18,7 @@ php example/app-response-limits.php
 php example/app-claim-validation.php
 php example/app-audience-validation.php
 php example/app-userinfo-validation.php
+php example/app-refresh-token.php
 ```
 
 - `app-simple.php` builds an authorization redirect and requests a client-credentials token - including an `audience` extra param, a provider-specific extension the library does not model itself - with PKCE left at its default (`PkceMode::Disabled`).
@@ -31,5 +32,7 @@ php example/app-userinfo-validation.php
 - `app-audience-validation.php` shows a token naming an audience beyond this client rejected outright, then the same shape accepted once that second audience is explicitly trusted via `withAudience()` - confirming aud contains this client is not enough on its own (OpenID Connect Core 1.0 §3.1.3.7 step 3 is two separate MUSTs). It then shows `withAllowUntrustedAudiences(true)` opting back out of that second half entirely, for a caller that cannot safely declare every audience a provider's tokens might carry - and logs an `alert`, not silently, since an untrusted value actually being let through is exactly the case that opt-out exists for. It also shows a malformed `aud` entry (a non-string value mixed into an otherwise well-formed array) being rejected outright by default rather than silently discarded.
 
 - `app-userinfo-validation.php` completes a normal authorization code flow, then shows `fetchUserInfo()` validating the userinfo response against the authenticated ID token: a valid signed response is accepted, one with the wrong `iss` or `aud` is rejected (OpenID Connect Core 1.0 §5.3.2 requires both, but only "if signed"), one naming a different `sub` is rejected, and one missing `sub` entirely is rejected (§5.3.2's sub requirement is unconditional). It closes by showing a plain JSON response with no `iss`/`aud` at all still accepted once its `sub` matches, confirming those two checks do not apply outside the signed case.
+
+- `app-refresh-token.php` completes a normal authorization code flow, then shows `refresh()`: a refresh response with no new `id_token` at all carries the original ID token and claims forward unchanged (OpenID Connect Core 1.0 §12.2 permits the response to omit one); a refresh response with a matching new `id_token` is accepted; and one naming a different subject than the original authentication is rejected. It also shows `expiresIn` on `AuthenticationResult` and that a rotated `refresh_token` in the response is exactly what the app must persist going forward.
 
 A real application would replace `MockHttpFetcher` with an `HttpFetcherInterface` implementation that uses its HTTP client, and `InMemoryCache` with its PSR-16 cache adapter. The client configuration and factory wiring can remain the same.

@@ -47,6 +47,11 @@ composes a handful of small, independently-testable collaborators instead:
 - `IdTokenVerifier` / `ClaimsValidator` - signature verification and claims checks (issuer, audience, nonce).
 - `TokenEndpointClient` / `ClientAuthenticator` - talks to `token_endpoint`, applies RFC 6749 §2.3.1 client auth.
 - `Pkce` - RFC 7636 verifier/challenge generation.
+- `RefreshTokenClient` - redeems a refresh token (OpenID Connect Core 1.0 §12). Implements its
+  own `RefreshTokenClientInterface`, standing apart from `AuthorizationFlowClientInterface`
+  since a refresh call has no state/nonce/flow in play. `OpenIDConnectClient` implements that
+  interface too via a one-line delegation, so a caller holding one client object gets `refresh()`
+  without reaching for a second one.
 
 `OpenIDConnectClientFactory` is the only place that calls `new` on these collaborators and wires them together.
 Construct `OpenIDConnectClient` directly only from the factory or from test code. When a new capability needs a new

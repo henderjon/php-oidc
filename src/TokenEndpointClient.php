@@ -8,11 +8,12 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 /**
- * Posts to `token_endpoint` for the two grants this module supports:
- * authorization code exchange (the interactive login flows) and client
- * credentials (non-interactive, see TokenGrantClientInterface). Both share
- * the same request/response shape - only `grant_type` and its params
- * differ - so one collaborator handles both.
+ * Posts to `token_endpoint` for the three grants this module supports:
+ * authorization code exchange (the interactive login flows), client
+ * credentials (non-interactive, see TokenGrantClientInterface), and refresh
+ * token (see RefreshTokenClientInterface). All three share the same
+ * request/response shape - only `grant_type` and its params differ - so
+ * one collaborator handles all of them.
  */
 final class TokenEndpointClient {
 
@@ -94,6 +95,20 @@ final class TokenEndpointClient {
 		}
 
 		return $this->request($config, $params);
+	}
+
+	/**
+	 * OpenID Connect Core 1.0 §12.1: the refresh request authenticates to the Token Endpoint
+	 * the same way as any other token request - handled by request()'s existing
+	 * ClientAuthenticator::apply() call, nothing specific to this grant.
+	 *
+	 * @throws TokenRequestException
+	 */
+	public function refreshToken( OpenIDConnectClientConfig $config, string $refreshToken ): TokenResult {
+		return $this->request($config, [
+			'grant_type'    => 'refresh_token',
+			'refresh_token' => $refreshToken,
+		]);
 	}
 
 	/**

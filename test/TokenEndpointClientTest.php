@@ -52,6 +52,39 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertSame('Basic ' . base64_encode('the-client-id:the-client-secret'), $request['headers']['Authorization']);
 	}
 
+	public function testRefreshToken(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'the-new-access-token' ], JSON_THROW_ON_ERROR), 200));
+
+		$result = $this->makeClient($fetcher)->refreshToken($this->config(), 'the-refresh-token');
+
+		$this->assertSame('the-new-access-token', $result->accessToken);
+
+		$request = $fetcher->requests[0];
+		$this->assertStringContainsString('grant_type=refresh_token', $request['body']);
+		$this->assertStringContainsString('refresh_token=the-refresh-token', $request['body']);
+		$this->assertSame('Basic ' . base64_encode('the-client-id:the-client-secret'), $request['headers']['Authorization']);
+	}
+
+	/**
+	 * A rejected refresh token (revoked, expired, or already rotated out from under the
+	 * caller) is a routine, terminal outcome, not a claims problem - it must surface as
+	 * TokenRequestException, not AuthenticationFailedException, so a caller can tell "this
+	 * session is over, re-authenticate" apart from "a validated claim did not match".
+	 * request() already covers this generically (see
+	 * testThrowsOnNonSuccessStatusWithErrorField(), exercised via a different grant) - this
+	 * proves it holds for refreshToken() specifically too, not just by construction.
+	 */
+	public function testRefreshTokenThrowsOnARejectedRefreshToken(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'error' => 'invalid_grant' ], JSON_THROW_ON_ERROR), 400));
+
+		$this->expectException(TokenRequestException::class);
+		$this->expectExceptionMessage('invalid_grant');
+
+		$this->makeClient($fetcher)->refreshToken($this->config(), 'the-refresh-token');
+	}
+
 	public function testRequestClientCredentialsTokenWithScopes(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));

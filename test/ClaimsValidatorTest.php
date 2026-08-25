@@ -663,6 +663,153 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
+	public function testValidateRefreshedSubjectPassesWhenItMatches(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => 'the-subject' ]);
+
+		$validator->validateRefreshedSubject($claims, 'the-subject');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateRefreshedSubjectFailsWhenItDoesNotMatch(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => 'someone-elses-subject' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('does not match the original ID token');
+
+		$validator->validateRefreshedSubject($claims, 'the-subject');
+	}
+
+	public function testValidateRefreshedSubjectLogsExpectedAndActual(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'sub' => 'someone-elses-subject' ]);
+
+		try {
+			$validator->validateRefreshedSubject($claims, 'the-subject');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('the-subject', $records[0]['context']['expected']);
+		$this->assertSame('someone-elses-subject', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateRefreshedAuthTimeSkipsCheckWhenNotPresent(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims();
+
+		$validator->validateRefreshedAuthTime($claims, null);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateRefreshedAuthTimePassesWhenItMatchesTheOriginal(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'auth_time' => 1_700_000_000 ]);
+
+		$validator->validateRefreshedAuthTime($claims, 1_700_000_000);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateRefreshedAuthTimeFailsWhenItDoesNotMatchTheOriginal(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'auth_time' => 1_700_000_300 ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('does not match the original authentication time');
+
+		$validator->validateRefreshedAuthTime($claims, 1_700_000_000);
+	}
+
+	public function testValidateRefreshedAuthTimeFailsWhenTheOriginalNeverHadOne(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'auth_time' => 1_700_000_000 ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$validator->validateRefreshedAuthTime($claims, null);
+	}
+
+	public function testValidateRefreshedAuthTimeLogsExpectedAndActual(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'auth_time' => 1_700_000_300 ]);
+
+		try {
+			$validator->validateRefreshedAuthTime($claims, 1_700_000_000);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame(1_700_000_000, $records[0]['context']['expected']);
+		$this->assertSame(1_700_000_300, $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateRefreshedNonceSkipsCheckWhenNotPresent(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'nonce' => null ]);
+
+		$validator->validateRefreshedNonce($claims, null);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateRefreshedNoncePassesWhenItMatchesTheOriginal(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'nonce' => 'the-nonce' ]);
+
+		$validator->validateRefreshedNonce($claims, 'the-nonce');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateRefreshedNonceFailsWhenItDoesNotMatchTheOriginal(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'nonce' => 'a-different-nonce' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('does not match the original ID token');
+
+		$validator->validateRefreshedNonce($claims, 'the-nonce');
+	}
+
+	public function testValidateRefreshedNonceFailsWhenTheOriginalHadNone(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'nonce' => 'a-nonce' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$validator->validateRefreshedNonce($claims, null);
+	}
+
+	public function testValidateRefreshedNonceLogsExpectedAndActual(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'nonce' => 'a-different-nonce' ]);
+
+		try {
+			$validator->validateRefreshedNonce($claims, 'the-nonce');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('the-nonce', $records[0]['context']['expected']);
+		$this->assertSame('a-different-nonce', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
 		$logger    = new ArrayLogger;
 		$validator = new ClaimsValidator($logger);
