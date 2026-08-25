@@ -52,6 +52,20 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertSame('Basic ' . base64_encode('the-client-id:the-client-secret'), $request['headers']['Authorization']);
 	}
 
+	public function testRefreshToken(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'the-new-access-token' ], JSON_THROW_ON_ERROR), 200));
+
+		$result = $this->makeClient($fetcher)->refreshToken($this->config(), 'the-refresh-token');
+
+		$this->assertSame('the-new-access-token', $result->accessToken);
+
+		$request = $fetcher->requests[0];
+		$this->assertStringContainsString('grant_type=refresh_token', $request['body']);
+		$this->assertStringContainsString('refresh_token=the-refresh-token', $request['body']);
+		$this->assertSame('Basic ' . base64_encode('the-client-id:the-client-secret'), $request['headers']['Authorization']);
+	}
+
 	public function testRequestClientCredentialsTokenWithScopes(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
