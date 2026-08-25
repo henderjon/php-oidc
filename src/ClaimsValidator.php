@@ -24,6 +24,9 @@ use Psr\Log\NullLogger;
  */
 final class ClaimsValidator {
 
+	// OpenID Connect Core 1.0 §2: "sub... MUST NOT exceed 255 ASCII characters in length."
+	private const MAX_SUBJECT_LENGTH = 255;
+
 	public function __construct(
 		private readonly LoggerInterface $logger = new NullLogger,
 		private readonly ?string $state = null,
@@ -63,8 +66,9 @@ final class ClaimsValidator {
 	 * `sub`, `exp`, and `iat` are all REQUIRED claims in every ID token (OpenID Connect Core
 	 * 1.0 §2) - not optional, and not merely "checked if present" the way `JWT::decode()`
 	 * treats them (see IdTokenVerifier's own docblock). A token omitting any of the three, or
-	 * carrying a non-numeric value for `exp`/`iat`, or claiming to expire before or at the
-	 * moment it says it was issued, is rejected here before anything else about it is trusted.
+	 * carrying a non-numeric value for `exp`/`iat`, claiming to expire before or at the moment
+	 * it says it was issued, or carrying a `sub` longer than §2's own 255-character cap, is
+	 * rejected here before anything else about it is trusted.
 	 *
 	 * @throws AuthenticationFailedException
 	 */
@@ -75,6 +79,16 @@ final class ClaimsValidator {
 			$this->logger->error('OIDC: ID token is missing the required sub claim', [ 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('ID token is missing the required sub claim');
+		}
+
+		if( strlen($sub) > self::MAX_SUBJECT_LENGTH ) {
+			$this->logger->error('OIDC: ID token sub claim exceeds the maximum allowed length', [
+				'length' => strlen($sub),
+				'max'    => self::MAX_SUBJECT_LENGTH,
+				'state'  => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('ID token sub claim exceeds the maximum allowed length');
 		}
 
 		$exp = $claims->get('exp');
