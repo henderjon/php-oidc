@@ -73,4 +73,37 @@ class IncomingAuthorizationResponseTest extends TestCase {
 		$this->assertNull($response->errorSummary());
 	}
 
+	public function testErrorAtTheLengthLimitIsNotTruncated(): void {
+		$response = new IncomingAuthorizationResponse([ 'error' => str_repeat('a', 255) ]);
+
+		$this->assertSame(str_repeat('a', 255), $response->error);
+	}
+
+	public function testErrorOverTheLengthLimitIsTruncated(): void {
+		$response = new IncomingAuthorizationResponse([ 'error' => str_repeat('a', 256) ]);
+
+		$this->assertSame(str_repeat('a', 255) . '...(truncated)', $response->error);
+	}
+
+	public function testErrorDescriptionOverTheLengthLimitIsTruncated(): void {
+		$response = new IncomingAuthorizationResponse([
+			'error'             => 'access_denied',
+			'error_description' => str_repeat('a', 300),
+		]);
+
+		$this->assertSame(str_repeat('a', 255) . '...(truncated)', $response->errorDescription);
+	}
+
+	public function testTruncatedErrorFieldsKeepErrorSummaryBounded(): void {
+		$response = new IncomingAuthorizationResponse([
+			'error'             => str_repeat('a', 300),
+			'error_description' => str_repeat('b', 300),
+		]);
+
+		$this->assertSame(
+			str_repeat('a', 255) . '...(truncated): ' . str_repeat('b', 255) . '...(truncated)',
+			$response->errorSummary(),
+		);
+	}
+
 }
