@@ -31,15 +31,22 @@ final class OpenIDConnectClientConfig {
 	 * @param array<string,string>     $endpointOverrides    Known endpoint values (e.g. `authorization_endpoint`,
 	 *                                                        `jwks_uri`, `token_endpoint`) that skip discovery for that value.
 	 * @param array<string,string>     $extraAuthParams      Additional parameters merged into the authorization request.
-	 * @param ?list<string>            $allowedHosts         Hosts every resolved endpoint (override or discovered) must
-	 *                                                        match, checked by UrlPolicy. Null skips the explicit-list
-	 *                                                        check and falls back to a default: the host of `issuer`
-	 *                                                        (or `providerUrl`, when `issuer` is not set), or every
-	 *                                                        host when neither is configured or `allowAnyHost` is set.
-	 *                                                        A discovery document can name an endpoint on any host it
-	 *                                                        likes - this default means that, without an explicit
-	 *                                                        `allowedHosts`, a discovered endpoint still has to stay on
-	 *                                                        the provider's own host to be followed.
+	 * @param ?list<string>            $allowedHosts         Bare hostnames (e.g. `login.example.com`, not
+	 *                                                        `https://login.example.com`) every resolved endpoint
+	 *                                                        (override or discovered) must match, checked by
+	 *                                                        UrlPolicy. A scheme-prefixed entry is tolerated - the
+	 *                                                        host is recovered from it - but never write one on
+	 *                                                        purpose: it is stripped and ignored either way, since
+	 *                                                        scheme is enforced once, globally, via
+	 *                                                        `allowInsecureSchemes`, never per host. Null skips the
+	 *                                                        explicit-list check and falls back to a default: the
+	 *                                                        host of `issuer` (or `providerUrl`, when `issuer` is not
+	 *                                                        set), or every host when neither is configured or
+	 *                                                        `allowAnyHost` is set. A discovery document can name an
+	 *                                                        endpoint on any host it likes - this default means that,
+	 *                                                        without an explicit `allowedHosts`, a discovered
+	 *                                                        endpoint still has to stay on the provider's own host to
+	 *                                                        be followed.
 	 * @param bool                     $allowAnyHost         Opts out of the default-to-provider-host fallback above
 	 *                                                        when `allowedHosts` is null, restoring "every host allowed"
 	 *                                                        for a provider that legitimately splits its endpoints

@@ -115,4 +115,29 @@ class UrlPolicyTest extends TestCase {
 		$this->assertFalse($this->urlPolicy->isAllowed('http://issuer.example.com/token', $config));
 	}
 
+	public function testAllowlistAcceptsASchemePrefixedEntry(): void {
+		// A caller pasting a full endpoint URL into allowedHosts, scheme included, is an easy
+		// mistake - the host is recovered from it rather than making every request fail
+		// silently, since a bare hostname parsed from the real URL can never string-equal a
+		// scheme-prefixed entry.
+		$config = $this->config(allowedHosts: [ 'https://issuer.example.com' ]);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+	}
+
+	public function testAllowlistStillRejectsANonMatchingHostWhenEntryIsSchemePrefixed(): void {
+		$config = $this->config(allowedHosts: [ 'https://issuer.example.com' ]);
+
+		$this->assertFalse($this->urlPolicy->isAllowed('https://attacker.example.net/token', $config));
+	}
+
+	public function testASchemePrefixedAllowlistEntryDoesNotGrantThatScheme(): void {
+		// The scheme on an allowedHosts entry is never consulted - scheme is enforced once,
+		// globally, via allowInsecureSchemes, never per host. An http:// entry must not act as
+		// a backdoor into allowing http for that host.
+		$config = $this->config(allowedHosts: [ 'http://issuer.example.com' ]);
+
+		$this->assertFalse($this->urlPolicy->isAllowed('http://issuer.example.com/token', $config));
+	}
+
 }

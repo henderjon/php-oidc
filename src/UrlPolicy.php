@@ -24,6 +24,16 @@ namespace Oidc;
  * up. See defaultAllowedHost() for why that tier falls back to unrestricted,
  * rather than rejecting everything, when neither `issuer` nor `providerUrl`
  * is configured at all.
+ *
+ * Each `$config->allowedHosts` entry is meant to be a bare hostname, but a caller pasting a
+ * full endpoint URL (scheme included, e.g. copied straight from a provider's documentation) is
+ * an easy mistake to make - and, unlike a mismatched host, this one used to fail every request
+ * silently: a bare hostname parsed from the real URL can never string-equal a scheme-prefixed
+ * entry, so nothing would ever pass. normalizedAllowedHost() recovers the host from that shape
+ * instead. This is safe to do unconditionally: the scheme on an entry, if present, was never
+ * consulted for anything - the scheme of the actual request is checked once, above, against
+ * `allowInsecureSchemes`, entirely independently of `allowedHosts` - so stripping it here
+ * changes nothing about which schemes are actually permitted.
  */
 final class UrlPolicy {
 
@@ -43,7 +53,9 @@ final class UrlPolicy {
 		}
 
 		if( $config->allowedHosts !== null ) {
-			return in_array($host, $config->allowedHosts, true);
+			$allowedHosts = array_map(self::normalizedAllowedHost(...), $config->allowedHosts);
+
+			return in_array($host, $allowedHosts, true);
 		}
 
 		if( $config->allowAnyHost ) {
@@ -53,6 +65,21 @@ final class UrlPolicy {
 		$defaultHost = self::defaultAllowedHost($config);
 
 		return $defaultHost === null || $host === $defaultHost;
+	}
+
+	/**
+	 * See the class docblock for why this exists and why it is safe: recovers the host from an
+	 * `allowedHosts` entry that turned out to be a full URL instead of a bare hostname. Returns
+	 * the entry unchanged when it has no scheme to strip - the ordinary, documented case.
+	 */
+	private static function normalizedAllowedHost( string $value ): string {
+		if( !str_contains($value, '://') ) {
+			return $value;
+		}
+
+		$host = parse_url($value, PHP_URL_HOST);
+
+		return is_string($host) ? $host : $value;
 	}
 
 	/**
