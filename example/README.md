@@ -36,3 +36,5 @@ php example/app-refresh-token.php
 - `app-refresh-token.php` completes a normal authorization code flow, then shows `refresh()`: a refresh response with no new `id_token` at all carries the original ID token and claims forward unchanged (OpenID Connect Core 1.0 §12.2 permits the response to omit one); a refresh response with a matching new `id_token` is accepted; and one naming a different subject than the original authentication is rejected. It also shows `expiresIn` on `AuthenticationResult` and that a rotated `refresh_token` in the response is exactly what the app must persist going forward.
 
 A real application would replace `MockHttpFetcher` with an `HttpFetcherInterface` implementation that uses its HTTP client, and `InMemoryCache` with its PSR-16 cache adapter. The client configuration and factory wiring can remain the same.
+
+See [`pseudo/`](pseudo/README.md) for a non-runnable, real-app-shaped version of each script above - a login route, a callback route, a background job - with the mock harness stripped out.
