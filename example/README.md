@@ -17,6 +17,7 @@ php example/app-tls-policy.php
 php example/app-response-limits.php
 php example/app-claim-validation.php
 php example/app-audience-validation.php
+php example/app-userinfo-validation.php
 ```
 
 - `app-simple.php` builds an authorization redirect and requests a client-credentials token - including an `audience` extra param, a provider-specific extension the library does not model itself - with PKCE left at its default (`PkceMode::Disabled`).
@@ -28,5 +29,7 @@ php example/app-audience-validation.php
 - `app-response-limits.php` shows `CurlHttpFetcher`'s `maxResponseBytes` cap accepting a response under the limit and aborting one over it, with the error it logs when that happens - and, through the full client, a discovery response with an unexpected `Content-Type` (`text/html` instead of JSON) being rejected before its body is ever parsed.
 - `app-claim-validation.php` shows a token missing the required `sub` or `exp` claim being rejected, and one whose `exp` is not after its own `iat` - all cases `firebase/php-jwt`'s own `JWT::decode()` does not catch, since it only checks `exp`/`iat`/`nbf` when they happen to be present. It also shows the separate, opt-in `maxTokenLifetimeSeconds` cap rejecting a token whose `exp - iat` is unreasonably long even though every claim is otherwise well-formed, and accepting one that fits within the cap.
 - `app-audience-validation.php` shows a token naming an audience beyond this client rejected outright, then the same shape accepted once that second audience is explicitly trusted via `withAudience()` - confirming aud contains this client is not enough on its own (OpenID Connect Core 1.0 §3.1.3.7 step 3 is two separate MUSTs). It then shows `withAllowUntrustedAudiences(true)` opting back out of that second half entirely, for a caller that cannot safely declare every audience a provider's tokens might carry - and logs an `alert`, not silently, since an untrusted value actually being let through is exactly the case that opt-out exists for. It also shows a malformed `aud` entry (a non-string value mixed into an otherwise well-formed array) being rejected outright by default rather than silently discarded.
+
+- `app-userinfo-validation.php` completes a normal authorization code flow, then shows `fetchUserInfo()` validating the userinfo response against the authenticated ID token: a valid signed response is accepted, one with the wrong `iss` or `aud` is rejected (OpenID Connect Core 1.0 §5.3.2 requires both, but only "if signed"), one naming a different `sub` is rejected, and one missing `sub` entirely is rejected (§5.3.2's sub requirement is unconditional). It closes by showing a plain JSON response with no `iss`/`aud` at all still accepted once its `sub` matches, confirming those two checks do not apply outside the signed case.
 
 A real application would replace `MockHttpFetcher` with an `HttpFetcherInterface` implementation that uses its HTTP client, and `InMemoryCache` with its PSR-16 cache adapter. The client configuration and factory wiring can remain the same.
