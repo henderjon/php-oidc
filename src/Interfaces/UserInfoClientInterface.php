@@ -19,9 +19,13 @@ use Oidc\OpenIDConnectClientConfig;
 interface UserInfoClientInterface extends AuthorizationFlowClientInterface {
 
 	/**
+	 * $expectedSubject must be the sub Claim from the authenticated ID token
+	 * (AuthenticationResult::$claims->get('sub')). OpenID Connect Core 1.0 §5.3.2 requires the
+	 * UserInfo response's sub to be verified against it, to guard against token substitution.
+	 *
 	 * @throws ProviderDiscoveryException
 	 * @throws UserInfoRequestException
 	 */
-	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken ): Claims;
+	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken, string $expectedSubject ): Claims;
 
 }

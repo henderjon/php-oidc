@@ -125,7 +125,7 @@ final class OpenIDConnectClient implements
 		return $this->tokenEndpointClient->requestClientCredentialsToken($config, $scopes, $extraParams);
 	}
 
-	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken ): Claims {
+	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken, string $expectedSubject ): Claims {
 		$endpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::USERINFO_ENDPOINT);
 
 		try {
@@ -142,20 +142,46 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->contentType === 'application/jwt' ) {
-			return $this->verifySignedUserInfo($config, $response->body);
+			$claims = $this->verifySignedUserInfo($config, $response->body);
+
+			// OpenID Connect Core 1.0 §5.3.2: iss/aud are only REQUIRED "if signed" - a plain
+			// JSON UserInfo response carries no such requirement, so these two checks are
+			// scoped to this branch only.
+			$issuer = $config->issuer ?? $config->providerUrl;
+
+			if( $issuer === null ) {
+				throw new UserInfoRequestException('No issuer configured to validate the signed userinfo response against');
+			}
+
+			try {
+				$this->claimsValidator->validateUserInfoIssuer($claims, $issuer);
+				$this->claimsValidator->validateUserInfoAudience($claims, $config->clientId);
+			} catch( AuthenticationFailedException $e ) {
+				throw new UserInfoRequestException('Signed userinfo response failed claims validation', previous: $e);
+			}
+		} else {
+			if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
+				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type");
+			}
+
+			$decoded = json_decode($response->body, true);
+
+			if( !is_array($decoded) ) {
+				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned invalid JSON");
+			}
+
+			$claims = new Claims($decoded);
 		}
 
-		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
-			throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type");
+		// OpenID Connect Core 1.0 §5.3.2: the sub match is unconditional, unlike iss/aud
+		// above - it applies to both the signed and plain JSON response shapes.
+		try {
+			$this->claimsValidator->validateUserInfoSubject($claims, $expectedSubject);
+		} catch( AuthenticationFailedException $e ) {
+			throw new UserInfoRequestException('Userinfo response failed subject validation', previous: $e);
 		}
 
-		$decoded = json_decode($response->body, true);
-
-		if( !is_array($decoded) ) {
-			throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned invalid JSON");
-		}
-
-		return new Claims($decoded);
+		return $claims;
 	}
 
 	private function buildRedirect( OpenIDConnectClientConfig $config, string $responseType ): AuthorizationRedirect {

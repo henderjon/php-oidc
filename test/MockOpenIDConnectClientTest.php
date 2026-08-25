@@ -67,7 +67,7 @@ class MockOpenIDConnectClientTest extends TestCase {
 		$mock           = new MockOpenIDConnectClient;
 		$mock->userInfo = new Claims([ 'sub' => 'configured-user' ]);
 
-		$this->assertSame('configured-user', $mock->fetchUserInfo($this->config(), 'access-token')->get('sub'));
+		$this->assertSame('configured-user', $mock->fetchUserInfo($this->config(), 'access-token', 'configured-user')->get('sub'));
 	}
 
 }

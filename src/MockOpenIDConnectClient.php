@@ -59,7 +59,7 @@ class MockOpenIDConnectClient implements
 		return $this->tokenResult;
 	}
 
-	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken ): Claims {
+	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken, string $expectedSubject ): Claims {
 		return $this->userInfo;
 	}
 
