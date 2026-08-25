@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#375EAB">
+  <title>Style Guide - Go Documentation Server Style</title>
+  <style>
+    /* Base */
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      line-height: 1.3;
+      text-align: center;
+      color: #222;
+    }
+
+    pre, code {
+      font-family: Menlo, monospace;
+      font-size: 0.875rem;
+    }
+
+    pre {
+      line-height: 1.4;
+      overflow-x: auto;
+      background: #efefef;
+      padding: 0.625rem;
+      border-radius: 0.3125rem;
+      margin: 1.25rem;
+    }
+
+    pre .comment { color: #006600; }
+    pre .highlight { background: #ffff00; }
+
+    /* Typography */
+    h1, h2, h3, h4 {
+      margin: 1.25rem 0;
+      color: #375eab;
+      font-weight: bold;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      line-height: 1;
+    }
+
+    h1 .text-muted { color: #777; }
+
+    h2 {
+      font-size: 1.25rem;
+      background: #e0ebf5;
+      padding: 0.5rem;
+      line-height: 1.25;
+      font-weight: normal;
+      overflow-wrap: break-word;
+      clear: right;
+    }
+
+    h2 a { font-weight: bold; }
+
+    h3 {
+      font-size: 1.25rem;
+      line-height: 1.25;
+      overflow-wrap: break-word;
+      margin: 1.25rem 0.3125rem;
+    }
+
+    h4 {
+      font-size: 1rem;
+      margin: 1.25rem 0.3125rem;
+    }
+
+    /* Links */
+    a {
+      color: #375eab;
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .container {
+      text-align: left;
+      padding: 0 1.25rem;
+    }
+
+    p, li {
+      max-width: 50rem;
+      word-wrap: break-word;
+    }
+
+    p, ul, ol, dl { margin: 1.25rem; }
+    dd { margin: 0 0 0 1.25rem; }
+    dl, dd { font-size: 0.875rem; }
+
+    /* Topbar */
+    #topbar {
+      background: #e0ebf5;
+      height: 4rem;
+    }
+
+    .top-heading {
+      float: left;
+      padding: 1.313rem 0;
+      font-size: 1.25rem;
+    }
+
+    .top-heading a {
+      color: #222;
+      text-decoration: none;
+    }
+
+    /* Buttons */
+    .button {
+      padding: 0.625rem;
+      font-size: 1rem;
+      border-radius: 0.3125rem;
+      border: 1px solid #375eab;
+      display: inline-block;
+      margin: 0.3125rem 0.125rem;
+      text-decoration: none;
+    }
+
+    .button-primary {
+      color: white;
+      background: #375eab;
+    }
+
+    .button-secondary {
+      color: #222;
+      background: #e0ebf5;
+    }
+
+    .button:hover { opacity: 0.9; }
+
+    /* Forms */
+    .search-box { display: inline-flex; }
+
+    input[type="search"],
+    .text-input-example {
+      padding: 0.625rem;
+      border: 1px solid #375eab;
+      border-radius: 0.3125rem;
+      font-size: 1rem;
+    }
+
+    input[type="search"] {
+      border-right: 0;
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+      flex-grow: 1;
+      min-width: 5.625rem;
+    }
+
+    input[type="search"] + button {
+      padding: 0.625rem;
+      background: #375eab;
+      color: white;
+      border: 1px solid #375eab;
+      border-top-right-radius: 0.3125rem;
+      border-bottom-right-radius: 0.3125rem;
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+      cursor: pointer;
+    }
+
+    ::placeholder { color: #7f7f7f; }
+
+    /* Tables */
+    table {
+      border-collapse: collapse;
+      margin: 1.25rem;
+    }
+
+    table td, table th {
+      padding: 0.625rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    table th {
+      background: #e0ebf5;
+      color: #375eab;
+    }
+
+    /* Alerts */
+    .alert { color: #aa0000; }
+
+    .alert-box {
+      background: #f9f9be;
+      padding: 0.625rem;
+      text-align: center;
+      border-radius: 0.3125rem;
+      margin: 1.25rem;
+    }
+
+    /* Footer */
+    #footer {
+      text-align: left;
+      color: #666;
+      font-size: 0.875rem;
+      margin: 2.5rem 0;
+    }
+
+    /* Style Guide Components */
+    .style-section { margin: 2rem 0; }
+
+    .color-item {
+      display: inline-block;
+      text-align: center;
+    }
+
+    .color-swatch {
+      display: inline-block;
+      width: 100px;
+      height: 100px;
+      border: 1px solid #ccc;
+      margin: 0.5rem;
+      border-radius: 0.3125rem;
+    }
+
+    .color-label {
+      display: block;
+      margin-top: 0.5rem;
+      font-family: Menlo, monospace;
+      font-size: 0.75rem;
+    }
+
+    /* Color swatches */
+    .color-primary { background: #375eab; }
+    .color-light-blue { background: #e0ebf5; }
+    .color-accent-blue { background: #5279c7; }
+    .color-text-dark { background: #222; }
+    .color-text-medium { background: #666; }
+    .color-text-muted { background: #777; }
+    .color-text-light { background: #999; }
+    .color-bg-light { background: #efefef; }
+    .color-white { background: #fff; border: 2px solid #ccc; }
+    .color-code-bg { background: #ffffd8; }
+    .color-highlight { background: #ffff00; }
+    .color-selection { background: #ff9632; }
+    .color-alert { background: #aa0000; }
+    .color-warning { background: #f9f9be; }
+    .color-comment { background: #006600; }
+
+    /* Toggle/Collapse */
+    .toggleButton,
+    .exampleHeading { cursor: pointer; }
+
+    .exampleHeading .text { color: #375eab; }
+
+    .toggle > .collapsed,
+    .toggleVisible > .expanded { display: block; }
+
+    .toggle > .expanded,
+    .toggleVisible > .collapsed { display: none; }
+
+    /* Recipe metadata */
+    .print-show {
+      font-size: 0.875rem;
+      color: #666;
+    }
+
+    #footer{
+
+    }
+
+    /* Responsive */
+    @media (max-width: 43.75em) {
+      body { font-size: 0.9375rem; }
+      pre, code { font-size: 0.866rem; }
+      .container { padding: 0 0.625rem; }
+      p, pre, ul, ol { margin: 0.625rem; }
+    }
+
+    @media print {
+      #topbar, .source-info{
+        display: none !important;
+      }
+      h2 {
+        background-color: #e3f1fa !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      /* Ingredients section: 2 columns after 7 items */
+      ul:has(li:nth-child(8)) {
+        column-count: 2;
+        column-gap: 1rem;
+      }
+      /* Balance columns when 14+ items */
+      ul:has(li:nth-child(15)) {
+        column-count: 2;
+      }
+    }
+
+    @page {
+      margin-bottom: 1in;
+      @bottom-center {
+        content: attr(data-source);
+        font-size: 0.875rem;
+        color: #666;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <div class="container">
+      <div class="top-heading">
+        <a href="/">Style Guide</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <h1>Go Documentation Server Style Guide</h1>
+    <p>
+      This style guide documents the visual design system used by the Go Documentation Server
+      running on localhost:8080. It includes typography, colors, components, and layout patterns.
+    </p>
+
+    <!-- COLORS SECTION -->
+    <div class="style-section">
+      <h2>Color Palette</h2>
+      <h3>Primary Colors</h3>
+      <div>
+        <div class="color-item">
+          <div class="color-swatch color-primary"></div>
+          <span class="color-label">#375eab<br>Primary Blue</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-light-blue"></div>
+          <span class="color-label">#e0ebf5<br>Light Blue</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-accent-blue"></div>
+          <span class="color-label">#5279c7<br>Accent Blue</span>
+        </div>
+      </div>
+
+      <h3>Neutral Colors</h3>
+      <div>
+        <div class="color-item">
+          <div class="color-swatch color-text-dark"></div>
+          <span class="color-label">#222<br>Text Dark</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-text-medium"></div>
+          <span class="color-label">#666<br>Text Medium</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-text-muted"></div>
+          <span class="color-label">#777<br>Text Muted</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-text-light"></div>
+          <span class="color-label">#999<br>Text Light</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-bg-light"></div>
+          <span class="color-label">#efefef<br>Background Light</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-white"></div>
+          <span class="color-label">#fff<br>White</span>
+        </div>
+      </div>
+
+      <h3>Highlight & Alert Colors</h3>
+      <div>
+        <div class="color-item">
+          <div class="color-swatch color-code-bg"></div>
+          <span class="color-label">#ffffd8<br>Code Background</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-highlight"></div>
+          <span class="color-label">#ffff00<br>Highlight</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-selection"></div>
+          <span class="color-label">#ff9632<br>Selection</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-alert"></div>
+          <span class="color-label">#aa0000<br>Alert</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-warning"></div>
+          <span class="color-label">#f9f9be<br>Warning</span>
+        </div>
+        <div class="color-item">
+          <div class="color-swatch color-comment"></div>
+          <span class="color-label">#006600<br>Comment</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TYPOGRAPHY SECTION -->
+    <div class="style-section">
+      <h2>Typography</h2>
+
+      <h3>Font Families</h3>
+      <ul>
+        <li><strong>Body Text:</strong> Arial, sans-serif</li>
+        <li><strong>Code/Monospace:</strong> Menlo, monospace</li>
+      </ul>
+
+      <h3>Headings</h3>
+      <div class="typography-example">
+        <h1>Heading 1 (1.75rem) <span class="text-muted">with muted text</span></h1>
+        <h2>Heading 2 (1.25rem) with Background</h2>
+        <h3>Heading 3 (1.25rem)</h3>
+        <h4>Heading 4 (1rem)</h4>
+      </div>
+
+      <h3>Body Text</h3>
+      <p>
+        This is a paragraph demonstrating the body text style. The font is Arial with a line-height
+        of 1.3 and color #222. Paragraphs have a maximum width of 50rem for optimal readability.
+      </p>
+
+      <h3>Links</h3>
+      <p>
+        This is a <a href="#">standard link</a> with color #375eab. Links have no underline by
+        default but show underline on hover.
+      </p>
+
+      <h3>Code</h3>
+      <p>Inline code looks like <code>this.isCode()</code> with Menlo monospace font.</p>
+
+      <pre>// Code block example
+func main() {
+    fmt.Println("Hello, World!")
+    <span class="comment">// This is a comment</span>
+}</pre>
+    </div>
+
+    <!-- BUTTONS SECTION -->
+    <div class="style-section">
+      <h2>Buttons</h2>
+
+      <h3>Primary Button</h3>
+      <a href="#" class="button button-primary">Primary Button</a>
+      <a href="#" class="button button-primary">Another Action</a>
+
+      <h3>Secondary Button</h3>
+      <a href="#" class="button button-secondary">Secondary Button</a>
+      <a href="#" class="button button-secondary">Cancel</a>
+
+      <h3>Button Specifications</h3>
+      <ul>
+        <li>Padding: 0.625rem (10px)</li>
+        <li>Font size: 1rem</li>
+        <li>Border radius: 0.3125rem (5px)</li>
+        <li>Border: 0.0625rem (1px) solid #375eab</li>
+      </ul>
+    </div>
+
+    <!-- FORMS SECTION -->
+    <div class="style-section">
+      <h2>Form Elements</h2>
+
+      <h3>Search Box</h3>
+      <div class="search-box">
+        <input type="search" placeholder="Search" aria-label="Search">
+        <button type="submit">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+        </button>
+      </div>
+
+      <h3>Text Input</h3>
+      <input type="text" placeholder="Enter text" class="text-input-example">
+    </div>
+
+    <!-- TABLES SECTION -->
+    <div class="style-section">
+      <h2>Tables</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Package Name</th>
+            <th>Synopsis</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="#">archive/tar</a></td>
+            <td>Package tar implements access to tar archives.</td>
+          </tr>
+          <tr>
+            <td><a href="#">archive/zip</a></td>
+            <td>Package zip provides support for reading and writing ZIP archives.</td>
+          </tr>
+          <tr>
+            <td><a href="#">bufio</a></td>
+            <td>Package bufio implements buffered I/O.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- LISTS SECTION -->
+    <div class="style-section">
+      <h2>Lists</h2>
+
+      <h3>Unordered List</h3>
+      <ul>
+        <li>First item in the list</li>
+        <li>Second item in the list</li>
+        <li>Third item in the list
+          <ul>
+            <li>Nested item one</li>
+            <li>Nested item two</li>
+          </ul>
+        </li>
+      </ul>
+
+      <h3>Ordered List</h3>
+      <ol>
+        <li>First step</li>
+        <li>Second step</li>
+        <li>Third step</li>
+      </ol>
+
+      <h3>Definition List</h3>
+      <dl>
+        <dt>Term 1</dt>
+        <dd>Definition for term 1</dd>
+        <dt>Term 2</dt>
+        <dd>Definition for term 2</dd>
+      </dl>
+    </div>
+
+    <!-- ALERTS SECTION -->
+    <div class="style-section">
+      <h2>Alerts & Messages</h2>
+
+      <h3>Inline Alert</h3>
+      <p>This is a normal paragraph. <span class="alert">This is an alert message.</span> Back to normal.</p>
+
+      <h3>Alert Box</h3>
+      <div class="alert-box">
+        This is an alert box for important notifications or download status.
+      </div>
+    </div>
+
+    <!-- SPACING SECTION -->
+    <div class="style-section">
+      <h2>Spacing System</h2>
+
+      <h3>Common Spacing Values</h3>
+      <ul>
+        <li><code>0.125rem</code> (2px) - Minimal spacing</li>
+        <li><code>0.3125rem</code> (5px) - Small spacing, border radius</li>
+        <li><code>0.5rem</code> (8px) - Medium-small spacing</li>
+        <li><code>0.625rem</code> (10px) - Standard padding</li>
+        <li><code>1.25rem</code> (20px) - Standard margins</li>
+        <li><code>1.313rem</code> (21px) - Top heading padding</li>
+        <li><code>1.875rem</code> (30px) - Large spacing</li>
+        <li><code>2.5rem</code> (40px) - Extra large spacing</li>
+      </ul>
+
+      <h3>Container</h3>
+      <ul>
+        <li><strong>Max width:</strong> 59.38rem (950px)</li>
+        <li><strong>Padding:</strong> 0 1.25rem</li>
+      </ul>
+    </div>
+
+    <!-- LAYOUT EXAMPLES -->
+    <div class="style-section">
+      <h2>Layout Examples</h2>
+
+      <h3>Topbar</h3>
+      <p>The topbar has:</p>
+      <ul>
+        <li>Background color: #e0ebf5</li>
+        <li>Height: 4rem (64px)</li>
+        <li>Contains branding and navigation</li>
+      </ul>
+
+      <h3>Content Container</h3>
+      <p>Content is centered with max-width of 59.38rem and horizontal padding of 1.25rem.</p>
+    </div>
+
+    <!-- RESPONSIVE SECTION -->
+    <div class="style-section">
+      <h2>Responsive Breakpoints</h2>
+
+      <ul>
+        <li><strong>Mobile:</strong> max-width: 43.75em (700px)</li>
+        <li><strong>Tablet:</strong> 43.75em - 62.5em</li>
+        <li><strong>Desktop:</strong> > 62.5em (1000px)</li>
+      </ul>
+
+      <h3>Mobile Adaptations</h3>
+      <ul>
+        <li>Font size reduced to 0.9375rem</li>
+        <li>Code font size reduced to 0.866rem</li>
+        <li>Padding reduced to 0.625rem</li>
+        <li>Margins reduced to 0.625rem</li>
+        <li>Package synopsis hidden in tables</li>
+      </ul>
+    </div>
+
+    <!-- COLLAPSE/EXPAND SECTION -->
+    <div class="style-section">
+      <h2>Collapse/Expand Functionality</h2>
+
+      <p>
+        The Go documentation uses a toggle system to show and hide content sections.
+        This is commonly used for code examples, package overviews, and index sections.
+      </p>
+
+      <h3>Toggle States</h3>
+      <ul>
+        <li><strong>toggle</strong> - Content is collapsed (hidden)</li>
+        <li><strong>toggleVisible</strong> - Content is expanded (visible)</li>
+      </ul>
+
+      <h3>Interactive Examples</h3>
+
+      <!-- Example 1: Initially Collapsed -->
+      <div id="example-collapsed" class="toggle">
+        <div class="collapsed">
+          <h3 class="toggleButton" title="Click to show content">Example: Initially Collapsed ▹</h3>
+        </div>
+        <div class="expanded">
+          <h3 class="toggleButton" title="Click to hide content">Example: Initially Collapsed ▾</h3>
+          <p>
+            This content was initially hidden. The triangle arrow at the end of the heading points down (▾) when expanded
+            and right (▹) when collapsed, following Go's documentation conventions.
+          </p>
+          <pre>// Example code block
+func example() {
+    fmt.Println("This section can be toggled")
+}</pre>
+        </div>
+      </div>
+
+      <!-- Example 2: Initially Expanded -->
+      <div id="example-expanded" class="toggleVisible">
+        <div class="collapsed">
+          <h3 class="toggleButton" title="Click to show content">Example: Initially Expanded ▹</h3>
+        </div>
+        <div class="expanded">
+          <h3 class="toggleButton" title="Click to hide content">Example: Initially Expanded ▾</h3>
+          <p>
+            This content is visible by default. Click the heading to collapse it.
+            This is the pattern used for the main "Overview" and "Index" sections.
+          </p>
+          <ul>
+            <li>Item one</li>
+            <li>Item two</li>
+            <li>Item three</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Example 3: Code Example Pattern -->
+      <div id="example-code" class="toggle">
+        <div class="collapsed">
+          <p class="toggleButton exampleHeading">▹ <span class="text">Example Code</span></p>
+        </div>
+        <div class="expanded">
+          <p class="toggleButton exampleHeading">▾ <span class="text">Example Code</span></p>
+          <p>This demonstrates the inline example pattern used in function documentation.</p>
+          <p><strong>Code:</strong></p>
+          <pre>scanner := bufio.NewScanner(os.Stdin)
+for scanner.Scan() {
+    fmt.Println(scanner.Text())
+}</pre>
+          <p><strong>Output:</strong></p>
+          <pre>Line 1
+Line 2
+Line 3</pre>
+        </div>
+      </div>
+
+      <h3>Implementation Details</h3>
+      <p>The toggle system uses two CSS classes and JavaScript click handlers:</p>
+
+      <h4>CSS Classes</h4>
+      <pre>.toggle > .collapsed { display: block; }
+.toggle > .expanded { display: none; }
+
+.toggleVisible > .collapsed { display: none; }
+.toggleVisible > .expanded { display: block; }
+
+.toggleButton { cursor: pointer; }</pre>
+
+      <h4>JavaScript Toggle Function</h4>
+      <pre>function bindToggle(el) {
+  el.querySelector('.toggleButton').addEventListener('click', function() {
+    if (el.classList.contains('toggle')) {
+      el.classList.remove('toggle');
+      el.classList.add('toggleVisible');
+    } else {
+      el.classList.remove('toggleVisible');
+      el.classList.add('toggle');
+    }
+  });
+}</pre>
+
+      <h3>Usage Patterns</h3>
+      <ul>
+        <li><strong>Overview sections:</strong> Start expanded (toggleVisible)</li>
+        <li><strong>Code examples:</strong> Start collapsed (toggle)</li>
+        <li><strong>Index sections:</strong> Start expanded (toggleVisible)</li>
+        <li><strong>Arrow indicators:</strong> ▹ (collapsed) and ▾ (expanded)</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div id="footer">
+    <p>
+      Style Guide based on Go Documentation Server (go1.22.4)<br>
+      Colors: #375eab (Primary) • #e0ebf5 (Light Blue) • #222 (Text)
+    </p>
+  </div>
+
+  <script>
+    // Toggle functionality for collapse/expand sections
+    function bindToggle(el) {
+      var toggleButtons = el.querySelectorAll('.toggleButton');
+      toggleButtons.forEach(function(button) {
+        button.addEventListener('click', function(e) {
+          // Only trigger on the closest toggle container
+          var closestToggle = e.target.closest('.toggle, .toggleVisible');
+          if (closestToggle !== el) {
+            return;
+          }
+
+          if (el.classList.contains('toggle')) {
+            el.classList.remove('toggle');
+            el.classList.add('toggleVisible');
+          } else {
+            el.classList.remove('toggleVisible');
+            el.classList.add('toggle');
+          }
+        });
+      });
+    }
+
+    // Initialize all toggle elements on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      var toggleElements = document.querySelectorAll('.toggle, .toggleVisible');
+      toggleElements.forEach(function(el) {
+        bindToggle(el);
+      });
+    });
+  </script>
+</body>
+</html>
