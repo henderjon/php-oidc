@@ -2,6 +2,11 @@
 
 // Pseudo-code - illustrates how this looks in a real app, not a runnable script. See
 // example/app-refresh-token.php for the runnable version, and example/pseudo/README.md.
+//
+// This shows the proactive path: check expiresIn before calling the resource server, and
+// refresh ahead of time if it is up. See app-refresh-token-reactive.php for the companion
+// reactive path - call first, refresh only on a 401 - which is the one actually load-bearing
+// for correctness; this proactive check is an optimization on top of it, not a replacement.
 
 use Oidc\Claims;
 use Oidc\Exceptions\AuthenticationFailedException;

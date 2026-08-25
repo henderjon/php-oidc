@@ -28,5 +28,11 @@ library's behavior actually verified against a fake provider.
   `withAllowUntrustedAudiences()`.
 - `app-userinfo-validation.php` - `fetchUserInfo()`'s subject check, and the extra
   issuer/audience checks that only apply to a signed response.
-- `app-refresh-token.php` - persisting a session across an access-token expiry, and
-  `refresh()`'s subject validation and refresh-token rotation.
+- `app-refresh-token.php` - the proactive path: checking `expiresIn` before calling the
+  resource server and refreshing ahead of time, persisting a session across an access-token
+  expiry, and `refresh()`'s subject validation and refresh-token rotation.
+- `app-refresh-token-reactive.php` - the reactive path: calling the resource server first,
+  refreshing only on a 401, retrying once, and never looping on a second 401. This is the
+  path actually load-bearing for correctness; the proactive check is an optimization on top
+  of it, not a replacement, since a provider can revoke a token early for reasons that have
+  nothing to do with its nominal `expires_in`.
