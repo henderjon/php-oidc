@@ -456,6 +456,80 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame([], $logger->records);
 	}
 
+	public function testValidateUserInfoSubjectPassesWhenItMatches(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => 'the-subject' ]);
+
+		$validator->validateUserInfoSubject($claims, 'the-subject');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateUserInfoSubjectFailsWhenMissing(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => null ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('missing');
+
+		$validator->validateUserInfoSubject($claims, 'the-subject');
+	}
+
+	public function testValidateUserInfoSubjectFailsWhenEmptyString(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => '' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('missing');
+
+		$validator->validateUserInfoSubject($claims, 'the-subject');
+	}
+
+	public function testValidateUserInfoSubjectFailsWhenItDoesNotMatch(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => 'someone-elses-subject' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('does not match the authenticated ID token subject');
+
+		$validator->validateUserInfoSubject($claims, 'the-subject');
+	}
+
+	public function testValidateUserInfoSubjectLogsExpectedAndActualOnMismatch(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'sub' => 'someone-elses-subject' ]);
+
+		try {
+			$validator->validateUserInfoSubject($claims, 'the-subject');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('the-subject', $records[0]['context']['expected']);
+		$this->assertSame('someone-elses-subject', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateUserInfoSubjectLogsOnMissing(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'sub' => null ]);
+
+		try {
+			$validator->validateUserInfoSubject($claims, 'the-subject');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: UserInfo response is missing the required sub claim', $records[0]['message']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
 		$logger    = new ArrayLogger;
 		$validator = new ClaimsValidator($logger);

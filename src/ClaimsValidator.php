@@ -301,4 +301,39 @@ final class ClaimsValidator {
 		}
 	}
 
+	/**
+	 * OpenID Connect Core 1.0 §5.3.2 (Successful UserInfo Response): "The sub (subject) Claim
+	 * MUST always be returned in the UserInfo Response... The sub Claim in the UserInfo
+	 * Response MUST be verified to exactly match the sub Claim in the ID Token; if they do not
+	 * match, the UserInfo Response values MUST NOT be used." This guards against token
+	 * substitution - an access token valid for a different session, presented to the userinfo
+	 * endpoint, would otherwise return a different user's claims under the caller's identity.
+	 *
+	 * Unconditional on whether the response was signed - unlike validateUserInfoIssuer() and
+	 * validateUserInfoAudience() below, §5.3.2 does not scope this requirement to "if signed".
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateUserInfoSubject( Claims $claims, string $expectedSubject ): void {
+		$actual = $claims->get('sub');
+
+		if( !is_string($actual) || $actual === '' ) {
+			$this->logger->error('OIDC: UserInfo response is missing the required sub claim', [
+				'state' => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('UserInfo response is missing the required sub claim');
+		}
+
+		if( $actual !== $expectedSubject ) {
+			$this->logger->error('OIDC: UserInfo response subject does not match the authenticated ID token subject', [
+				'expected' => $expectedSubject,
+				'actual'   => $actual,
+				'state'    => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('UserInfo response subject does not match the authenticated ID token subject');
+		}
+	}
+
 }
