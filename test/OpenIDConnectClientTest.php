@@ -99,6 +99,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
 			'access_token' => 'the-access-token',
 			'id_token'     => $idToken,
+			'expires_in'   => 3600,
 		], JSON_THROW_ON_ERROR), 200));
 
 		$response = new IncomingAuthorizationResponse([ 'code' => 'the-code', 'state' => $params['state'] ]);
@@ -107,6 +108,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame('user-1', $result->claims->get('sub'));
 		$this->assertSame('the-access-token', $result->accessToken);
 		$this->assertSame($idToken, $result->idToken);
+		$this->assertSame(3600, $result->expiresIn);
 	}
 
 	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenMissingSub(): void {
@@ -852,6 +854,42 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: callback is missing the id_token', $records[0]['message']);
 		$this->assertSame($params['state'], $records[0]['context']['state']);
+	}
+
+	public function testRefreshWithNoNewIdTokenReturnsTheOriginalIdTokenAndClaims(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-new-access-token',
+			'expires_in'   => 3600,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$originalClaims = new Claims([ 'iss' => self::ISSUER, 'sub' => 'user-1', 'aud' => self::CLIENT_ID ]);
+
+		$result = $this->makeClient($fetcher)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $originalClaims);
+
+		$this->assertSame('the-original-id-token', $result->idToken);
+		$this->assertSame($originalClaims, $result->claims);
+		$this->assertSame('the-new-access-token', $result->accessToken);
+		$this->assertSame(3600, $result->expiresIn);
+	}
+
+	public function testRefreshWithAMatchingNewIdTokenSucceeds(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+
+		$newIdToken = $fixture->sign([ 'iss' => self::ISSUER, 'sub' => 'user-1', 'aud' => self::CLIENT_ID ]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-new-access-token',
+			'id_token'     => $newIdToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$originalClaims = new Claims([ 'iss' => self::ISSUER, 'sub' => 'user-1', 'aud' => self::CLIENT_ID ]);
+
+		$result = $this->makeClient($fetcher)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $originalClaims);
+
+		$this->assertSame($newIdToken, $result->idToken);
+		$this->assertSame('user-1', $result->claims->get('sub'));
 	}
 
 	public function testRequestClientCredentialsToken(): void {

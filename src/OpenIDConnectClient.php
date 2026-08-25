@@ -5,6 +5,7 @@ namespace Oidc;
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\UserInfoRequestException;
+use Oidc\Interfaces\RefreshTokenClientInterface;
 use Oidc\Interfaces\TokenGrantClientInterface;
 use Oidc\Interfaces\UserInfoClientInterface;
 use Psr\Log\LoggerInterface;
@@ -25,7 +26,8 @@ use Psr\Log\NullLogger;
  */
 final class OpenIDConnectClient implements
 	TokenGrantClientInterface,
-	UserInfoClientInterface {
+	UserInfoClientInterface,
+	RefreshTokenClientInterface {
 
 	private const DEFAULT_SCOPE = 'openid';
 
@@ -36,6 +38,7 @@ final class OpenIDConnectClient implements
 		private readonly ClaimsValidator $claimsValidator,
 		private readonly TokenEndpointClient $tokenEndpointClient,
 		private readonly HttpFetcherInterface $httpFetcher,
+		private readonly RefreshTokenClient $refreshTokenClient,
 		private readonly LoggerInterface $logger = new NullLogger,
 	) {
 	}
@@ -94,7 +97,7 @@ final class OpenIDConnectClient implements
 		// authorization-endpoint-issued case below.
 		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: false);
 
-		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken);
+		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken, $tokenResult->expiresIn);
 	}
 
 	public function buildImplicitFlowRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect {
@@ -131,6 +134,10 @@ final class OpenIDConnectClient implements
 
 	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [], array $extraParams = [] ): TokenResult {
 		return $this->tokenEndpointClient->requestClientCredentialsToken($config, $scopes, $extraParams);
+	}
+
+	public function refresh( OpenIDConnectClientConfig $config, string $refreshToken, string $originalIdToken, Claims $originalClaims ): AuthenticationResult {
+		return $this->refreshTokenClient->refresh($config, $refreshToken, $originalIdToken, $originalClaims);
 	}
 
 	public function fetchUserInfo( OpenIDConnectClientConfig $config, string $accessToken, string $expectedSubject ): Claims {
