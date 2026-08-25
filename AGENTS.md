@@ -114,6 +114,15 @@ subclass hooks. This library replaces that with plain constructor injection - ca
 - When a value is defined by a spec (PKCE's S256 challenge, JWT claims), assert against a known test vector from
   that spec where one exists, not only against the library's own encoding of the same input.
 
+## Documentation
+
+- `docs/index.html` is the rendered public API reference (served via GitHub Pages from `dev`). Keep it in sync with
+  any change to the public API in the same change, not a follow-up: a new class, interface, method, constructor
+  parameter, `with*()` wither, enum case, or exception type all need a matching update there.
+- It documents the public surface only. Internal collaborators (`AuthorizationStateStore`,
+  `ProviderMetadataResolver`, `IdTokenVerifier`, `ClaimsValidator`, `TokenEndpointClient`, and similar) are
+  deliberately excluded - see the page's own footer for the reasoning.
+
 ## Git
 
 - Default branch is `dev`. Treat it as the merge target for pull requests, not a branch to commit to directly.

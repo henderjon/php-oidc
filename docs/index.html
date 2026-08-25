@@ -346,9 +346,12 @@ $result   = $client-&gt;completeAuthorizationCodeFlow($config, $response);
 
 $subject = $result-&gt;claims-&gt;get('sub');</pre>
         <p>
-          See the <a href="https://github.com/henderjon/php-oidc/tree/main/example">example/</a>
+          See the <a href="https://github.com/henderjon/php-oidc/tree/dev/example">example/</a>
           directory for runnable scripts covering PKCE, host and algorithm allowlisting, claim and
-          audience validation, UserInfo, and refresh tokens.
+          audience validation, UserInfo, and refresh tokens - or
+          <a href="https://github.com/henderjon/php-oidc/tree/dev/example/pseudo">example/pseudo/</a>
+          for a shorter, non-runnable version of each one, shaped like a real app's login route,
+          callback route, or background job instead of a mock harness.
         </p>
       </div>
     </div>
