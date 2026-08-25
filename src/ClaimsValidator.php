@@ -50,10 +50,11 @@ final class ClaimsValidator {
 		string $expectedClientId,
 		?string $expectedNonce,
 		?int $maxLifetimeSeconds = null,
+		bool $allowUntrustedAudiences = false,
 	): void {
 		$this->validateRequiredClaims($claims);
 		$this->validateIssuer($claims, $expectedIssuer);
-		$this->validateAudience($claims, $expectedClientId);
+		$this->validateAudience($claims, $expectedClientId, $allowUntrustedAudiences);
 		$this->validateNonce($claims, $expectedNonce);
 		$this->validateTokenLifetime($claims, $maxLifetimeSeconds);
 	}
@@ -160,11 +161,36 @@ final class ClaimsValidator {
 	 * strings per the JWT spec; `$expectedAudience` mirrors that so a
 	 * caller can either pin one exact value or accept any of several.
 	 *
+	 * OpenID Connect Core 1.0 §3.1.3.7 step 3 is two separate MUSTs, not one: the token
+	 * "MUST be rejected if [it] does not list the Client as a valid audience, OR IF IT
+	 * CONTAINS ADDITIONAL AUDIENCES NOT TRUSTED BY THE CLIENT." Both are checked by default -
+	 * a caller widening `$expectedAudience` beyond its own client ID is an explicit statement
+	 * of which extra audiences it trusts, and anything in `aud` outside that set is, by
+	 * definition, untrusted. `$allowUntrustedAudiences` (see
+	 * OpenIDConnectClientConfig::$allowUntrustedAudiences) opts back out of that second half
+	 * for the rare case where a caller cannot safely enumerate every audience a provider's
+	 * tokens might legitimately carry - the first half (the client's own expected value must
+	 * be present) is never optional.
+	 *
+	 * The full expected and actual audience sets are logged whenever an untrusted value is
+	 * involved - on rejection, or on an `allowUntrustedAudiences` opt-out that actually let
+	 * one through - not just the offending values. Debugging should never require separately
+	 * reconstructing what a token actually claimed or what this call expected.
+	 *
+	 * A malformed `aud` array - one containing a non-string entry alongside otherwise valid
+	 * ones - is a different problem from an untrusted-but-well-formed extra value, and
+	 * `$allowUntrustedAudiences` governs both the same way: by default (`false`), a malformed
+	 * entry is rejected outright rather than silently discarded, since silently discarding it
+	 * would let a token with a genuinely malformed claim pass as if it had never carried the
+	 * bad entry at all. `true` relaxes this the same way it relaxes untrusted-but-well-formed
+	 * extras - a malformed entry is filtered out and validation proceeds on whatever
+	 * well-formed values remain, same as before this check existed.
+	 *
 	 * @param list<string>|string $expectedAudience
 	 * @throws AuthenticationFailedException
 	 */
-	public function validateAudience( Claims $claims, array|string $expectedAudience ): void {
-		$actual   = $this->toStringList($claims->get('aud'));
+	public function validateAudience( Claims $claims, array|string $expectedAudience, bool $allowUntrustedAudiences = false ): void {
+		$actual   = $this->toActualAudienceList($claims->get('aud'), $allowUntrustedAudiences);
 		$expected = $this->toStringList($expectedAudience);
 
 		if( array_intersect($expected, $actual) === [] ) {
@@ -176,6 +202,36 @@ final class ClaimsValidator {
 
 			throw new AuthenticationFailedException('ID token audience does not match any of the expected values');
 		}
+
+		$untrusted = array_values(array_diff($actual, $expected));
+
+		if( $untrusted === [] ) {
+			return;
+		}
+
+		if( $allowUntrustedAudiences ) {
+			// Not a rejection - allowUntrustedAudiences deliberately lets this through - but
+			// an untrusted value actually being present (not just theoretically possible) is
+			// exactly the case this opt-out exists for, and it warrants standing out from
+			// routine operational noise rather than passing completely silently.
+			$this->logger->alert('OIDC: ID token audience contains untrusted values, allowed through by configuration', [
+				'expected'  => $expected,
+				'actual'    => $actual,
+				'untrusted' => $untrusted,
+				'state'     => $this->state,
+			]);
+
+			return;
+		}
+
+		$this->logger->error('OIDC: ID token audience contains additional values not trusted by this client', [
+			'expected'  => $expected,
+			'actual'    => $actual,
+			'untrusted' => $untrusted,
+			'state'     => $this->state,
+		]);
+
+		throw new AuthenticationFailedException('ID token audience contains additional values not trusted by this client');
 	}
 
 	/**
@@ -187,6 +243,37 @@ final class ClaimsValidator {
 		}
 
 		return is_string($value) ? [ $value ] : [];
+	}
+
+	/**
+	 * Like toStringList(), but for the actual `aud` claim specifically - an untrusted value,
+	 * unlike an `$expectedAudience` a caller wrote themselves - so a malformed entry here
+	 * gets a real decision instead of toStringList()'s silent array_filter(). A bare non-array,
+	 * non-string `aud` (already handled correctly as an empty list - it fails the "must
+	 * contain the expected value" check on its own) is unaffected; this only changes behavior
+	 * for an array containing a mix of valid strings and something else.
+	 *
+	 * @throws AuthenticationFailedException
+	 * @return list<string>
+	 */
+	private function toActualAudienceList( mixed $value, bool $allowUntrustedAudiences ): array {
+		if( !is_array($value) ) {
+			return $this->toStringList($value);
+		}
+
+		$malformed = array_values(array_filter($value, static fn ( mixed $item ): bool => !is_string($item)));
+
+		if( $malformed !== [] && !$allowUntrustedAudiences ) {
+			$this->logger->error('OIDC: ID token audience contains a malformed value', [
+				'aud'       => $value,
+				'malformed' => $malformed,
+				'state'     => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('ID token audience contains a malformed value');
+		}
+
+		return array_values(array_filter($value, 'is_string'));
 	}
 
 	/**
