@@ -18,4 +18,5 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
       - run: composer install --prefer-dist --no-interaction --no-progress
+      - run: composer audit --locked
       - run: vendor/bin/phpunit

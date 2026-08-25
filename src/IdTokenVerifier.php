@@ -91,6 +91,17 @@ final class IdTokenVerifier {
 
 	/**
 	 * @param list<string> $allowedAlgorithms See OpenIDConnectClientConfig::$allowedAlgorithms.
+	 * @param bool $requireAtHash OpenID Connect Core 1.0 §3.2.2.10 makes `at_hash` REQUIRED,
+	 *                             not merely checked-if-present, specifically when the ID Token
+	 *                             is issued from the authorization endpoint together with an
+	 *                             access token (the Implicit Flow's `id_token token` response
+	 *                             type, and any Hybrid Flow combination). The Authorization
+	 *                             Code Flow's ID token, issued from the token endpoint, has
+	 *                             `at_hash` as OPTIONAL per §3.1.3.6 even though an access
+	 *                             token accompanies it there too - callers on that flow must
+	 *                             leave this `false`. Has no effect when `$accessToken` is
+	 *                             null; `at_hash` is never required for an ID token issued
+	 *                             with no access token alongside it.
 	 * @throws AuthenticationFailedException
 	 * @throws ProviderDiscoveryException
 	 */
@@ -100,6 +111,7 @@ final class IdTokenVerifier {
 		string $clientSecret,
 		array $allowedAlgorithms = [ 'RS256' ],
 		?string $accessToken = null,
+		bool $requireAtHash = false,
 	): Claims {
 		if( strlen($idToken) > self::MAX_ID_TOKEN_LENGTH_BYTES ) {
 			$this->logger->error('OIDC: ID token exceeds the maximum allowed length', [
@@ -135,7 +147,7 @@ final class IdTokenVerifier {
 
 		$claims = $this->decodeAndVerifySignature($idToken, $key);
 
-		$this->verifyAccessTokenHash($claims, $alg, $accessToken);
+		$this->verifyAccessTokenHash($claims, $alg, $accessToken, $requireAtHash);
 
 		return $claims;
 	}
@@ -206,10 +218,20 @@ final class IdTokenVerifier {
 	/**
 	 * @throws AuthenticationFailedException
 	 */
-	private function verifyAccessTokenHash( Claims $claims, string $alg, ?string $accessToken ): void {
+	private function verifyAccessTokenHash( Claims $claims, string $alg, ?string $accessToken, bool $requireAtHash ): void {
+		if( $accessToken === null ) {
+			return;
+		}
+
 		$atHash = $claims->get('at_hash');
 
-		if( $atHash === null || $accessToken === null ) {
+		if( $atHash === null ) {
+			if( $requireAtHash ) {
+				$this->logger->error('OIDC: ID token is missing the required at_hash claim for an access token issued alongside it', [ 'alg' => $alg, 'state' => $this->state ]);
+
+				throw new AuthenticationFailedException('ID token is missing the required at_hash claim');
+			}
+
 			return;
 		}
 

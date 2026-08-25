@@ -489,6 +489,69 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
 
+	public function testVerifyAllowsAMissingAtHashByDefaultEvenWithAnAccessToken(): void {
+		// requireAtHash defaults to false - matches the Authorization Code Flow, where OpenID
+		// Connect Core 1.0 §3.1.3.6 makes at_hash OPTIONAL even though an access token
+		// accompanies the ID token there too.
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: 'the-access-token');
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyRejectsAMissingAtHashWhenRequiredAndAnAccessTokenIsPresent(): void {
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('missing the required at_hash claim');
+
+		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: 'the-access-token', requireAtHash: true);
+	}
+
+	public function testVerifyDoesNotRequireAtHashWhenNoAccessTokenIsPresentEvenIfRequired(): void {
+		// requireAtHash only ever matters alongside an access token - OpenID Connect Core 1.0
+		// §3.2.2.10: at_hash "MAY NOT be used when no Access Token is issued."
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], requireAtHash: true);
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyAcceptsAMatchingAtHashWhenRequired(): void {
+		$accessToken  = 'the-access-token';
+		$digest       = hash('sha256', $accessToken, true);
+		$expectedHash = JWT::urlsafeB64Encode(substr($digest, 0, 16));
+
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => $expectedHash ], self::CLIENT_SECRET, 'HS256');
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: $accessToken, requireAtHash: true);
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyLogsARequiredButMissingAtHash(): void {
+		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: 'the-access-token', requireAtHash: true);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('HS256', $records[0]['context']['alg']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testVerifyEncryptedTokenLogsTheHeader(): void {
 		$header   = JWT::urlsafeB64Encode(json_encode([ 'alg' => 'RSA-OAEP', 'enc' => 'A256GCM' ], JSON_THROW_ON_ERROR));
 		$payload  = JWT::urlsafeB64Encode('encrypted-payload');
