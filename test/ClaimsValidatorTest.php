@@ -456,6 +456,175 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame([], $logger->records);
 	}
 
+	public function testValidateUserInfoSubjectPassesWhenItMatches(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => 'the-subject' ]);
+
+		$validator->validateUserInfoSubject($claims, 'the-subject');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateUserInfoSubjectFailsWhenMissing(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => null ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('missing');
+
+		$validator->validateUserInfoSubject($claims, 'the-subject');
+	}
+
+	public function testValidateUserInfoSubjectFailsWhenEmptyString(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => '' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('missing');
+
+		$validator->validateUserInfoSubject($claims, 'the-subject');
+	}
+
+	public function testValidateUserInfoSubjectFailsWhenItDoesNotMatch(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => 'someone-elses-subject' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('does not match the authenticated ID token subject');
+
+		$validator->validateUserInfoSubject($claims, 'the-subject');
+	}
+
+	public function testValidateUserInfoSubjectLogsExpectedAndActualOnMismatch(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'sub' => 'someone-elses-subject' ]);
+
+		try {
+			$validator->validateUserInfoSubject($claims, 'the-subject');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('the-subject', $records[0]['context']['expected']);
+		$this->assertSame('someone-elses-subject', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateUserInfoSubjectLogsOnMissing(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'sub' => null ]);
+
+		try {
+			$validator->validateUserInfoSubject($claims, 'the-subject');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: UserInfo response is missing the required sub claim', $records[0]['message']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateUserInfoIssuerPassesWhenItMatches(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iss' => 'https://issuer.example.com' ]);
+
+		$validator->validateUserInfoIssuer($claims, 'https://issuer.example.com');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateUserInfoIssuerFailsWhenItDoesNotMatch(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'iss' => 'https://other.example.com' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('UserInfo response issuer');
+
+		$validator->validateUserInfoIssuer($claims, 'https://issuer.example.com');
+	}
+
+	public function testValidateUserInfoIssuerLogsExpectedAndActual(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'iss' => 'https://other.example.com' ]);
+
+		try {
+			$validator->validateUserInfoIssuer($claims, 'https://issuer.example.com');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('https://issuer.example.com', $records[0]['context']['expected']);
+		$this->assertSame('https://other.example.com', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateUserInfoAudiencePassesWhenClientIdIsIncluded(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'some-other-resource' ] ]);
+
+		$validator->validateUserInfoAudience($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateUserInfoAudiencePassesWithASingleStringAudience(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => 'the-client-id' ]);
+
+		$validator->validateUserInfoAudience($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateUserInfoAudienceDoesNotRejectUntrustedExtraValues(): void {
+		// Unlike the ID token's validateAudience(), §5.3.2 places no "no untrusted extra
+		// audiences" requirement on the UserInfo response - an extra value alongside the
+		// client id must not fail this check.
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-extra-audience' ] ]);
+
+		$validator->validateUserInfoAudience($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateUserInfoAudienceFailsWhenClientIdIsNotIncluded(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => 'someone-elses-client-id' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('UserInfo response audience');
+
+		$validator->validateUserInfoAudience($claims, 'the-client-id');
+	}
+
+	public function testValidateUserInfoAudienceLogsExpectedAndActual(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'aud' => 'someone-elses-client-id' ]);
+
+		try {
+			$validator->validateUserInfoAudience($claims, 'the-client-id');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('the-client-id', $records[0]['context']['expected']);
+		$this->assertSame([ 'someone-elses-client-id' ], $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
 		$logger    = new ArrayLogger;
 		$validator = new ClaimsValidator($logger);

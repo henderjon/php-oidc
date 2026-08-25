@@ -786,23 +786,102 @@ class OpenIDConnectClientTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse(json_encode([ 'sub' => 'user-1', 'email' => 'user@example.com' ], JSON_THROW_ON_ERROR), 200, 'application/json'));
 
-		$claims = $this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token');
+		$claims = $this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 
 		$this->assertSame('user-1', $claims->get('sub'));
 		$this->assertSame('user@example.com', $claims->get('email'));
 		$this->assertSame('Bearer the-access-token', $fetcher->requests[0]['headers']['Authorization']);
 	}
 
+	/**
+	 * OpenID Connect Core 1.0 §5.3.2: iss/aud are only REQUIRED "if signed" - a plain JSON
+	 * UserInfo response carrying neither must still pass once its sub matches.
+	 */
+	public function testFetchUserInfoJsonDoesNotRequireIssuerOrAudience(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR), 200, 'application/json'));
+
+		$claims = $this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testFetchUserInfoJsonRejectsASubjectMismatch(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR), 200, 'application/json'));
+
+		$this->expectException(UserInfoRequestException::class);
+
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-2');
+	}
+
+	public function testFetchUserInfoJsonRejectsAMissingSubject(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse(json_encode([ 'email' => 'user@example.com' ], JSON_THROW_ON_ERROR), 200, 'application/json'));
+
+		$this->expectException(UserInfoRequestException::class);
+
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+	}
+
 	public function testFetchUserInfoSignedResponse(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
-		$idToken = $fixture->sign([ 'sub' => 'user-1' ]);
+		$idToken = $fixture->sign([ 'sub' => 'user-1', 'iss' => self::ISSUER, 'aud' => self::CLIENT_ID ]);
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse($idToken, 200, 'application/jwt'));
 
-		$claims = $this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token');
+		$claims = $this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 
 		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testFetchUserInfoSignedResponseRejectsAWrongIssuer(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$idToken = $fixture->sign([ 'sub' => 'user-1', 'iss' => 'https://other.example.com', 'aud' => self::CLIENT_ID ]);
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse($idToken, 200, 'application/jwt'));
+
+		$this->expectException(UserInfoRequestException::class);
+
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+	}
+
+	public function testFetchUserInfoSignedResponseRejectsAWrongAudience(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$idToken = $fixture->sign([ 'sub' => 'user-1', 'iss' => self::ISSUER, 'aud' => 'someone-elses-client-id' ]);
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse($idToken, 200, 'application/jwt'));
+
+		$this->expectException(UserInfoRequestException::class);
+
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+	}
+
+	public function testFetchUserInfoSignedResponseRejectsAWrongSubject(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$idToken = $fixture->sign([ 'sub' => 'user-1', 'iss' => self::ISSUER, 'aud' => self::CLIENT_ID ]);
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse($idToken, 200, 'application/jwt'));
+
+		$this->expectException(UserInfoRequestException::class);
+
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-2');
+	}
+
+	public function testFetchUserInfoSignedResponseRejectsAMissingSubject(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$idToken = $fixture->sign([ 'sub' => null, 'iss' => self::ISSUER, 'aud' => self::CLIENT_ID ]);
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse($idToken, 200, 'application/jwt'));
+
+		$this->expectException(UserInfoRequestException::class);
+
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 	}
 
 	public function testFetchUserInfoThrowsOnNonSuccessStatus(): void {
@@ -811,7 +890,7 @@ class OpenIDConnectClientTest extends TestCase {
 
 		$this->expectException(UserInfoRequestException::class);
 
-		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token');
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 	}
 
 	public function testFetchUserInfoThrowsOnUnexpectedContentType(): void {
@@ -820,7 +899,7 @@ class OpenIDConnectClientTest extends TestCase {
 
 		$this->expectException(UserInfoRequestException::class);
 
-		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token');
+		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 	}
 
 }
