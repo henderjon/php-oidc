@@ -237,7 +237,23 @@ final class IdTokenVerifier {
 		$jwks = $this->fetchJwks($jwksUri);
 		$this->assertKeyCountWithinLimit($jwks, $jwksUri);
 
-		$keySet = JWK::parseKeySet($jwks, $alg);
+		// firebase/php-jwt throws its own exception (UnexpectedValueException,
+		// InvalidArgumentException, ...) for a malformed, missing, or empty "keys" member -
+		// none of which is an AuthenticationFailedException. Every other malformed-input path
+		// in this class becomes one of those, logged first; this call is not an exception to
+		// that just because the rejection happens inside a dependency instead of this class's
+		// own code.
+		try {
+			$keySet = JWK::parseKeySet($jwks, $alg);
+		} catch( \Exception $e ) {
+			$this->logger->error('OIDC: unable to parse the JWKS document', [
+				'jwks_uri'  => $jwksUri,
+				'exception' => $e,
+				'state'     => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('Unable to parse the JWKS document', previous: $e);
+		}
 
 		$selectedKid = match( true ) {
 			$kid !== null && isset($keySet[$kid]) => $kid,
@@ -311,7 +327,14 @@ final class IdTokenVerifier {
 			return;
 		}
 
-		foreach( $jwks['keys'] as $index => $entry ) {
+		// A malformed "keys" value never reaches here today - JWK::parseKeySet() above
+		// already rejects every shape this cast would otherwise let through, before this
+		// method is ever called. Matches assertKeyCountWithinLimit()'s own guard anyway,
+		// rather than leaving this method's safety implicitly dependent on a specific
+		// firebase/php-jwt version continuing to reject exactly what it does today.
+		$keys = is_array($jwks['keys'] ?? null) ? $jwks['keys'] : [];
+
+		foreach( $keys as $index => $entry ) {
 			if( ( $entry['kid'] ?? (string)$index ) !== $selectedKid ) {
 				continue;
 			}
