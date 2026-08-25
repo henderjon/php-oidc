@@ -75,6 +75,11 @@ final class OpenIDConnectClientConfig {
 	 *                                                        legitimately carry audiences this integration cannot
 	 *                                                        safely enumerate up front. False by default - both
 	 *                                                        checks run unless explicitly opted out of.
+	 * @param ClientAuthMethod         $clientAuthMethod     Which OpenID Connect Core 1.0 §9 method
+	 *                                                        `ClientAuthenticator` uses for a confidential client.
+	 *                                                        Defaults to `Basic`, the spec default when no method is
+	 *                                                        registered. Has no effect on a public client (empty
+	 *                                                        `clientSecret`) - see `ClientAuthMethod`'s own docblock.
 	 */
 	public function __construct(
 		public readonly string $clientId,
@@ -93,6 +98,7 @@ final class OpenIDConnectClientConfig {
 		public readonly ?int $maxTokenLifetimeSeconds = null,
 		public readonly bool $allowUntrustedAudiences = false,
 		public readonly bool $allowAnyHost = false,
+		public readonly ClientAuthMethod $clientAuthMethod = ClientAuthMethod::Basic,
 	) {
 	}
 
@@ -101,7 +107,7 @@ final class OpenIDConnectClientConfig {
 			$clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -110,7 +116,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -119,7 +125,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -128,7 +134,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -137,7 +143,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -150,7 +156,7 @@ final class OpenIDConnectClientConfig {
 			array_values(array_unique([ ...$this->scopes, ...$scopes ])),
 			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -162,7 +168,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -174,7 +180,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -186,7 +192,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -195,7 +201,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -204,7 +210,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -223,7 +229,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -239,7 +245,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -251,7 +257,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -260,7 +266,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$allowUntrustedAudiences, $this->allowAnyHost,
+			$allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
 		);
 	}
 
@@ -272,7 +278,16 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $allowAnyHost,
+			$this->allowUntrustedAudiences, $allowAnyHost, $this->clientAuthMethod,
+		);
+	}
+
+	public function withClientAuthMethod( ClientAuthMethod $clientAuthMethod ): self {
+		return new self(
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $clientAuthMethod,
 		);
 	}
 
