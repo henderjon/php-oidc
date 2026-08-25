@@ -73,6 +73,7 @@ final class TokenResult {
 		return match( $field ) {
 			self::TOKEN_TYPE, self::REFRESH_TOKEN, self::ID_TOKEN, self::SCOPE => is_string($value),
 			self::EXPIRES_IN => is_int($value),
+			default => throw new \LogicException("Unexpected field $field in token response"),
 		};
 	}
 
