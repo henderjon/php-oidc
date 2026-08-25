@@ -18,11 +18,17 @@ composer update -W vendor/package       # update one dependency with its own dep
 php example/app.php                     # run the example application (see example/README.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs `vendor/bin/phpunit` against PHP 8.1 through 8.5. There is no configured
-linter, static analyzer, or `.editorconfig` in this repository yet - do not assume `phpcs`/`phpstan` exist.
+CI (`.github/workflows/ci.yml`) runs `composer audit --locked` and `vendor/bin/phpunit` against PHP 8.1 through 8.5.
+There is no configured linter, static analyzer, or `.editorconfig` in this repository yet - do not assume
+`phpcs`/`phpstan` exist.
 
 - **Always scope dependency updates.** Use `composer update -W <vendor>/<package>` for a specific package plus its
   dependents. Never run an unbounded `composer update` - it can pull in breaking changes across the whole tree.
+- **Dependency update policy.** Dependabot opens monthly update PRs for both Composer packages and GitHub Actions
+  (`.github/dependabot.yml`) - review and merge those promptly rather than letting `composer.lock` drift.
+  `composer audit --locked` runs in CI on every push and PR, so a runtime dependency with a known advisory fails
+  the build instead of passing unnoticed; review the advisory and update the affected package (scoped, per the
+  rule above) before merging past a failure there.
 
 ## Architecture
 
