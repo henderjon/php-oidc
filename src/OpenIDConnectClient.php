@@ -236,6 +236,16 @@ final class OpenIDConnectClient implements
 		$summary = $response->errorSummary();
 
 		if( $summary !== null ) {
+			// This runs on every callback before the state is even checked - a bogus,
+			// unauthenticated request reaches it just as easily as a real one. Log before
+			// throwing, matching every other rejection in this class, so a provider-reported
+			// error is never silent just because this particular caller does not log the
+			// exception itself.
+			$this->logger->error('OIDC: provider returned an error on the callback', [
+				'error'             => $response->error,
+				'error_description' => $response->errorDescription,
+			]);
+
 			throw new AuthenticationFailedException("Provider returned an error: {$summary}");
 		}
 	}
