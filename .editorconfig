@@ -17,3 +17,8 @@ indent_size = 2
 
 [*.md]
 indent_size = 2
+
+[Makefile]
+# Recipe lines require a literal tab - GNU Make's own syntax, not a style choice this file
+# can override.
+indent_style = tab

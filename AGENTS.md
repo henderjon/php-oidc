@@ -12,9 +12,10 @@ generic, and stable. Breaking changes are allowed but must be deliberate and not
 
 ```sh
 composer install                        # install dependencies
-vendor/bin/phpunit                      # run the full test suite
+make phpunit                            # run the full test suite (vendor/bin/phpunit)
+make phpstan                            # run static analysis (level 8, config in phpstan.neon)
+make test                               # both of the above
 vendor/bin/phpunit --filter TestClassName   # run one test class
-vendor/bin/phpstan analyse              # run static analysis (level 8, config in phpstan.neon)
 composer update -W vendor/package       # update one dependency with its own dependents
 php example/app.php                     # run the example application (see example/README.md)
 ```
