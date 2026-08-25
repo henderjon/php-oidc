@@ -3,10 +3,11 @@
 namespace Oidc;
 
 /**
- * Applies RFC 6749 §2.3.1 client authentication to a token/introspection/
- * revocation request: HTTP Basic when a client secret is configured,
- * falling back to identifying the client via `client_id` in the body for
- * a public client with none.
+ * Applies one of OpenID Connect Core 1.0 §9's Client Authentication methods (see
+ * ClientAuthMethod) to a token/introspection/revocation request - HTTP Basic or client
+ * credentials in the body, per `$config->clientAuthMethod` - falling back to identifying the
+ * client via a bare `client_id` in the body for a public client with no secret, regardless of
+ * which method is configured.
  */
 final class ClientAuthenticator {
 
@@ -19,9 +20,18 @@ final class ClientAuthenticator {
 
 		if( $config->clientSecret === '' ) {
 			$params['client_id'] = $config->clientId;
-		} else {
-			$headers['Authorization'] = 'Basic ' . base64_encode(rawurlencode($config->clientId) . ':' . rawurlencode($config->clientSecret));
+
+			return [ $params, $headers ];
 		}
+
+		if( $config->clientAuthMethod === ClientAuthMethod::Post ) {
+			$params['client_id']     = $config->clientId;
+			$params['client_secret'] = $config->clientSecret;
+
+			return [ $params, $headers ];
+		}
+
+		$headers['Authorization'] = 'Basic ' . base64_encode(rawurlencode($config->clientId) . ':' . rawurlencode($config->clientSecret));
 
 		return [ $params, $headers ];
 	}

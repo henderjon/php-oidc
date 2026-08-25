@@ -33,6 +33,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertNull($config->maxTokenLifetimeSeconds);
 		$this->assertFalse($config->allowUntrustedAudiences);
 		$this->assertFalse($config->allowAnyHost);
+		$this->assertSame(ClientAuthMethod::Basic, $config->clientAuthMethod);
 	}
 
 	public function testWithClientId(): void {
@@ -207,6 +208,14 @@ class OpenIDConnectClientConfigTest extends TestCase {
 
 		$this->assertFalse($config->allowAnyHost, 'original must be unchanged');
 		$this->assertTrue($new->allowAnyHost);
+	}
+
+	public function testWithClientAuthMethod(): void {
+		$config = $this->makeConfig();
+		$new    = $config->withClientAuthMethod(ClientAuthMethod::Post);
+
+		$this->assertSame(ClientAuthMethod::Basic, $config->clientAuthMethod, 'original must be unchanged');
+		$this->assertSame(ClientAuthMethod::Post, $new->clientAuthMethod);
 	}
 
 }
