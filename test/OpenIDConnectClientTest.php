@@ -229,63 +229,6 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame([ 'an-untrusted-audience' ], $records[0]['context']['untrusted']);
 	}
 
-	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenWithAMismatchedAzp(): void {
-		$fixture = new RsaKeyFixture;
-		$fetcher = new FakeHttpFetcher;
-		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
-		$client = $this->makeClient($fetcher);
-
-		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
-		$params   = $this->queryParams($redirect->url);
-
-		$idToken = $fixture->sign([
-			'iss'   => self::ISSUER,
-			'aud'   => self::CLIENT_ID,
-			'azp'   => 'someone-elses-client-id',
-			'nonce' => $params['nonce'],
-		]);
-		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
-			'access_token' => 'the-access-token',
-			'id_token'     => $idToken,
-		], JSON_THROW_ON_ERROR), 200));
-
-		$this->expectException(AuthenticationFailedException::class);
-		$this->expectExceptionMessage('azp');
-
-		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
-			'code'  => 'the-code',
-			'state' => $params['state'],
-		]));
-	}
-
-	public function testCompleteAuthorizationCodeFlowAcceptsAnIdTokenWithAMatchingAzp(): void {
-		$fixture = new RsaKeyFixture;
-		$fetcher = new FakeHttpFetcher;
-		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
-		$client = $this->makeClient($fetcher);
-
-		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
-		$params   = $this->queryParams($redirect->url);
-
-		$idToken = $fixture->sign([
-			'iss'   => self::ISSUER,
-			'aud'   => self::CLIENT_ID,
-			'azp'   => self::CLIENT_ID,
-			'nonce' => $params['nonce'],
-		]);
-		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
-			'access_token' => 'the-access-token',
-			'id_token'     => $idToken,
-		], JSON_THROW_ON_ERROR), 200));
-
-		$result = $client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
-			'code'  => 'the-code',
-			'state' => $params['state'],
-		]));
-
-		$this->assertSame(self::CLIENT_ID, $result->claims->get('azp'));
-	}
-
 	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenExceedingTheConfiguredMaxLifetime(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;

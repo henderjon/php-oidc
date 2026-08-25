@@ -271,11 +271,6 @@ final class OpenIDConnectClient implements
 		// Core 1.0 §3.1.3.7 step 3's other half) unless allowUntrustedAudiences opts out of it.
 		$claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $config->allowUntrustedAudiences);
 
-		// Checked against the real OAuth client_id specifically, not $audience - azp is about
-		// which client the token was issued to, which does not change just because $audience
-		// was widened to accept some other resource identifier too.
-		$claimsValidator->validateAuthorizedParty($claims, $config->clientId);
-
 		$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
 
 		return $claims;

@@ -55,7 +55,6 @@ final class ClaimsValidator {
 		$this->validateRequiredClaims($claims);
 		$this->validateIssuer($claims, $expectedIssuer);
 		$this->validateAudience($claims, $expectedClientId, $allowUntrustedAudiences);
-		$this->validateAuthorizedParty($claims, $expectedClientId);
 		$this->validateNonce($claims, $expectedNonce);
 		$this->validateTokenLifetime($claims, $maxLifetimeSeconds);
 	}
@@ -233,36 +232,6 @@ final class ClaimsValidator {
 		]);
 
 		throw new AuthenticationFailedException('ID token audience contains additional values not trusted by this client');
-	}
-
-	/**
-	 * `azp` is genuinely optional, and the spec is explicit that it is scoped to extensions
-	 * beyond OpenID Connect Core itself - most providers never send it at all. When it IS
-	 * present, though, §3.1.3.7 step 5's own guidance is that it SHOULD equal the Client's
-	 * `client_id` - checked here, best-effort, since a mismatched `azp` is a meaningful
-	 * signal even though the base spec never makes this a MUST. Deliberately checked against
-	 * `$expectedClientId` specifically, not whatever `$expectedAudience` a caller configured
-	 * for validateAudience() - `azp` is about which OAuth client the token was issued to,
-	 * which does not change just because a caller widened its accepted `aud` values.
-	 *
-	 * @throws AuthenticationFailedException
-	 */
-	public function validateAuthorizedParty( Claims $claims, string $expectedClientId ): void {
-		$azp = $claims->get('azp');
-
-		if( $azp === null ) {
-			return;
-		}
-
-		if( $azp !== $expectedClientId ) {
-			$this->logger->error('OIDC: ID token azp does not match the expected client ID', [
-				'expected' => $expectedClientId,
-				'actual'   => $azp,
-				'state'    => $this->state,
-			]);
-
-			throw new AuthenticationFailedException('ID token azp does not match the expected client ID');
-		}
 	}
 
 	/**

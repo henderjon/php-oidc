@@ -110,14 +110,14 @@ completeFlowWithClaims($client, $permissiveConfig, $http, $tokenEndpoint, [
 ]);
 echo "With allowUntrustedAudiences(true), the same token is accepted without declaring anything.\n\n";
 
-// azp is genuinely optional - most providers never send it - but §3.1.3.7 step 5 says that
-// when it IS present, it SHOULD equal this client's own client_id. A mismatch here is a
-// meaningful signal even though the base spec never makes checking it a MUST.
+// A non-string entry mixed into an otherwise well-formed aud array is a malformed claim, not
+// a well-formed extra audience - allowUntrustedAudiences relaxes this the same way, but by
+// default it is rejected outright rather than silently discarded.
 try {
 	completeFlowWithClaims($client, $config, $http, $tokenEndpoint, [
 		...$validClaims,
-		'azp' => 'a-different-client-id',
+		'aud' => [ $config->clientId, 42 ],
 	]);
 } catch (AuthenticationFailedException $e) {
-	echo "A token whose azp does not match this client's own client_id is rejected: {$e->getMessage()}\n";
+	echo "A token with a malformed aud entry is rejected: {$e->getMessage()}\n";
 }

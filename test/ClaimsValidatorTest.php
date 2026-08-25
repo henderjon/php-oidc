@@ -280,52 +280,6 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
-	public function testValidateAuthorizedPartyPassesWhenAzpIsAbsent(): void {
-		$validator = new ClaimsValidator;
-		$claims    = $this->validClaims([ 'azp' => null ]);
-
-		$validator->validateAuthorizedParty($claims, 'the-client-id');
-
-		$this->addToAssertionCount(1);
-	}
-
-	public function testValidateAuthorizedPartyPassesWhenAzpMatches(): void {
-		$validator = new ClaimsValidator;
-		$claims    = $this->validClaims([ 'azp' => 'the-client-id' ]);
-
-		$validator->validateAuthorizedParty($claims, 'the-client-id');
-
-		$this->addToAssertionCount(1);
-	}
-
-	public function testValidateAuthorizedPartyFailsWhenAzpDoesNotMatch(): void {
-		$validator = new ClaimsValidator;
-		$claims    = $this->validClaims([ 'azp' => 'someone-elses-client-id' ]);
-
-		$this->expectException(AuthenticationFailedException::class);
-		$this->expectExceptionMessage('azp');
-
-		$validator->validateAuthorizedParty($claims, 'the-client-id');
-	}
-
-	public function testValidateAuthorizedPartyLogsExpectedAndActual(): void {
-		$logger    = new ArrayLogger;
-		$validator = (new ClaimsValidator($logger))->withState('the-state');
-		$claims    = $this->validClaims([ 'azp' => 'someone-elses-client-id' ]);
-
-		try {
-			$validator->validateAuthorizedParty($claims, 'the-client-id');
-			$this->fail('Expected AuthenticationFailedException to be thrown');
-		} catch( AuthenticationFailedException ) {
-		}
-
-		$records = $logger->recordsAt(LogLevel::ERROR);
-		$this->assertCount(1, $records);
-		$this->assertSame('the-client-id', $records[0]['context']['expected']);
-		$this->assertSame('someone-elses-client-id', $records[0]['context']['actual']);
-		$this->assertSame('the-state', $records[0]['context']['state']);
-	}
-
 	public function testMismatchedNonceLogsExpectedAndActual(): void {
 		$logger    = new ArrayLogger;
 		$validator = (new ClaimsValidator($logger))->withState('the-state');
