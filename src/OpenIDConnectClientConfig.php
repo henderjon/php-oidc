@@ -41,6 +41,12 @@ final class OpenIDConnectClientConfig {
 	 *                                                        ES256, ...) must be allowlisted explicitly. HS*
 	 *                                                        algorithms are also always rejected outright when
 	 *                                                        `clientSecret` is empty, regardless of this list.
+	 * @param ?int                     $maxTokenLifetimeSeconds Caps `exp - iat` (see ClaimsValidator::validateTokenLifetime()) -
+	 *                                                        independent of IdTokenVerifier's clock-skew leeway, which
+	 *                                                        is a different concern. Null skips the check. Deliberately
+	 *                                                        opt-in: a sensible cap depends on a given provider's own
+	 *                                                        typical token lifetime, which this library cannot guess
+	 *                                                        safely for every integration.
 	 */
 	public function __construct(
 		public readonly string $clientId,
@@ -56,6 +62,7 @@ final class OpenIDConnectClientConfig {
 		public readonly bool $allowInsecureSchemes = false,
 		public readonly ?array $allowedHosts = null,
 		public readonly array $allowedAlgorithms = [ 'RS256' ],
+		public readonly ?int $maxTokenLifetimeSeconds = null,
 	) {
 	}
 
@@ -63,7 +70,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -71,7 +78,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -79,7 +86,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -87,7 +94,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -95,7 +102,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -107,7 +114,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			array_values(array_unique([ ...$this->scopes, ...$scopes ])),
 			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -118,7 +125,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -129,7 +136,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -140,7 +147,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -148,7 +155,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -156,7 +163,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms,
+			$allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -171,7 +178,7 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $allowedHosts, $this->allowedAlgorithms,
+			$this->allowInsecureSchemes, $allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 		);
 	}
 
@@ -186,7 +193,18 @@ final class OpenIDConnectClientConfig {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $allowedAlgorithms,
+			$this->allowInsecureSchemes, $this->allowedHosts, $allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+		);
+	}
+
+	/**
+	 * @param ?int $maxTokenLifetimeSeconds Null clears the cap (every lifetime allowed again).
+	 */
+	public function withMaxTokenLifetimeSeconds( ?int $maxTokenLifetimeSeconds ): self {
+		return new self(
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $maxTokenLifetimeSeconds,
 		);
 	}
 

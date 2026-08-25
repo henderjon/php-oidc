@@ -30,6 +30,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertFalse($config->allowInsecureSchemes);
 		$this->assertNull($config->allowedHosts);
 		$this->assertSame([ 'RS256' ], $config->allowedAlgorithms);
+		$this->assertNull($config->maxTokenLifetimeSeconds);
 	}
 
 	public function testWithClientId(): void {
@@ -174,6 +175,20 @@ class OpenIDConnectClientConfigTest extends TestCase {
 
 		$this->assertSame([ 'RS256', 'PS256' ], $config->allowedAlgorithms, 'original must be unchanged');
 		$this->assertSame([ 'ES256' ], $new->allowedAlgorithms, 'must replace, not merge with the previous list');
+	}
+
+	public function testWithMaxTokenLifetimeSeconds(): void {
+		$config = $this->makeConfig();
+		$new    = $config->withMaxTokenLifetimeSeconds(3600);
+
+		$this->assertNull($config->maxTokenLifetimeSeconds, 'original must be unchanged');
+		$this->assertSame(3600, $new->maxTokenLifetimeSeconds);
+	}
+
+	public function testWithMaxTokenLifetimeSecondsCanClearToNull(): void {
+		$new = $this->makeConfig()->withMaxTokenLifetimeSeconds(3600)->withMaxTokenLifetimeSeconds(null);
+
+		$this->assertNull($new->maxTokenLifetimeSeconds);
 	}
 
 }

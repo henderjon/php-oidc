@@ -108,6 +108,67 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame($idToken, $result->idToken);
 	}
 
+	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenMissingSub(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		// RsaKeyFixture::sign() fills in a default sub unless overridden - explicitly clear it
+		// to prove a token omitting the required claim entirely is rejected, not just a wrong one.
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'sub'   => null,
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+	}
+
+	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenExceedingTheConfiguredMaxLifetime(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+		$config = $this->config()->withMaxTokenLifetimeSeconds(300);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'nonce' => $params['nonce'],
+			'iat'   => time(),
+			'exp'   => time() + 3600,
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('lifetime');
+
+		$client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+	}
+
 	public function testCompletionResolvesTokenEndpointAndJwksUriFromOneDiscoveryFetch(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;
