@@ -88,7 +88,11 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Token response is missing id_token');
 		}
 
-		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state);
+		// requireAtHash: false - this ID token is issued from the token endpoint, where OpenID
+		// Connect Core 1.0 §3.1.3.6 makes at_hash OPTIONAL even though an access token
+		// accompanies it here too. §3.2.2.10's REQUIRED at_hash is specific to the
+		// authorization-endpoint-issued case below.
+		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: false);
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken);
 	}
@@ -115,8 +119,12 @@ final class OpenIDConnectClient implements
 			throw new AuthenticationFailedException('Callback is missing the id_token');
 		}
 
+		// requireAtHash: true - this ID token is issued from the authorization endpoint.
+		// OpenID Connect Core 1.0 §3.2.2.10 makes at_hash REQUIRED, not merely checked-if-
+		// present, whenever an access token accompanies it here. Has no effect when
+		// $response->accessToken is null (a bare `id_token` response, not `id_token token`).
 		$providerMetadataResolver = $this->providerMetadataResolver->withState($flow->state);
-		$claims                   = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $providerMetadataResolver, $flow->state);
+		$claims                   = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: true);
 
 		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
 	}
@@ -236,6 +244,16 @@ final class OpenIDConnectClient implements
 		$summary = $response->errorSummary();
 
 		if( $summary !== null ) {
+			// This runs on every callback before the state is even checked - a bogus,
+			// unauthenticated request reaches it just as easily as a real one. Log before
+			// throwing, matching every other rejection in this class, so a provider-reported
+			// error is never silent just because this particular caller does not log the
+			// exception itself.
+			$this->logger->error('OIDC: provider returned an error on the callback', [
+				'error'             => $response->error,
+				'error_description' => $response->errorDescription,
+			]);
+
 			throw new AuthenticationFailedException("Provider returned an error: {$summary}");
 		}
 	}
@@ -271,10 +289,11 @@ final class OpenIDConnectClient implements
 		array|string|null $audience,
 		ProviderMetadataResolver $providerMetadataResolver,
 		string $state,
+		bool $requireAtHash,
 	): Claims {
 		$jwksUri         = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
 		$idTokenVerifier = $this->idTokenVerifier->withState($state);
-		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken);
+		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken, $requireAtHash);
 
 		$issuer = $config->issuer ?? $config->providerUrl;
 

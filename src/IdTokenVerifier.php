@@ -91,6 +91,17 @@ final class IdTokenVerifier {
 
 	/**
 	 * @param list<string> $allowedAlgorithms See OpenIDConnectClientConfig::$allowedAlgorithms.
+	 * @param bool $requireAtHash OpenID Connect Core 1.0 §3.2.2.10 makes `at_hash` REQUIRED,
+	 *                             not merely checked-if-present, specifically when the ID Token
+	 *                             is issued from the authorization endpoint together with an
+	 *                             access token (the Implicit Flow's `id_token token` response
+	 *                             type, and any Hybrid Flow combination). The Authorization
+	 *                             Code Flow's ID token, issued from the token endpoint, has
+	 *                             `at_hash` as OPTIONAL per §3.1.3.6 even though an access
+	 *                             token accompanies it there too - callers on that flow must
+	 *                             leave this `false`. Has no effect when `$accessToken` is
+	 *                             null; `at_hash` is never required for an ID token issued
+	 *                             with no access token alongside it.
 	 * @throws AuthenticationFailedException
 	 * @throws ProviderDiscoveryException
 	 */
@@ -100,6 +111,7 @@ final class IdTokenVerifier {
 		string $clientSecret,
 		array $allowedAlgorithms = [ 'RS256' ],
 		?string $accessToken = null,
+		bool $requireAtHash = false,
 	): Claims {
 		if( strlen($idToken) > self::MAX_ID_TOKEN_LENGTH_BYTES ) {
 			$this->logger->error('OIDC: ID token exceeds the maximum allowed length', [
@@ -135,7 +147,7 @@ final class IdTokenVerifier {
 
 		$claims = $this->decodeAndVerifySignature($idToken, $key);
 
-		$this->verifyAccessTokenHash($claims, $alg, $accessToken);
+		$this->verifyAccessTokenHash($claims, $alg, $accessToken, $requireAtHash);
 
 		return $claims;
 	}
@@ -206,10 +218,20 @@ final class IdTokenVerifier {
 	/**
 	 * @throws AuthenticationFailedException
 	 */
-	private function verifyAccessTokenHash( Claims $claims, string $alg, ?string $accessToken ): void {
+	private function verifyAccessTokenHash( Claims $claims, string $alg, ?string $accessToken, bool $requireAtHash ): void {
+		if( $accessToken === null ) {
+			return;
+		}
+
 		$atHash = $claims->get('at_hash');
 
-		if( $atHash === null || $accessToken === null ) {
+		if( $atHash === null ) {
+			if( $requireAtHash ) {
+				$this->logger->error('OIDC: ID token is missing the required at_hash claim for an access token issued alongside it', [ 'alg' => $alg, 'state' => $this->state ]);
+
+				throw new AuthenticationFailedException('ID token is missing the required at_hash claim');
+			}
+
 			return;
 		}
 
@@ -237,7 +259,23 @@ final class IdTokenVerifier {
 		$jwks = $this->fetchJwks($jwksUri);
 		$this->assertKeyCountWithinLimit($jwks, $jwksUri);
 
-		$keySet = JWK::parseKeySet($jwks, $alg);
+		// firebase/php-jwt throws its own exception (UnexpectedValueException,
+		// InvalidArgumentException, ...) for a malformed, missing, or empty "keys" member -
+		// none of which is an AuthenticationFailedException. Every other malformed-input path
+		// in this class becomes one of those, logged first; this call is not an exception to
+		// that just because the rejection happens inside a dependency instead of this class's
+		// own code.
+		try {
+			$keySet = JWK::parseKeySet($jwks, $alg);
+		} catch( \Exception $e ) {
+			$this->logger->error('OIDC: unable to parse the JWKS document', [
+				'jwks_uri'  => $jwksUri,
+				'exception' => $e,
+				'state'     => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('Unable to parse the JWKS document', previous: $e);
+		}
 
 		$selectedKid = match( true ) {
 			$kid !== null && isset($keySet[$kid]) => $kid,
@@ -311,7 +349,14 @@ final class IdTokenVerifier {
 			return;
 		}
 
-		foreach( $jwks['keys'] as $index => $entry ) {
+		// A malformed "keys" value never reaches here today - JWK::parseKeySet() above
+		// already rejects every shape this cast would otherwise let through, before this
+		// method is ever called. Matches assertKeyCountWithinLimit()'s own guard anyway,
+		// rather than leaving this method's safety implicitly dependent on a specific
+		// firebase/php-jwt version continuing to reject exactly what it does today.
+		$keys = is_array($jwks['keys'] ?? null) ? $jwks['keys'] : [];
+
+		foreach( $keys as $index => $entry ) {
 			if( ( $entry['kid'] ?? (string)$index ) !== $selectedKid ) {
 				continue;
 			}

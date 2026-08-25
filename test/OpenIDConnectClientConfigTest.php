@@ -32,6 +32,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertSame([ 'RS256' ], $config->allowedAlgorithms);
 		$this->assertNull($config->maxTokenLifetimeSeconds);
 		$this->assertFalse($config->allowUntrustedAudiences);
+		$this->assertFalse($config->allowAnyHost);
 	}
 
 	public function testWithClientId(): void {
@@ -198,6 +199,14 @@ class OpenIDConnectClientConfigTest extends TestCase {
 
 		$this->assertFalse($config->allowUntrustedAudiences, 'original must be unchanged');
 		$this->assertTrue($new->allowUntrustedAudiences);
+	}
+
+	public function testWithAllowAnyHost(): void {
+		$config = $this->makeConfig();
+		$new    = $config->withAllowAnyHost(true);
+
+		$this->assertFalse($config->allowAnyHost, 'original must be unchanged');
+		$this->assertTrue($new->allowAnyHost);
 	}
 
 }

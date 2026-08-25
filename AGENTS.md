@@ -19,15 +19,20 @@ composer update -W vendor/package       # update one dependency with its own dep
 php example/app.php                     # run the example application (see example/README.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs `vendor/bin/phpunit` against PHP 8.1 through 8.5. PHPStan is configured at
-level 8 over `src` only. `test/` and `example/` are deliberately out of scope for now - add them back to `paths`
-in `phpstan.neon` when they are ready (they carry 26 and 20 errors respectively). Analysis is not yet wired into
-CI and does not pass clean: one error remains in `src/`. Do not add a baseline file to hide it. There is no
-configured code-style linter in this repository - do not assume `phpcs` exists. `.editorconfig` covers whitespace
-only: PHP indents with tabs, everything else with spaces (2 for YAML and Markdown, 4 otherwise).
+CI (`.github/workflows/ci.yml`) runs `composer audit --locked`, `vendor/bin/phpunit`, and
+`vendor/bin/phpstan analyse` against PHP 8.1 through 8.5. PHPStan is configured at level 8 over `src` only.
+`test/` and `example/` are deliberately out of scope for now - add them back to `paths` in `phpstan.neon` when
+they are ready. There is no configured code-style linter in this repository - do not assume `phpcs` exists.
+`.editorconfig` covers whitespace only: PHP indents with tabs, everything else with spaces (2 for YAML and
+Markdown, 4 otherwise).
 
 - **Always scope dependency updates.** Use `composer update -W <vendor>/<package>` for a specific package plus its
   dependents. Never run an unbounded `composer update` - it can pull in breaking changes across the whole tree.
+- **Dependency update policy.** Dependabot opens monthly update PRs for both Composer packages and GitHub Actions
+  (`.github/dependabot.yml`) - review and merge those promptly rather than letting `composer.lock` drift.
+  `composer audit --locked` runs in CI on every push and PR, so a runtime dependency with a known advisory fails
+  the build instead of passing unnoticed; review the advisory and update the affected package (scoped, per the
+  rule above) before merging past a failure there.
 
 ## Architecture
 

@@ -2,6 +2,7 @@
 
 namespace Oidc;
 
+use Firebase\JWT\JWT;
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\ProviderDiscoveryException;
@@ -652,6 +653,31 @@ class OpenIDConnectClientTest extends TestCase {
 		]));
 	}
 
+	public function testCompleteAuthorizationCodeFlowWithProviderErrorLogsTheErrorAndDescription(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'error'             => 'access_denied',
+				'error_description' => 'The user denied access',
+			]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$providerErrorRecords = array_values(array_filter(
+			$records,
+			static fn ( array $record ): bool => $record['message'] === 'OIDC: provider returned an error on the callback',
+		));
+
+		$this->assertCount(1, $providerErrorRecords);
+		$this->assertSame('access_denied', $providerErrorRecords[0]['context']['error']);
+		$this->assertSame('The user denied access', $providerErrorRecords[0]['context']['error_description']);
+	}
+
 	public function testCompletionNeverSendsCredentialsToATokenEndpointThatViolatesTheUrlPolicy(): void {
 		$fetcher = new FakeHttpFetcher;
 		$config  = $this->config()->withEndpointOverrides([
@@ -738,6 +764,71 @@ class OpenIDConnectClientTest extends TestCase {
 
 		$response = new IncomingAuthorizationResponse([ 'id_token' => $idToken, 'state' => $params['state'] ]);
 		$result   = $client->completeImplicitFlow($this->config(), $response);
+
+		$this->assertSame('user-1', $result->claims->get('sub'));
+	}
+
+	/**
+	 * OpenID Connect Core 1.0 §3.2.2.10 makes at_hash REQUIRED when an access token is issued
+	 * from the authorization endpoint alongside the ID token - unlike the Authorization Code
+	 * Flow, where §3.1.3.6 leaves it OPTIONAL even with an access token present too.
+	 */
+	public function testImplicitFlowWithAccessTokenRequiresAtHash(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+
+		$redirect = $client->buildImplicitFlowRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'sub'   => 'user-1',
+			'nonce' => $params['nonce'],
+		]);
+
+		$response = new IncomingAuthorizationResponse([
+			'id_token'     => $idToken,
+			'access_token' => 'the-access-token',
+			'state'        => $params['state'],
+		]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('missing the required at_hash claim');
+
+		$client->completeImplicitFlow($this->config(), $response);
+	}
+
+	public function testImplicitFlowWithAccessTokenAndValidAtHashSucceeds(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+
+		$redirect = $client->buildImplicitFlowRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$accessToken = 'the-access-token';
+		$digest      = hash('sha256', $accessToken, true);
+		$atHash      = JWT::urlsafeB64Encode(substr($digest, 0, 16));
+
+		$idToken = $fixture->sign([
+			'iss'     => self::ISSUER,
+			'aud'     => self::CLIENT_ID,
+			'sub'     => 'user-1',
+			'nonce'   => $params['nonce'],
+			'at_hash' => $atHash,
+		]);
+
+		$response = new IncomingAuthorizationResponse([
+			'id_token'     => $idToken,
+			'access_token' => $accessToken,
+			'state'        => $params['state'],
+		]);
+
+		$result = $client->completeImplicitFlow($this->config(), $response);
 
 		$this->assertSame('user-1', $result->claims->get('sub'));
 	}

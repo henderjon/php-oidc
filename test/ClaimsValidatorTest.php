@@ -325,6 +325,44 @@ class ClaimsValidatorTest extends TestCase {
 		$validator->validateRequiredClaims($claims);
 	}
 
+	public function testValidateRequiredClaimsAllowsSubAtTheLengthLimit(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => str_repeat('a', 255) ]);
+
+		$validator->validateRequiredClaims($claims);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateRequiredClaimsRejectsSubOverTheLengthLimit(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'sub' => str_repeat('a', 256) ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('exceeds the maximum allowed length');
+
+		$validator->validateRequiredClaims($claims);
+	}
+
+	public function testValidateRequiredClaimsLogsTheOversizedSubLength(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'sub' => str_repeat('a', 256) ]);
+
+		try {
+			$validator->validateRequiredClaims($claims);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token sub claim exceeds the maximum allowed length', $records[0]['message']);
+		$this->assertSame(256, $records[0]['context']['length']);
+		$this->assertSame(255, $records[0]['context']['max']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testValidateRequiredClaimsRejectsMissingExp(): void {
 		$validator = new ClaimsValidator;
 		$claims    = $this->validClaims([ 'exp' => null ]);

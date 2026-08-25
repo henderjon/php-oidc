@@ -12,13 +12,22 @@ class UrlPolicyTest extends TestCase {
 		$this->urlPolicy = new UrlPolicy;
 	}
 
-	private function config( bool $allowInsecureSchemes = false, ?array $allowedHosts = null ): OpenIDConnectClientConfig {
+	private function config(
+		bool $allowInsecureSchemes = false,
+		?array $allowedHosts = null,
+		bool $allowAnyHost = false,
+		?string $providerUrl = null,
+		?string $issuer = null,
+	): OpenIDConnectClientConfig {
 		return new OpenIDConnectClientConfig(
 			clientId: 'the-client-id',
 			clientSecret: 'the-client-secret',
 			redirectUrl: 'https://example.com/callback',
+			providerUrl: $providerUrl,
+			issuer: $issuer,
 			allowInsecureSchemes: $allowInsecureSchemes,
 			allowedHosts: $allowedHosts,
+			allowAnyHost: $allowAnyHost,
 		);
 	}
 
@@ -50,9 +59,40 @@ class UrlPolicyTest extends TestCase {
 		$this->assertFalse($this->urlPolicy->isAllowed('https:///no-host', $config));
 	}
 
-	public function testNoAllowlistPermitsAnyHost(): void {
+	public function testNoAllowlistAndNoProviderPermitsAnyHost(): void {
+		// Neither issuer nor providerUrl is set on this config - there is no discovery-driven
+		// trust boundary to protect (ProviderMetadataResolver never performs discovery at all
+		// without one of them), so this falls back to unrestricted rather than rejecting
+		// every host.
 		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $this->config()));
 		$this->assertTrue($this->urlPolicy->isAllowed('https://anywhere.example.net/token', $this->config()));
+	}
+
+	public function testNoAllowlistFallsBackToTheProviderUrlHost(): void {
+		$config = $this->config(providerUrl: 'https://issuer.example.com');
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('https://attacker.example.net/token', $config));
+	}
+
+	public function testNoAllowlistPrefersTheIssuerHostOverProviderUrl(): void {
+		$config = $this->config(providerUrl: 'https://discovery.example.com', issuer: 'https://issuer.example.com');
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('https://discovery.example.com/token', $config));
+	}
+
+	public function testAllowAnyHostPermitsAnyHostEvenWithAProviderUrlSet(): void {
+		$config = $this->config(providerUrl: 'https://issuer.example.com', allowAnyHost: true);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+		$this->assertTrue($this->urlPolicy->isAllowed('https://anywhere.example.net/token', $config));
+	}
+
+	public function testExplicitAllowlistTakesPrecedenceOverAllowAnyHost(): void {
+		$config = $this->config(allowedHosts: [ 'issuer.example.com' ], allowAnyHost: true);
+
+		$this->assertFalse($this->urlPolicy->isAllowed('https://attacker.example.net/token', $config));
 	}
 
 	public function testAllowlistPermitsAMatchingHost(): void {
@@ -72,6 +112,31 @@ class UrlPolicyTest extends TestCase {
 
 		// A matching host on a disallowed scheme must still fail - the checks are additive,
 		// not either/or.
+		$this->assertFalse($this->urlPolicy->isAllowed('http://issuer.example.com/token', $config));
+	}
+
+	public function testAllowlistAcceptsASchemePrefixedEntry(): void {
+		// A caller pasting a full endpoint URL into allowedHosts, scheme included, is an easy
+		// mistake - the host is recovered from it rather than making every request fail
+		// silently, since a bare hostname parsed from the real URL can never string-equal a
+		// scheme-prefixed entry.
+		$config = $this->config(allowedHosts: [ 'https://issuer.example.com' ]);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+	}
+
+	public function testAllowlistStillRejectsANonMatchingHostWhenEntryIsSchemePrefixed(): void {
+		$config = $this->config(allowedHosts: [ 'https://issuer.example.com' ]);
+
+		$this->assertFalse($this->urlPolicy->isAllowed('https://attacker.example.net/token', $config));
+	}
+
+	public function testASchemePrefixedAllowlistEntryDoesNotGrantThatScheme(): void {
+		// The scheme on an allowedHosts entry is never consulted - scheme is enforced once,
+		// globally, via allowInsecureSchemes, never per host. An http:// entry must not act as
+		// a backdoor into allowing http for that host.
+		$config = $this->config(allowedHosts: [ 'http://issuer.example.com' ]);
+
 		$this->assertFalse($this->urlPolicy->isAllowed('http://issuer.example.com/token', $config));
 	}
 

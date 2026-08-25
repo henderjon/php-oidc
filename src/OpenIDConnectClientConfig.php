@@ -31,12 +31,29 @@ final class OpenIDConnectClientConfig {
 	 * @param array<string,string>     $endpointOverrides    Known endpoint values (e.g. `authorization_endpoint`,
 	 *                                                        `jwks_uri`, `token_endpoint`) that skip discovery for that value.
 	 * @param array<string,string>     $extraAuthParams      Additional parameters merged into the authorization request.
-	 * @param ?list<string>            $allowedHosts         Hosts every resolved endpoint (override or discovered) must
-	 *                                                        match, checked by UrlPolicy. Null skips the check. Meant for
-	 *                                                        multi-tenant deployments where provider configuration is
-	 *                                                        resolved per request and might be attacker- or
-	 *                                                        tenant-influenced - a single, statically-known integration
-	 *                                                        usually has no need for it.
+	 * @param ?list<string>            $allowedHosts         Bare hostnames (e.g. `login.example.com`, not
+	 *                                                        `https://login.example.com`) every resolved endpoint
+	 *                                                        (override or discovered) must match, checked by
+	 *                                                        UrlPolicy. A scheme-prefixed entry is tolerated - the
+	 *                                                        host is recovered from it - but never write one on
+	 *                                                        purpose: it is stripped and ignored either way, since
+	 *                                                        scheme is enforced once, globally, via
+	 *                                                        `allowInsecureSchemes`, never per host. Null skips the
+	 *                                                        explicit-list check and falls back to a default: the
+	 *                                                        host of `issuer` (or `providerUrl`, when `issuer` is not
+	 *                                                        set), or every host when neither is configured or
+	 *                                                        `allowAnyHost` is set. A discovery document can name an
+	 *                                                        endpoint on any host it likes - this default means that,
+	 *                                                        without an explicit `allowedHosts`, a discovered
+	 *                                                        endpoint still has to stay on the provider's own host to
+	 *                                                        be followed.
+	 * @param bool                     $allowAnyHost         Opts out of the default-to-provider-host fallback above
+	 *                                                        when `allowedHosts` is null, restoring "every host allowed"
+	 *                                                        for a provider that legitimately splits its endpoints
+	 *                                                        across multiple hosts (e.g. Google's token/JWKS/userinfo
+	 *                                                        endpoints each live on a different host than its issuer).
+	 *                                                        Has no effect when `allowedHosts` is set explicitly. False
+	 *                                                        by default.
 	 * @param list<string>             $allowedAlgorithms    ID token signing algorithms this config accepts, checked
 	 *                                                        by IdTokenVerifier before any key material is touched -
 	 *                                                        the token's own `alg` header never gets to pick its own
@@ -75,6 +92,7 @@ final class OpenIDConnectClientConfig {
 		public readonly array $allowedAlgorithms = [ 'RS256' ],
 		public readonly ?int $maxTokenLifetimeSeconds = null,
 		public readonly bool $allowUntrustedAudiences = false,
+		public readonly bool $allowAnyHost = false,
 	) {
 	}
 
@@ -83,7 +101,7 @@ final class OpenIDConnectClientConfig {
 			$clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -92,7 +110,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -101,7 +119,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -110,7 +128,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -119,7 +137,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -132,7 +150,7 @@ final class OpenIDConnectClientConfig {
 			array_values(array_unique([ ...$this->scopes, ...$scopes ])),
 			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -144,7 +162,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -156,7 +174,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -168,7 +186,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -177,7 +195,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -186,7 +204,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -195,14 +213,17 @@ final class OpenIDConnectClientConfig {
 	 * withEndpointOverrides(), this narrows a security boundary rather than adding to a
 	 * list of extras, so two calls silently unioning their hosts would be the wrong default.
 	 *
-	 * @param ?list<string> $allowedHosts Null clears the allowlist (every host allowed again).
+	 * @param ?list<string> $allowedHosts Null clears the explicit allowlist and falls back to
+	 *                                    the default described on the constructor's
+	 *                                    `$allowedHosts` parameter, rather than allowing every
+	 *                                    host outright.
 	 */
 	public function withAllowedHosts( ?array $allowedHosts ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -218,7 +239,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -230,7 +251,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences,
+			$this->allowUntrustedAudiences, $this->allowAnyHost,
 		);
 	}
 
@@ -239,7 +260,19 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$allowUntrustedAudiences,
+			$allowUntrustedAudiences, $this->allowAnyHost,
+		);
+	}
+
+	/**
+	 * Has no effect while `allowedHosts` is set explicitly - see `$allowAnyHost` above.
+	 */
+	public function withAllowAnyHost( bool $allowAnyHost ): self {
+		return new self(
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences, $allowAnyHost,
 		);
 	}
 
