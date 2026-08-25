@@ -336,4 +336,53 @@ final class ClaimsValidator {
 		}
 	}
 
+	/**
+	 * OpenID Connect Core 1.0 §5.3.2: "If signed, the UserInfo Response MUST contain the
+	 * Claims iss (issuer) and aud (audience) as members. The iss value MUST be the OP's
+	 * Issuer Identifier URL." Conditioned on "if signed" in the spec text itself - a plain
+	 * JSON UserInfo response carries no such requirement, so this is never called for that
+	 * path (see OpenIDConnectClient::fetchUserInfo()).
+	 *
+	 * Kept separate from validateIssuer() rather than reused - a UserInfo failure logging as
+	 * "ID token issuer..." would misdescribe what actually failed.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateUserInfoIssuer( Claims $claims, string $expectedIssuer ): void {
+		$actual = $claims->get('iss');
+
+		if( $actual !== $expectedIssuer ) {
+			$this->logger->error('OIDC: UserInfo response issuer does not match the expected issuer', [
+				'expected' => $expectedIssuer,
+				'actual'   => $actual,
+				'state'    => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('UserInfo response issuer does not match the expected issuer');
+		}
+	}
+
+	/**
+	 * OpenID Connect Core 1.0 §5.3.2: "...aud (audience) as members... The aud value MUST be
+	 * or include the RP's Client ID value." A containment check only - unlike
+	 * validateAudience(), §5.3.2 places no "no untrusted extra audiences" requirement on the
+	 * UserInfo response, so this does not reuse that stricter ID-token rule (OIDC Core 1.0
+	 * §3.1.3.7 step 3's second half has no UserInfo counterpart).
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateUserInfoAudience( Claims $claims, string $expectedClientId ): void {
+		$actual = $this->toStringList($claims->get('aud'));
+
+		if( !in_array($expectedClientId, $actual, true) ) {
+			$this->logger->error('OIDC: UserInfo response audience does not include the expected client id', [
+				'expected' => $expectedClientId,
+				'actual'   => $actual,
+				'state'    => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('UserInfo response audience does not include the expected client id');
+		}
+	}
+
 }
