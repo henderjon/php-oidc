@@ -23,7 +23,11 @@ final class OpenIDConnectClientConfig {
 	 * @param list<string>|string|null $audience             Expected `aud` value(s), when it must differ from
 	 *                                                        `clientId` - a single expected audience, or several
 	 *                                                        acceptable ones. Null skips the check (see
-	 *                                                        ClaimsValidator::validateAudience()).
+	 *                                                        ClaimsValidator::validateAudience()). By default this
+	 *                                                        doubles as the complete trusted set: any `aud` value
+	 *                                                        outside it is rejected too (OpenID Connect Core 1.0
+	 *                                                        §3.1.3.7 step 3), unless `allowUntrustedAudiences` opts
+	 *                                                        out of that half.
 	 * @param array<string,string>     $endpointOverrides    Known endpoint values (e.g. `authorization_endpoint`,
 	 *                                                        `jwks_uri`, `token_endpoint`) that skip discovery for that value.
 	 * @param array<string,string>     $extraAuthParams      Additional parameters merged into the authorization request.
@@ -47,6 +51,13 @@ final class OpenIDConnectClientConfig {
 	 *                                                        opt-in: a sensible cap depends on a given provider's own
 	 *                                                        typical token lifetime, which this library cannot guess
 	 *                                                        safely for every integration.
+	 * @param bool                     $allowUntrustedAudiences Opts out of the "no untrusted extra audiences" half of
+	 *                                                        `aud` validation (see `$audience` above), keeping only
+	 *                                                        the check that the client's own expected value is
+	 *                                                        present. For the rare case where a provider's tokens may
+	 *                                                        legitimately carry audiences this integration cannot
+	 *                                                        safely enumerate up front. False by default - both
+	 *                                                        checks run unless explicitly opted out of.
 	 */
 	public function __construct(
 		public readonly string $clientId,
@@ -63,6 +74,7 @@ final class OpenIDConnectClientConfig {
 		public readonly ?array $allowedHosts = null,
 		public readonly array $allowedAlgorithms = [ 'RS256' ],
 		public readonly ?int $maxTokenLifetimeSeconds = null,
+		public readonly bool $allowUntrustedAudiences = false,
 	) {
 	}
 
@@ -71,6 +83,7 @@ final class OpenIDConnectClientConfig {
 			$clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -79,6 +92,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -87,6 +101,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -95,6 +110,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -103,6 +119,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -115,6 +132,7 @@ final class OpenIDConnectClientConfig {
 			array_values(array_unique([ ...$this->scopes, ...$scopes ])),
 			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -126,6 +144,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -137,6 +156,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -148,6 +168,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -156,6 +177,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -164,6 +186,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -179,6 +202,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -194,6 +218,7 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
 		);
 	}
 
@@ -205,6 +230,16 @@ final class OpenIDConnectClientConfig {
 			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences,
+		);
+	}
+
+	public function withAllowUntrustedAudiences( bool $allowUntrustedAudiences ): self {
+		return new self(
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$allowUntrustedAudiences,
 		);
 	}
 

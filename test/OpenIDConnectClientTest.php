@@ -138,6 +138,154 @@ class OpenIDConnectClientTest extends TestCase {
 		]));
 	}
 
+	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenWithAnUntrustedExtraAudience(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		// aud lists this client alongside an audience nobody configured this client to trust -
+		// OpenID Connect Core 1.0 §3.1.3.7 step 3 requires rejecting that, not just confirming
+		// the client's own id is somewhere in the list.
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => [ self::CLIENT_ID, 'an-untrusted-audience' ],
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('not trusted');
+
+		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+	}
+
+	public function testCompleteAuthorizationCodeFlowAcceptsAnUntrustedExtraAudienceWhenOptedOut(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+		$config = $this->config()->withAllowUntrustedAudiences(true);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => [ self::CLIENT_ID, 'an-untrusted-audience' ],
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$result = $client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+
+		$this->assertSame([ self::CLIENT_ID, 'an-untrusted-audience' ], $result->claims->get('aud'));
+	}
+
+	public function testCompleteAuthorizationCodeFlowLogsAnAlertWhenAllowUntrustedAudiencesLetsSomethingThrough(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$logger = new ArrayLogger;
+		$client = $this->makeClient($fetcher, logger: $logger);
+		$config = $this->config()->withAllowUntrustedAudiences(true);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => [ self::CLIENT_ID, 'an-untrusted-audience' ],
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+
+		$records = $logger->recordsAt(LogLevel::ALERT);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token audience contains untrusted values, allowed through by configuration', $records[0]['message']);
+		$this->assertSame([ 'an-untrusted-audience' ], $records[0]['context']['untrusted']);
+	}
+
+	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenWithAMismatchedAzp(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'azp'   => 'someone-elses-client-id',
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('azp');
+
+		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+	}
+
+	public function testCompleteAuthorizationCodeFlowAcceptsAnIdTokenWithAMatchingAzp(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'azp'   => self::CLIENT_ID,
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$result = $client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+
+		$this->assertSame(self::CLIENT_ID, $result->claims->get('azp'));
+	}
+
 	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenExceedingTheConfiguredMaxLifetime(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;

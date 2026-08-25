@@ -267,7 +267,14 @@ final class OpenIDConnectClient implements
 
 		// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just
 		// defaults to clientId unless the config overrides it with a distinct expected audience.
-		$claimsValidator->validateAudience($claims, $audience ?? $config->clientId);
+		// By default this also rejects any aud value outside that expected set (OpenID Connect
+		// Core 1.0 §3.1.3.7 step 3's other half) unless allowUntrustedAudiences opts out of it.
+		$claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $config->allowUntrustedAudiences);
+
+		// Checked against the real OAuth client_id specifically, not $audience - azp is about
+		// which client the token was issued to, which does not change just because $audience
+		// was widened to accept some other resource identifier too.
+		$claimsValidator->validateAuthorizedParty($claims, $config->clientId);
 
 		$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
 

@@ -43,11 +43,117 @@ class ClaimsValidatorTest extends TestCase {
 
 	public function testMatchingAudienceAsArrayPasses(): void {
 		$validator = new ClaimsValidator;
-		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'other-client' ] ]);
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id' ] ]);
 
 		$validator->validate($claims, 'https://issuer.example.com', 'the-client-id', 'the-nonce');
 
 		$this->addToAssertionCount(1);
+	}
+
+	public function testAudienceContainingAnUntrustedExtraValueFails(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-untrusted-audience' ] ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('not trusted');
+
+		$validator->validate($claims, 'https://issuer.example.com', 'the-client-id', 'the-nonce');
+	}
+
+	public function testAllowUntrustedAudiencesOptsOutOfTheExtraValueCheck(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-untrusted-audience' ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testAllowUntrustedAudiencesStillRequiresTheExpectedValueToBePresent(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'someone-elses-client-id', 'an-untrusted-audience' ] ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('does not match any of the expected values');
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+	}
+
+	public function testAllowUntrustedAudiencesLogsAnAlertWhenItActuallyLetsSomethingThrough(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-untrusted-audience' ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$records = $logger->recordsAt(LogLevel::ALERT);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token audience contains untrusted values, allowed through by configuration', $records[0]['message']);
+		$this->assertSame([ 'the-client-id' ], $records[0]['context']['expected']);
+		$this->assertSame([ 'the-client-id', 'an-untrusted-audience' ], $records[0]['context']['actual']);
+		$this->assertSame([ 'an-untrusted-audience' ], $records[0]['context']['untrusted']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testAllowUntrustedAudiencesDoesNotLogWhenThereIsNothingToBypass(): void {
+		$logger    = new ArrayLogger;
+		$validator = new ClaimsValidator($logger);
+		$claims    = $this->validClaims([ 'aud' => 'the-client-id' ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$this->assertSame([], $logger->records);
+	}
+
+	public function testMalformedAudienceEntryFailsByDefault(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 42 ] ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('malformed');
+
+		$validator->validateAudience($claims, 'the-client-id');
+	}
+
+	public function testMalformedAudienceEntryLogsTheRawClaimAndTheMalformedValues(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 42, null ] ]);
+
+		try {
+			$validator->validateAudience($claims, 'the-client-id');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token audience contains a malformed value', $records[0]['message']);
+		$this->assertSame([ 'the-client-id', 42, null ], $records[0]['context']['aud']);
+		$this->assertSame([ 42, null ], $records[0]['context']['malformed']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testAllowUntrustedAudiencesRelaxesTheMalformedEntryCheck(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 42 ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testANonArrayNonStringAudienceIsNotTreatedAsMalformed(): void {
+		// Already handled correctly without this check: a bare wrong-typed aud normalizes to
+		// an empty actual list and fails the ordinary "does not match" check on its own - a
+		// distinct "malformed" error is not needed for this shape.
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => 42 ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('does not match any of the expected values');
+
+		$validator->validateAudience($claims, 'the-client-id');
 	}
 
 	public function testAudienceNotIncludingClientIdFails(): void {
@@ -99,7 +205,7 @@ class ClaimsValidatorTest extends TestCase {
 
 	public function testValidateAudienceWithArrayExpectedAndArrayActualPasses(): void {
 		$validator = new ClaimsValidator;
-		$claims    = $this->validClaims([ 'aud' => [ 'other-client', 'the-resource-audience' ] ]);
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'the-resource-audience' ] ]);
 
 		$validator->validateAudience($claims, [ 'the-client-id', 'the-resource-audience' ]);
 
@@ -148,6 +254,75 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame([ 'the-client-id' ], $records[0]['context']['expected']);
 		$this->assertSame([ 'someone-elses-client-id' ], $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testUntrustedExtraAudienceLogsTheUntrustedValues(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-untrusted-audience' ] ]);
+
+		try {
+			$validator->validateAudience($claims, 'the-client-id');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token audience contains additional values not trusted by this client', $records[0]['message']);
+		// The full expected and actual sets are logged, not just the offending value(s) -
+		// debugging a rejection should never require separately reconstructing what the
+		// token actually claimed or what this call expected.
+		$this->assertSame([ 'the-client-id' ], $records[0]['context']['expected']);
+		$this->assertSame([ 'the-client-id', 'an-untrusted-audience' ], $records[0]['context']['actual']);
+		$this->assertSame([ 'an-untrusted-audience' ], $records[0]['context']['untrusted']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateAuthorizedPartyPassesWhenAzpIsAbsent(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'azp' => null ]);
+
+		$validator->validateAuthorizedParty($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateAuthorizedPartyPassesWhenAzpMatches(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'azp' => 'the-client-id' ]);
+
+		$validator->validateAuthorizedParty($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateAuthorizedPartyFailsWhenAzpDoesNotMatch(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'azp' => 'someone-elses-client-id' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('azp');
+
+		$validator->validateAuthorizedParty($claims, 'the-client-id');
+	}
+
+	public function testValidateAuthorizedPartyLogsExpectedAndActual(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'azp' => 'someone-elses-client-id' ]);
+
+		try {
+			$validator->validateAuthorizedParty($claims, 'the-client-id');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('the-client-id', $records[0]['context']['expected']);
+		$this->assertSame('someone-elses-client-id', $records[0]['context']['actual']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
