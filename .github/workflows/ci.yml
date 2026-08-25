@@ -19,3 +19,4 @@ jobs:
           php-version: ${{ matrix.php }}
       - run: composer install --prefer-dist --no-interaction --no-progress
       - run: vendor/bin/phpunit
+      - run: vendor/bin/phpstan analyse
