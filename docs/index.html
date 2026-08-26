@@ -418,7 +418,12 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         internal collaborators (state store, provider metadata resolver, ID token verifier, claims
         validator, token endpoint client) itself - those are not part of this library's public API.
       </p>
-      <div class="method-sig">final class OpenIDConnectClientFactory {
+      <p>
+        Deliberately not <code>final</code>, unlike most classes in this library - a consumer that
+        wants a different wiring (an extra collaborator, a different assembly order) can subclass
+        it rather than reimplementing <code>make()</code> from scratch.
+      </p>
+      <div class="method-sig">class OpenIDConnectClientFactory {
 
     public function __construct(
         HttpFetcherInterface $httpFetcher = new CurlHttpFetcher,
