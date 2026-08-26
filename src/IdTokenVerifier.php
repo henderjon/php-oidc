@@ -279,8 +279,7 @@ final class IdTokenVerifier {
 
 		$selectedKid = match( true ) {
 			$kid !== null && isset($keySet[$kid]) => $kid,
-			count($keySet) === 1                  => array_key_first($keySet),
-			default                                => null,
+			default                                => $this->findSoleSigningCandidate($jwks, $keySet, $alg),
 		};
 
 		if( $selectedKid === null ) {
@@ -320,6 +319,71 @@ final class IdTokenVerifier {
 	}
 
 	/**
+	 * When `kid` is absent, narrows the candidate set to keys actually usable for verifying
+	 * this specific algorithm, rather than every key `JWK::parseKeySet()` happened to parse -
+	 * a JWKS commonly carries an encryption key alongside its signing key(s) (RFC 7517 §4.2's
+	 * "use" is OPTIONAL, so its absence is not itself exclusionary - but an entry explicitly
+	 * marked "enc" is never a signature candidate regardless), and, when a provider signs with
+	 * more than one algorithm family, a signing key for each of those. `count($keySet) === 1`
+	 * alone conflates all of that with genuine ambiguity: a JWKS with one RS256 signing key
+	 * and one unrelated encryption key is not actually ambiguous for an RS256 token, but it
+	 * has two entries.
+	 *
+	 * Filters the RAW JWKS entries, not the already-parsed `$keySet` - `JWK::parseKeySet()`
+	 * exposes only each `Key`'s (possibly tautological, see assertKeyTypeMatchesAlgorithm())
+	 * algorithm label, not the JWK's original "use"/"kty" - the same reason
+	 * assertKeyTypeMatchesAlgorithm() itself reads from `$jwks` directly.
+	 *
+	 * @param array<string,mixed> $jwks
+	 * @param array<string,Key> $keySet
+	 */
+	private function findSoleSigningCandidate( array $jwks, array $keySet, string $alg ): ?string {
+		$expectedKty = self::expectedKtyFor($alg);
+		$keys        = is_array($jwks['keys'] ?? null) ? $jwks['keys'] : [];
+		$candidates  = [];
+
+		foreach( $keys as $index => $entry ) {
+			$entryKid = is_string($entry['kid'] ?? null) ? $entry['kid'] : (string)$index;
+
+			if( !isset($keySet[$entryKid]) ) {
+				// Failed to parse (e.g. an unsupported curve) - JWK::parseKeySet() already
+				// dropped it, so it was never a candidate to begin with.
+				continue;
+			}
+
+			if( ( $entry['use'] ?? null ) === 'enc' ) {
+				continue;
+			}
+
+			if( $expectedKty !== null && ( $entry['kty'] ?? null ) !== $expectedKty ) {
+				continue;
+			}
+
+			$candidates[] = $entryKid;
+		}
+
+		return count($candidates) === 1 ? $candidates[0] : null;
+	}
+
+	/**
+	 * The algorithm family a JWK's own "kty" must declare to be usable for $alg - shared by
+	 * findSoleSigningCandidate() (narrowing candidates before selection) and
+	 * assertKeyTypeMatchesAlgorithm() (verifying the final selection independently of
+	 * firebase/php-jwt's own, otherwise tautological, internal check - see that method's own
+	 * docblock).
+	 */
+	private static function expectedKtyFor( string $alg ): ?string {
+		return match( true ) {
+			str_starts_with($alg, 'RS'), str_starts_with($alg, 'PS') => 'RSA',
+			str_starts_with($alg, 'ES')                              => 'EC',
+			$alg === 'EdDSA'                                         => 'OKP',
+			// Anything else is outside firebase/php-jwt's own supported algorithm list and
+			// will already be rejected by JWT::decode() itself - nothing to check here.
+			default                                                  => null,
+		};
+	}
+
+	/**
 	 * A JWKS entry's own "alg" is optional (RFC 7517 §4.4) - when it is absent,
 	 * JWK::parseKeySet() labels the resulting Key with whatever algorithm this class asked
 	 * for, which is the token's own (already allowlist-checked) `alg`. That means
@@ -336,14 +400,7 @@ final class IdTokenVerifier {
 	 * @throws AuthenticationFailedException
 	 */
 	private function assertKeyTypeMatchesAlgorithm( array $jwks, string $selectedKid, string $alg ): void {
-		$expectedKty = match( true ) {
-			str_starts_with($alg, 'RS'), str_starts_with($alg, 'PS') => 'RSA',
-			str_starts_with($alg, 'ES')                              => 'EC',
-			$alg === 'EdDSA'                                         => 'OKP',
-			// Anything else is outside firebase/php-jwt's own supported algorithm list and
-			// will already be rejected by JWT::decode() itself - nothing to check here.
-			default                                                  => null,
-		};
+		$expectedKty = self::expectedKtyFor($alg);
 
 		if( $expectedKty === null ) {
 			return;
