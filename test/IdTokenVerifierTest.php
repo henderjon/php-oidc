@@ -47,6 +47,103 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
 
+	public function testVerifyRs256TokenWithNoKidIgnoresEncryptionKeyInJwks(): void {
+		$signingFixture    = new RsaKeyFixture;
+		$encryptionDecoy   = new RsaKeyFixture;
+
+		$mergedJwks = [
+			'keys' => [
+				...$this->withoutKid($signingFixture->jwks()),
+				...$this->withoutKid($encryptionDecoy->jwks(), use: 'enc'),
+			],
+		];
+
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode($mergedJwks, JSON_THROW_ON_ERROR), 200));
+
+		$idToken  = $signingFixture->sign([ 'sub' => 'user-1' ], keyId: null);
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, 'unused');
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyRs256TokenWithNoKidIgnoresDifferentAlgorithmFamilyKeyInJwks(): void {
+		$signingFixture  = new RsaKeyFixture;
+		$ecSigningDecoy  = new EcKeyFixture;
+
+		$mergedJwks = [
+			'keys' => [
+				...$this->withoutKid($signingFixture->jwks()),
+				...$this->withoutKid($ecSigningDecoy->jwks()),
+			],
+		];
+
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode($mergedJwks, JSON_THROW_ON_ERROR), 200));
+
+		$idToken  = $signingFixture->sign([ 'sub' => 'user-1' ], keyId: null);
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, 'unused');
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyRs256TokenWithNoKidSucceedsAmongMixedUseAndAlgorithmKeys(): void {
+		// Mirrors a real-world JWKS shape confirmed against an actual OpenID Foundation
+		// conformance suite fixture (oidcc-client-test-kid-absent-single-jwks): one signing
+		// key per algorithm family, plus separate encryption keys, none carrying a kid.
+		$signingFixture     = new RsaKeyFixture;
+		$ecSigningDecoy     = new EcKeyFixture;
+		$rsaEncryptionDecoy = new RsaKeyFixture;
+		$ecEncryptionDecoy  = new EcKeyFixture;
+
+		$mergedJwks = [
+			'keys' => [
+				...$this->withoutKid($signingFixture->jwks()),
+				...$this->withoutKid($ecSigningDecoy->jwks()),
+				...$this->withoutKid($rsaEncryptionDecoy->jwks(), use: 'enc'),
+				...$this->withoutKid($ecEncryptionDecoy->jwks(), use: 'enc'),
+			],
+		];
+
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode($mergedJwks, JSON_THROW_ON_ERROR), 200));
+
+		$idToken  = $signingFixture->sign([ 'sub' => 'user-1' ], keyId: null);
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, 'unused');
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyThrowsWhenNoKidAndMultipleSigningCandidatesShareAnAlgorithmFamily(): void {
+		$fixture      = new RsaKeyFixture;
+		$otherFixture = new RsaKeyFixture;
+
+		// Two RSA signing keys, neither carrying a kid - genuinely ambiguous even after
+		// filtering out encryption keys and other algorithm families.
+		$mergedJwks = [
+			'keys' => [
+				...$this->withoutKid($fixture->jwks()),
+				...$this->withoutKid($otherFixture->jwks()),
+			],
+		];
+
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode($mergedJwks, JSON_THROW_ON_ERROR), 200));
+
+		$idToken  = $fixture->sign([ 'sub' => 'user-1' ], keyId: null);
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+	}
+
 	public function testVerifyHs256TokenAgainstClientSecret(): void {
 		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
@@ -262,6 +359,21 @@ class IdTokenVerifierTest extends TestCase {
 	private function reKeyed( RsaKeyFixture $fixture ): array {
 		$keys       = $fixture->jwks()['keys'];
 		$keys[0]['kid'] = 'other-key';
+
+		return $keys;
+	}
+
+	/**
+	 * @param array<string,mixed> $jwks
+	 * @return list<array<string,mixed>>
+	 */
+	private function withoutKid( array $jwks, ?string $use = null ): array {
+		$keys = $jwks['keys'];
+		unset($keys[0]['kid']);
+
+		if( $use !== null ) {
+			$keys[0]['use'] = $use;
+		}
 
 		return $keys;
 	}
