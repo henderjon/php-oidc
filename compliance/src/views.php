@@ -285,7 +285,37 @@ function setupForm( array $config ): string {
 		</fieldset>
 
 		<button type="submit" class="button button-primary">Save &amp; start login</button>
+		<a href="/index.php?action=reset" class="button button-secondary">Reset session</a>
+		<span class="field-hint">Clears the state/nonce cache and any saved login result - use this between test runs so a stale access token from a finished test can't leak into the next one. Issuer, Client ID, and Client Secret are kept so you do not have to copy them from the plan page again.</span>
 	</form>
+	HTML;
+}
+
+/**
+ * Shown after buildAuthorizationCodeRedirect() succeeds, instead of redirecting the browser
+ * there automatically. Some conformance test modules (e.g. the discovery-only ones) consider
+ * themselves finished the moment they see the discovery request this already triggered, and
+ * fail the run if the RP goes on to hit /authorize afterward - an automatic redirect gives the
+ * tester no way to stop there. This hands the choice back: click through for an end-to-end
+ * test, stop here for a discovery-only one.
+ */
+function continueToProviderPanel( string $redirectUrl ): string {
+	$escapedUrl = escape($redirectUrl);
+
+	return <<<HTML
+	<h2>Discovery resolved</h2>
+	<p>
+		The library fetched the provider's discovery document and built the authorization
+		redirect below. Nothing has been sent to the authorization endpoint yet.
+	</p>
+	<p>
+		If this test module only checks discovery, stop here - continuing on will fail it
+		with an "Illegal test state change" once it has already finished. Otherwise, continue
+		to complete the login.
+	</p>
+	<pre class="callback-url">{$escapedUrl}</pre>
+	<a href="{$escapedUrl}" class="button button-primary">Continue to provider</a>
+	<a href="/index.php" class="button button-secondary">Back to harness</a>
 	HTML;
 }
 

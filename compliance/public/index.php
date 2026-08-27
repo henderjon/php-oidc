@@ -93,8 +93,16 @@ if( $action === 'home' ) {
 }
 
 if( $action === 'reset' ) {
-	$_SESSION = [];
-	session_destroy();
+	$config = sessionConfig() ?? [];
+
+	$_SESSION = [
+		'harness_config' => [
+			'issuer'       => $config['issuer'] ?? '',
+			'clientId'     => $config['clientId'] ?? '',
+			'clientSecret' => $config['clientSecret'] ?? '',
+		],
+	];
+
 	header('Location: /index.php');
 
 	return;
@@ -132,7 +140,7 @@ if( $action === 'start' && $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		return;
 	}
 
-	header('Location: ' . $redirect->url);
+	render('Ready to continue', \Compliance\continueToProviderPanel($redirect->url));
 
 	return;
 }
@@ -149,7 +157,11 @@ if( $action === 'callback' ) {
 	$logger  = new CollectingLogger();
 	$config  = buildClientConfig($raw, \Compliance\callbackUrl());
 	$client  = makeClient($logger);
-	$request = new IncomingAuthorizationResponse($_GET);
+
+	// response_mode=form_post delivers code/state as a POST body instead of query params -
+	// $_GET would be empty except for our own ?action=callback.
+	$params  = $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET;
+	$request = new IncomingAuthorizationResponse($params);
 
 	try {
 		$result = $client->completeAuthorizationCodeFlow($config, $request);
