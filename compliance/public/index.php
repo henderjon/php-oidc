@@ -100,6 +100,7 @@ if( $action === 'reset' ) {
 			'issuer'       => $config['issuer'] ?? '',
 			'clientId'     => $config['clientId'] ?? '',
 			'clientSecret' => $config['clientSecret'] ?? '',
+			'responseType' => $config['responseType'] ?? 'code',
 		],
 	];
 
@@ -115,6 +116,7 @@ if( $action === 'start' && $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 		'clientId'                 => $_POST['clientId'] ?? '',
 		'clientSecret'             => $_POST['clientSecret'] ?? '',
 		'clientAuthMethod'         => $_POST['clientAuthMethod'] ?? 'Basic',
+		'responseType'             => $_POST['responseType'] ?? 'code',
 		'scopes'                   => $_POST['scopes'] ?? '',
 		'pkce'                     => $_POST['pkce'] ?? 'Disabled',
 		'allowedAlgorithms'        => $_POST['allowedAlgorithms'] ?? 'RS256',
@@ -133,7 +135,11 @@ if( $action === 'start' && $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	try {
 		$config   = buildClientConfig($raw, \Compliance\callbackUrl());
 		$client   = makeClient($logger);
-		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$redirect = match( $raw['responseType'] ) {
+			'id_token'       => $client->buildImplicitFlowRedirect($config),
+			'id_token token' => $client->buildImplicitFlowRedirectWithAccessToken($config),
+			default          => $client->buildAuthorizationCodeRedirect($config),
+		};
 	} catch( OpenIDConnectException $e ) {
 		render('Login failed', \Compliance\errorPanel('Could not start the login redirect', $e, $logger));
 
@@ -154,19 +160,36 @@ if( $action === 'callback' ) {
 		return;
 	}
 
+	// Implicit flow's default response mode (response_mode=fragment) delivers code/id_token/
+	// state after "#", which is never sent to any server - only JavaScript running in the
+	// browser can see it. A GET with none of those in the query string might just be that
+	// fragment waiting to be read; render a relay page that reads location.hash and resubmits
+	// it as real query params, rather than assuming the request is simply broken.
+	$hasQueryParams = isset($_GET['code']) || isset($_GET['id_token']) || isset($_GET['error']);
+
+	if( $_SERVER['REQUEST_METHOD'] !== 'POST' && !$hasQueryParams ) {
+		render('Reading the fragment', \Compliance\fragmentRelayPanel());
+
+		return;
+	}
+
 	$logger  = new CollectingLogger();
 	$config  = buildClientConfig($raw, \Compliance\callbackUrl());
 	$client  = makeClient($logger);
 
-	// response_mode=form_post delivers code/state as a POST body instead of query params -
-	// $_GET would be empty except for our own ?action=callback.
-	$params  = $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET;
-	$request = new IncomingAuthorizationResponse($params);
+	// response_mode=form_post delivers code/state/id_token as a POST body instead of query
+	// params - $_GET would be empty except for our own ?action=callback.
+	$params     = $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET;
+	$request    = new IncomingAuthorizationResponse($params);
+	$isImplicit = in_array($raw['responseType'] ?? 'code', [ 'id_token', 'id_token token' ], true);
+	$flowLabel  = $isImplicit ? 'Implicit flow' : 'Authorization code flow';
 
 	try {
-		$result = $client->completeAuthorizationCodeFlow($config, $request);
+		$result = $isImplicit
+			? $client->completeImplicitFlow($config, $request)
+			: $client->completeAuthorizationCodeFlow($config, $request);
 	} catch( OpenIDConnectException $e ) {
-		render('Callback failed', \Compliance\errorPanel('Authorization code flow', $e, $logger));
+		render('Callback failed', \Compliance\errorPanel($flowLabel, $e, $logger));
 
 		return;
 	}
@@ -179,7 +202,7 @@ if( $action === 'callback' ) {
 		'expiresIn'    => $result->expiresIn,
 	];
 
-	render('Callback succeeded', \Compliance\successPanel('Authorization code flow', $result->idToken, $result->claims, $result->accessToken, $result->refreshToken, $result->expiresIn, $logger));
+	render('Callback succeeded', \Compliance\successPanel($flowLabel, $result->idToken, $result->claims, $result->accessToken, $result->refreshToken, $result->expiresIn, $logger));
 
 	return;
 }

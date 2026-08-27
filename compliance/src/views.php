@@ -186,9 +186,10 @@ HTML;
 }
 
 function callbackUrl(): string {
-	$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+	$host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+	$scheme = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? (!empty($_SERVER['HTTPS']) ? 'https' : 'http');
 
-	return "http://{$host}/index.php?action=callback";
+	return "{$scheme}://{$host}/index.php?action=callback";
 }
 
 /**
@@ -208,6 +209,7 @@ function setupForm( array $config ): string {
 	$allowUntrustedChecked    = !empty($config['allowUntrustedAudiences']) ? 'checked' : '';
 	$pkceOptions              = optionsFor([ 'Disabled', 'Optional', 'Required' ], (string)($config['pkce'] ?? 'Disabled'));
 	$authMethodOptions        = optionsFor([ 'Basic', 'Post' ], (string)($config['clientAuthMethod'] ?? 'Basic'));
+	$responseTypeOptions      = optionsFor([ 'code', 'id_token', 'id_token token' ], (string)($config['responseType'] ?? 'code'));
 	$callbackUrl              = escape(callbackUrl());
 
 	return <<<HTML
@@ -236,6 +238,10 @@ function setupForm( array $config ): string {
 
 		<fieldset>
 			<legend>Client</legend>
+
+			<label for="responseType">Response type</label>
+			<select id="responseType" name="responseType">{$responseTypeOptions}</select>
+			<span class="field-hint">"code" uses the authorization code flow. "id_token" and "id_token token" use the implicit flow - PKCE is ignored either way, since the library only applies it to the code flow.</span>
 
 			<label for="clientId">Client ID</label>
 			<input type="text" id="clientId" name="clientId" value="{$clientId}" required>
@@ -286,7 +292,7 @@ function setupForm( array $config ): string {
 
 		<button type="submit" class="button button-primary">Save &amp; start login</button>
 		<a href="/index.php?action=reset" class="button button-secondary">Reset session</a>
-		<span class="field-hint">Clears the state/nonce cache and any saved login result - use this between test runs so a stale access token from a finished test can't leak into the next one. Issuer, Client ID, and Client Secret are kept so you do not have to copy them from the plan page again.</span>
+		<span class="field-hint">Clears the state/nonce cache and any saved login result - use this between test runs so a stale access token from a finished test can't leak into the next one. Issuer, Client ID, Client Secret, and Response type are kept, since those usually stay the same across a run of modules in one plan.</span>
 	</form>
 	HTML;
 }
@@ -302,20 +308,67 @@ function setupForm( array $config ): string {
 function continueToProviderPanel( string $redirectUrl ): string {
 	$escapedUrl = escape($redirectUrl);
 
+	$query        = (string)(parse_url($redirectUrl, PHP_URL_QUERY) ?? '');
+	parse_str($query, $queryParams);
+	$responseType = escape((string)($queryParams['response_type'] ?? '(none)'));
+
 	return <<<HTML
 	<h2>Discovery resolved</h2>
 	<p>
 		The library fetched the provider's discovery document and built the authorization
 		redirect below. Nothing has been sent to the authorization endpoint yet.
 	</p>
+	<div class="alert-box"><strong>response_type = {$responseType}</strong></div>
 	<p>
-		If this test module only checks discovery, stop here - continuing on will fail it
-		with an "Illegal test state change" once it has already finished. Otherwise, continue
-		to complete the login.
+		Check that matches the module you are running before continuing - a leftover or
+		reverted selection here is a common cause of a module failing on the very first
+		request. If this test module only checks discovery, stop here entirely - continuing on
+		will fail it with an "Illegal test state change" once it has already finished.
+		Otherwise, continue to complete the login.
 	</p>
 	<pre class="callback-url">{$escapedUrl}</pre>
 	<a href="{$escapedUrl}" class="button button-primary">Continue to provider</a>
 	<a href="/index.php" class="button button-secondary">Back to harness</a>
+	HTML;
+}
+
+/**
+ * Implicit flow's default response mode (response_mode=fragment) puts code/id_token/state
+ * after "#" in the redirect back to us - a URL fragment is never sent in any HTTP request, so
+ * the PHP side of this callback can never see it directly. Only JavaScript running in the
+ * browser can read location.hash, so this page's whole job is to read it and turn it into a
+ * normal query string on a follow-up request the server actually can read.
+ */
+function fragmentRelayPanel(): string {
+	return <<<HTML
+	<h2>Reading the fragment</h2>
+	<p>
+		Implicit flow's default response mode delivers the response after "#" in the URL - a
+		fragment, which browsers never send to any server. Only JavaScript running here in the
+		browser can read it.
+	</p>
+	<noscript>
+		<div class="alert-box">
+			JavaScript is required to complete an implicit flow login that uses this response
+			mode - there is no way to read the URL fragment from the server side.
+		</div>
+	</noscript>
+	<p id="fragment-relay-message">Reading the URL fragment&hellip;</p>
+	<script>
+	(function() {
+		"use strict";
+		var hash = window.location.hash.replace(/^#/, "");
+
+		if (hash === "") {
+			document.getElementById("fragment-relay-message").textContent =
+				"No fragment was present on this request - nothing to relay.";
+
+			return;
+		}
+
+		window.location.replace("?action=callback&" + hash);
+	}());
+	</script>
 	HTML;
 }
 

@@ -770,6 +770,15 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame('user-1', $result->claims->get('sub'));
 	}
 
+	public function testBuildImplicitFlowRedirectWithAccessTokenRequestsIdTokenToken(): void {
+		$client = $this->makeClient(new FakeHttpFetcher);
+
+		$redirect = $client->buildImplicitFlowRedirectWithAccessToken($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$this->assertSame('id_token token', $params['response_type']);
+	}
+
 	/**
 	 * OpenID Connect Core 1.0 §3.2.2.10 makes at_hash REQUIRED when an access token is issued
 	 * from the authorization endpoint alongside the ID token - unlike the Authorization Code

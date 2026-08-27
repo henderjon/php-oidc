@@ -736,6 +736,32 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         UserInfo) rather than this concrete class, so a test double such as
         <a href="#MockOpenIDConnectClient"><code>MockOpenIDConnectClient</code></a> can stand in for it.
       </p>
+      <p>
+        One method below exists only here, not on any interface - keep this concrete type in
+        scope where you specifically need it; everything else should still type-hint narrower.
+      </p>
+      <h3>buildImplicitFlowRedirectWithAccessToken</h3>
+      <div class="method-sig">public function buildImplicitFlowRedirectWithAccessToken(
+    OpenIDConnectClientConfig $config,
+): AuthorizationRedirect</div>
+      <p>
+        Same as <code>buildImplicitFlowRedirect()</code>, but requests
+        <code>response_type=id_token token</code> instead of the bare
+        <code>id_token</code> - an access token issued directly from the authorization endpoint,
+        no token endpoint round trip. Deliberately not on
+        <code>AuthorizationFlowClientInterface</code>: RFC 9700 recommends against Implicit
+        entirely, and the one case this variant used to serve - a browser-only app needing an
+        access token with no backend to exchange a code - is better served today by Authorization
+        Code plus PKCE, which never puts a token in a redirect URL at all. Reach for this only
+        for the rare case that still needs it (e.g. RP conformance certification).
+        <code>completeImplicitFlow()</code> needs no equivalent variant - it already validates
+        <code>at_hash</code> and returns the access token whenever the provider includes one,
+        regardless of which method built the original redirect.
+      </p>
+      <ul class="throws-list">
+        <li><code>throws AuthorizationStateException</code></li>
+        <li><code>throws ProviderDiscoveryException</code></li>
+      </ul>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 

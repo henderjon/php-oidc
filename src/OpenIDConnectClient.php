@@ -104,6 +104,25 @@ final class OpenIDConnectClient implements
 		return $this->buildRedirect($config, responseType: 'id_token');
 	}
 
+	/**
+	 * Requests `id_token token` instead of the bare `id_token` response type -
+	 * an OAuth 2.0 access token issued directly from the authorization endpoint, no token
+	 * endpoint round trip. Deliberately not part of AuthorizationFlowClientInterface: RFC 9700
+	 * recommends against Implicit entirely, and the specific case this variant used to serve -
+	 * a browser-only app needing an access token with no backend to exchange a code - is better
+	 * served today by Authorization Code plus PKCE, which never puts a token in a redirect URL
+	 * at all. This exists for the rare case that still needs it (e.g. RP conformance
+	 * certification), reachable only through this concrete class rather than the interface, so
+	 * the common contract stays free of a legacy, rarely-needed flag.
+	 *
+	 * completeImplicitFlow() needs no equivalent variant - it already validates at_hash and
+	 * returns the access token whenever the provider includes one, regardless of which method
+	 * built the original redirect.
+	 */
+	public function buildImplicitFlowRedirectWithAccessToken( OpenIDConnectClientConfig $config ): AuthorizationRedirect {
+		return $this->buildRedirect($config, responseType: 'id_token token');
+	}
+
 	public function completeImplicitFlow(
 		OpenIDConnectClientConfig $config,
 		IncomingAuthorizationResponse $response,
