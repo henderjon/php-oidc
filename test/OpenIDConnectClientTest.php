@@ -664,6 +664,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
 				'error'             => 'access_denied',
 				'error_description' => 'The user denied access',
+				'state'             => 'the-callback-state',
 			]));
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException ) {
@@ -678,6 +679,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertCount(1, $providerErrorRecords);
 		$this->assertSame('access_denied', $providerErrorRecords[0]['context']['error']);
 		$this->assertSame('The user denied access', $providerErrorRecords[0]['context']['error_description']);
+		$this->assertSame('the-callback-state', $providerErrorRecords[0]['context']['state']);
 	}
 
 	public function testCompletionNeverSendsCredentialsToATokenEndpointThatViolatesTheUrlPolicy(): void {

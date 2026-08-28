@@ -455,8 +455,24 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       <h2>Logging</h2>
       <p>
         Every log call passes a <code>context</code> array alongside the message. Which keys show
-        up depends on where the call happens, but a caller writing a log processor or a PSR-3
-        formatter that pulls specific fields out of <code>context</code> can rely on these names.
+        up varies by call site - each one logs whatever is actually diagnostic for its own failure,
+        not a single fixed envelope - but related call sites agree on the same names and shapes for
+        the same kind of failure, and a caller writing a log processor or a PSR-3 formatter that
+        pulls specific fields out of <code>context</code> can rely on these names wherever they
+        appear. <code>state</code> is by far the most common of them, showing up on nearly every
+        failure that happens within an authorization flow - it is the closest thing to a
+        transaction ID this library logs, letting every log line from one redirect/callback pair be
+        correlated together across every class that touched that flow.
+      </p>
+      <p>
+        The three classes that fetch and validate an HTTP response - <code>TokenEndpointClient</code>,
+        <code>ProviderMetadataResolver</code>, and <code>IdTokenVerifier::fetchJwks()</code> - log the
+        same shape for every failure along that path: a URL identifier, <code>http_status</code>,
+        <code>content_type</code>, and <code>state</code>, checking status before content type before
+        JSON validity. <code>http_status</code>/<code>content_type</code> are logged as <code>null</code>
+        rather than omitted when the failure happened before a response was ever received. A log query
+        keyed on these fields reads the same shape regardless of which of the three fetches actually
+        failed.
       </p>
       <table>
         <thead><tr><th>Key</th><th>Type</th><th>Meaning</th></tr></thead>
@@ -469,8 +485,8 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>endpoint_key</code></td><td><code>string</code></td><td>The provider-metadata key being resolved (e.g. <code>token_endpoint</code>, <code>jwks_uri</code>).</td></tr>
           <tr><td><code>jwks_uri</code></td><td><code>string</code></td><td>The JWKS endpoint URL.</td></tr>
           <tr><td><code>exception</code></td><td><code>Throwable</code></td><td>The underlying caught exception - a network error, a JSON decode failure, a signature verification failure.</td></tr>
-          <tr><td><code>http_status</code></td><td><code>?int</code></td><td>HTTP status code of the response that failed.</td></tr>
-          <tr><td><code>content_type</code></td><td><code>?string</code></td><td>The response's <code>Content-Type</code> header, when it didn't match what was expected.</td></tr>
+          <tr><td><code>http_status</code></td><td><code>?int</code></td><td>HTTP status code of the response, logged on every fetch failure against the token endpoint, provider discovery, or JWKS endpoint regardless of which check actually failed. Null when no response was ever received (a transport failure).</td></tr>
+          <tr><td><code>content_type</code></td><td><code>?string</code></td><td>The response's <code>Content-Type</code> header, logged alongside <code>http_status</code> on every fetch failure against those same three endpoints, not only when the content type itself was the problem. Null when no response was ever received (a transport failure).</td></tr>
           <tr><td><code>provider_error</code></td><td><code>?string</code></td><td>The <code>error</code> field from the token endpoint's JSON error body, when present.</td></tr>
           <tr><td><code>max_response_bytes</code></td><td><code>int</code></td><td>The configured response-size cap that was exceeded.</td></tr>
           <tr><td><code>kid</code></td><td><code>?string</code></td><td>The ID token header's <code>kid</code> value being looked up in the JWKS.</td></tr>
