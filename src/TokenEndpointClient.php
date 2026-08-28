@@ -132,17 +132,6 @@ final class TokenEndpointClient {
 			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", previous: $e);
 		}
 
-		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
-			$this->logger->error('OIDC: token endpoint returned an unexpected content type', [
-				'endpoint'     => $endpoint,
-				'http_status'  => $response->status,
-				'content_type' => $response->contentType,
-				'state'        => $this->state,
-			]);
-
-			throw new TokenRequestException("Token endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body);
-		}
-
 		$decoded = json_decode($response->body, true);
 
 		if( $response->status !== 200 ) {
@@ -157,6 +146,17 @@ final class TokenEndpointClient {
 			]);
 
 			throw new TokenRequestException("Token request failed: {$error}", $response->status, $response->body);
+		}
+
+		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
+			$this->logger->error('OIDC: token endpoint returned an unexpected content type', [
+				'endpoint'     => $endpoint,
+				'http_status'  => $response->status,
+				'content_type' => $response->contentType,
+				'state'        => $this->state,
+			]);
+
+			throw new TokenRequestException("Token endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body);
 		}
 
 		if( !is_array($decoded) ) {

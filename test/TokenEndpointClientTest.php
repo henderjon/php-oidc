@@ -257,6 +257,29 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertSame('text/html', $records[0]['context']['content_type']);
 	}
 
+	public function testANonSuccessStatusTakesPrecedenceOverAnUnexpectedContentType(): void {
+		// A proxy/gateway failure (a 502 from something in front of the real token endpoint)
+		// commonly carries both an error status and an HTML content type at once - the status
+		// is the more fundamental signal, so it must win rather than being masked by a
+		// content-type rejection.
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('<html>Bad Gateway</html>', 502, 'text/html'));
+
+		try {
+			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException $e ) {
+			$this->assertStringContainsString('502', $e->getMessage());
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: token endpoint returned an unsuccessful response', $records[0]['message']);
+		$this->assertSame(502, $records[0]['context']['http_status']);
+		$this->assertSame('text/html', $records[0]['context']['content_type']);
+	}
+
 	public function testThrowsOnNonSuccessStatusWithNonJsonBodyStillReportsTheStatusAndBody(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('invalid_client', 400));
