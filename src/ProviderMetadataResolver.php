@@ -120,9 +120,11 @@ final class ProviderMetadataResolver {
 			$response = $this->httpFetcher->fetch($url, null);
 		} catch( HttpTransportException $e ) {
 			$this->logger->error('OIDC: unable to fetch provider configuration', [
-				'url'       => $url,
-				'exception' => $e,
-				'state'     => $this->state,
+				'url'          => $url,
+				'http_status'  => null,
+				'content_type' => null,
+				'exception'    => $e,
+				'state'        => $this->state,
 			]);
 
 			throw new ProviderDiscoveryException("Unable to fetch provider configuration from {$url}", previous: $e);
@@ -130,9 +132,10 @@ final class ProviderMetadataResolver {
 
 		if( $response->status !== 200 ) {
 			$this->logger->error('OIDC: provider configuration endpoint returned an unsuccessful response', [
-				'url'         => $url,
-				'http_status' => $response->status,
-				'state'       => $this->state,
+				'url'          => $url,
+				'http_status'  => $response->status,
+				'content_type' => $response->contentType,
+				'state'        => $this->state,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned HTTP {$response->status}");
@@ -141,6 +144,7 @@ final class ProviderMetadataResolver {
 		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
 			$this->logger->error('OIDC: provider configuration endpoint returned an unexpected content type', [
 				'url'          => $url,
+				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
 			]);
@@ -152,9 +156,10 @@ final class ProviderMetadataResolver {
 
 		if( !is_array($decoded) ) {
 			$this->logger->error('OIDC: provider configuration endpoint returned invalid JSON', [
-				'url'         => $url,
-				'http_status' => $response->status,
-				'state'       => $this->state,
+				'url'          => $url,
+				'http_status'  => $response->status,
+				'content_type' => $response->contentType,
+				'state'        => $this->state,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned invalid JSON");

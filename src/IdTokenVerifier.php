@@ -444,16 +444,23 @@ final class IdTokenVerifier {
 		try {
 			$response = $this->httpFetcher->fetch($jwksUri, null);
 		} catch( HttpTransportException $e ) {
-			$this->logger->error('OIDC: unable to fetch JWKS', [ 'jwks_uri' => $jwksUri, 'exception' => $e, 'state' => $this->state ]);
+			$this->logger->error('OIDC: unable to fetch JWKS', [
+				'jwks_uri'     => $jwksUri,
+				'http_status'  => null,
+				'content_type' => null,
+				'exception'    => $e,
+				'state'        => $this->state,
+			]);
 
 			throw new ProviderDiscoveryException("Unable to fetch JWKS from {$jwksUri}", previous: $e);
 		}
 
 		if( $response->status !== 200 ) {
 			$this->logger->error('OIDC: JWKS endpoint returned an unsuccessful response', [
-				'jwks_uri'    => $jwksUri,
-				'http_status' => $response->status,
-				'state'       => $this->state,
+				'jwks_uri'     => $jwksUri,
+				'http_status'  => $response->status,
+				'content_type' => $response->contentType,
+				'state'        => $this->state,
 			]);
 
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned HTTP {$response->status}");
@@ -462,6 +469,7 @@ final class IdTokenVerifier {
 		if( !JsonContentTypePolicy::isAcceptable($response->contentType, [ 'application/jwk-set+json' ]) ) {
 			$this->logger->error('OIDC: JWKS endpoint returned an unexpected content type', [
 				'jwks_uri'     => $jwksUri,
+				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
 			]);
@@ -473,9 +481,10 @@ final class IdTokenVerifier {
 
 		if( !is_array($decoded) ) {
 			$this->logger->error('OIDC: JWKS endpoint returned invalid JSON', [
-				'jwks_uri'    => $jwksUri,
-				'http_status' => $response->status,
-				'state'       => $this->state,
+				'jwks_uri'     => $jwksUri,
+				'http_status'  => $response->status,
+				'content_type' => $response->contentType,
+				'state'        => $this->state,
 			]);
 
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned invalid JSON");
