@@ -245,7 +245,15 @@ final class IdTokenVerifier {
 		$expected = JWT::urlsafeB64Encode(substr($digest, 0, intdiv($bitLength, 16)));
 
 		if( !hash_equals($expected, (string)$atHash) ) {
-			$this->logger->error('OIDC: ID token at_hash does not match the access token', [ 'alg' => $alg, 'state' => $this->state ]);
+			// Safe to log both sides, unlike the access token itself: at_hash is a one-way
+			// digest of it, so neither value here can be reversed back into the access token
+			// that produced it.
+			$this->logger->error('OIDC: ID token at_hash does not match the access token', [
+				'alg'              => $alg,
+				'expected_at_hash' => $expected,
+				'actual_at_hash'   => (string)$atHash,
+				'state'            => $this->state,
+			]);
 
 			throw new AuthenticationFailedException('ID token at_hash does not match the access token');
 		}
