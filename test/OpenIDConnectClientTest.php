@@ -610,8 +610,11 @@ class OpenIDConnectClientTest extends TestCase {
 			]));
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
-			// The exception itself stays generic - the detail lives in the log instead.
+			// The exception's message stays generic - the detail lives in the log - but
+			// getState() still surfaces the raw callback state, since $flow is null here and
+			// there is no FlowState to read it from instead.
 			$this->assertSame('Unable to verify state', $e->getMessage());
+			$this->assertSame('a-forged-state', $e->getState());
 		}
 
 		$records = $logger->recordsAt(LogLevel::ALERT);
@@ -634,6 +637,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
 			$this->assertSame('Unable to verify state', $e->getMessage());
+			$this->assertNull($e->getState(), 'no state was ever in the callback to surface');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);

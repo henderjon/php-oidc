@@ -1042,16 +1042,26 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
     <div class="type-section" id="Exceptions">
       <h2>namespace Oidc\Exceptions</h2>
       <p>Every exception this library throws extends <code>OpenIDConnectException</code> (itself a plain <code>\RuntimeException</code>), so a caller that only wants a single catch clause for "something in this library failed" always has one available.</p>
+      <p>
+        <code>OpenIDConnectException</code> also carries <code>getState()</code> - the authorization
+        flow's <code>state</code> value the failure happened within, when one was available. This is
+        the same correlation id described in the <a href="#Logging">Logging</a> section above, now
+        reachable without opting into a logger at all: catch the exception and call
+        <code>getState()</code> directly. It's null whenever there was no flow to correlate with yet
+        (building a redirect before one exists) or none in scope at all (<code>UserInfoRequestException</code>
+        specifically - <code>fetchUserInfo()</code> isn't scoped to a stored flow the way the
+        authorization/token/JWKS paths are).
+      </p>
       <table>
         <thead><tr><th>Exception</th><th>Thrown when</th></tr></thead>
         <tbody>
-          <tr><td><code>OpenIDConnectException</code></td><td>Base class for every exception below. Never thrown directly.</td></tr>
+          <tr><td><code>OpenIDConnectException</code></td><td>Base class for every exception below. Never thrown directly. Carries <code>getState()</code>.</td></tr>
           <tr><td><code>AuthenticationFailedException</code></td><td>A callback carries a provider <code>error</code>, an invalid or expired state/nonce, or an ID token that fails signature or claims validation.</td></tr>
           <tr><td><code>AuthorizationStateException</code></td><td><code>AuthorizationStateStore</code> cannot persist a new authorization attempt because the underlying cache write itself failed - distinct from a clean miss on lookup (a forged, expired, or already-consumed state), which is a normal outcome, not a failure.</td></tr>
           <tr><td><code>HttpTransportException</code></td><td>The HTTP transport itself fails (connection failure, timeout), below the level of any specific OIDC operation. Rewrapped by callers into whichever domain exception fits.</td></tr>
           <tr><td><code>ProviderDiscoveryException</code></td><td>A provider's <code>.well-known/openid-configuration</code> or JWKS document cannot be fetched, parsed, or is missing a required endpoint.</td></tr>
-          <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response. Carries <code>getHttpStatus()</code> and <code>getRawBody()</code>, both null for a transport failure that never reached the server.</td></tr>
-          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response.</td></tr>
+          <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response. Also carries <code>getHttpStatus()</code> and <code>getRawBody()</code>, both null for a transport failure that never reached the server.</td></tr>
+          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response. <code>getState()</code> is always null here - see above.</td></tr>
         </tbody>
       </table>
       <div class="alert-box">

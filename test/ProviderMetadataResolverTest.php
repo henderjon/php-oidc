@@ -235,7 +235,8 @@ class ProviderMetadataResolverTest extends TestCase {
 		try {
 			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
-		} catch( ProviderDiscoveryException ) {
+		} catch( ProviderDiscoveryException $e ) {
+			$this->assertSame('the-state', $e->getState());
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);

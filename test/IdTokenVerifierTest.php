@@ -255,7 +255,8 @@ class IdTokenVerifierTest extends TestCase {
 		try {
 			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET);
 			$this->fail('Expected AuthenticationFailedException to be thrown');
-		} catch( AuthenticationFailedException ) {
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('the-state', $e->getState());
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);

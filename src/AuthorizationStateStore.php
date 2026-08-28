@@ -89,7 +89,7 @@ final class AuthorizationStateStore {
 		if( !$stored ) {
 			$this->logger->error('OIDC: failed to persist a new authorization attempt', [ 'state' => $this->loggableState($state) ]);
 
-			throw new AuthorizationStateException('Unable to persist authorization state');
+			throw new AuthorizationStateException('Unable to persist authorization state', state: $this->loggableState($state));
 		}
 
 		return new FlowState($state, $nonce, $codeVerifier);

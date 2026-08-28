@@ -129,7 +129,7 @@ final class TokenEndpointClient {
 				'state'       => $this->state,
 			]);
 
-			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", previous: $e);
+			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", state: $this->state, previous: $e);
 		}
 
 		$decoded = json_decode($response->body, true);
@@ -145,7 +145,7 @@ final class TokenEndpointClient {
 				'state'          => $this->state,
 			]);
 
-			throw new TokenRequestException("Token request failed: {$error}", $response->status, $response->body);
+			throw new TokenRequestException("Token request failed: {$error}", $response->status, $response->body, state: $this->state);
 		}
 
 		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
@@ -156,7 +156,7 @@ final class TokenEndpointClient {
 				'state'        => $this->state,
 			]);
 
-			throw new TokenRequestException("Token endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body);
+			throw new TokenRequestException("Token endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body, state: $this->state);
 		}
 
 		if( !is_array($decoded) ) {
@@ -167,7 +167,7 @@ final class TokenEndpointClient {
 				'state'        => $this->state,
 			]);
 
-			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body);
+			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, state: $this->state);
 		}
 
 		return new TokenResult($decoded, $this->logger, $this->state);

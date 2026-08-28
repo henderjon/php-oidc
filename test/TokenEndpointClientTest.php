@@ -192,7 +192,8 @@ class TokenEndpointClientTest extends TestCase {
 		try {
 			$this->makeScopedClient($fetcher, $logger, 'the-state')->exchangeAuthorizationCode($this->config(), 'the-code');
 			$this->fail('Expected a TokenRequestException to be thrown');
-		} catch( TokenRequestException ) {
+		} catch( TokenRequestException $e ) {
+			$this->assertSame('the-state', $e->getState());
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);

@@ -58,7 +58,7 @@ final class TokenResult {
 		}
 
 		if( in_array(self::ACCESS_TOKEN, $invalidFields, true) ) {
-			throw new TokenRequestException('Token response is missing access_token');
+			throw new TokenRequestException('Token response is missing access_token', state: $state);
 		}
 
 		$this->accessToken  = $response[self::ACCESS_TOKEN];
