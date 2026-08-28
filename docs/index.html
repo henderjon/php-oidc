@@ -455,8 +455,14 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       <h2>Logging</h2>
       <p>
         Every log call passes a <code>context</code> array alongside the message. Which keys show
-        up depends on where the call happens, but a caller writing a log processor or a PSR-3
-        formatter that pulls specific fields out of <code>context</code> can rely on these names.
+        up varies by call site - each one logs whatever is actually diagnostic for its own failure,
+        not a single fixed envelope - but related call sites agree on the same names and shapes for
+        the same kind of failure, and a caller writing a log processor or a PSR-3 formatter that
+        pulls specific fields out of <code>context</code> can rely on these names wherever they
+        appear. <code>state</code> is by far the most common of them, showing up on nearly every
+        failure that happens within an authorization flow - it is the closest thing to a
+        transaction ID this library logs, letting every log line from one redirect/callback pair be
+        correlated together across every class that touched that flow.
       </p>
       <p>
         The three classes that fetch and validate an HTTP response - <code>TokenEndpointClient</code>,
