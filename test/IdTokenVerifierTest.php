@@ -585,12 +585,23 @@ class IdTokenVerifierTest extends TestCase {
 	}
 
 	public function testVerifyWithMismatchedAccessTokenHashFails(): void {
+		$logger   = new ArrayLogger;
 		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => 'not-the-right-hash' ], self::CLIENT_SECRET, 'HS256');
-		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
 
-		$this->expectException(AuthenticationFailedException::class);
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: 'the-access-token');
+			$this->fail('Expected an AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
 
-		$verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: 'the-access-token');
+		$digest       = hash('sha256', 'the-access-token', true);
+		$expectedHash = JWT::urlsafeB64Encode(substr($digest, 0, 16));
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame($expectedHash, $records[0]['context']['expected_at_hash']);
+		$this->assertSame('not-the-right-hash', $records[0]['context']['actual_at_hash']);
 	}
 
 	public function testVerifyWithAtHashButNoAccessTokenSkipsTheCheck(): void {
