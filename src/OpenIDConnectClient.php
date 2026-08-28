@@ -278,6 +278,7 @@ final class OpenIDConnectClient implements
 			$this->logger->error('OIDC: provider returned an error on the callback', [
 				'error'             => $response->error,
 				'error_description' => $response->errorDescription,
+				'state'             => $response->state,
 			]);
 
 			throw new AuthenticationFailedException("Provider returned an error: {$summary}");
