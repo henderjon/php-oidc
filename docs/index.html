@@ -495,7 +495,6 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>alg</code></td><td><code>string</code></td><td>The ID token's <code>alg</code> header value.</td></tr>
           <tr><td><code>allowed_algorithms</code></td><td><code>list&lt;string&gt;</code></td><td>The configured algorithm allowlist the token's <code>alg</code> didn't match.</td></tr>
           <tr><td><code>expected_kty</code>, <code>actual_kty</code></td><td><code>string</code></td><td>The JWK key type expected for the token's algorithm vs. the key type actually found.</td></tr>
-          <tr><td><code>expected_at_hash</code>, <code>actual_at_hash</code></td><td><code>string</code></td><td>The <code>at_hash</code> this client computed from the access token vs. the value the ID token actually carried. Safe to log - both are one-way digests, not the access token itself.</td></tr>
           <tr><td><code>header</code></td><td><code>array</code></td><td>The ID token's decoded JOSE header.</td></tr>
           <tr><td><code>segment_count</code></td><td><code>int</code></td><td>Number of dot-separated segments found, where a JWT must have exactly three.</td></tr>
           <tr><td><code>length</code>, <code>max</code></td><td><code>int</code></td><td>An oversized value's actual length vs. the configured or hard-coded maximum (ID token byte length, <code>sub</code> claim length).</td></tr>
