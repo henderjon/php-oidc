@@ -27,6 +27,7 @@ class MockOpenIDConnectClient implements
 	RefreshTokenClientInterface {
 
 	public function __construct(
+		/** @todo v2 this will be renamed to redirectUri, matching the OIDC spec's `redirect_uri`. */
 		public string $redirectUrl = 'https://example.com/mock-authorize',
 		public AuthenticationResult $authenticationResult = new AuthenticationResult('mock-id-token', new Claims([ 'sub' => 'mock-user' ])),
 		public ?AuthenticationFailedException $authenticationException = null,
