@@ -12,9 +12,10 @@ class TokenRequestException extends OpenIDConnectException {
 		string $message,
 		private readonly ?int $httpStatus = null,
 		private readonly ?string $rawBody = null,
+		?string $state = null,
 		?\Throwable $previous = null,
 	) {
-		parent::__construct($message, previous: $previous);
+		parent::__construct($message, $state, $previous);
 	}
 
 	/**

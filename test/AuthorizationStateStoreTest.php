@@ -210,13 +210,17 @@ class AuthorizationStateStoreTest extends TestCase {
 		try {
 			$store->start();
 			$this->fail('Expected AuthorizationStateException to be thrown');
-		} catch( AuthorizationStateException ) {
+		} catch( AuthorizationStateException $e ) {
+			$exceptionState = $e->getState();
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: failed to persist a new authorization attempt', $records[0]['message']);
 		$this->assertIsString($records[0]['context']['state']);
+		// Same loggableState() truncation applied to both, on the same freshly-generated
+		// state - not just "a string", but the exact same value the log call carries.
+		$this->assertSame($records[0]['context']['state'], $exceptionState);
 	}
 
 }

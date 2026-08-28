@@ -78,7 +78,7 @@ final class ClaimsValidator {
 		if( !is_string($sub) || $sub === '' ) {
 			$this->logger->error('OIDC: ID token is missing the required sub claim', [ 'state' => $this->state ]);
 
-			throw new AuthenticationFailedException('ID token is missing the required sub claim');
+			throw new AuthenticationFailedException('ID token is missing the required sub claim', state: $this->state);
 		}
 
 		if( strlen($sub) > self::MAX_SUBJECT_LENGTH ) {
@@ -88,7 +88,7 @@ final class ClaimsValidator {
 				'state'  => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token sub claim exceeds the maximum allowed length');
+			throw new AuthenticationFailedException('ID token sub claim exceeds the maximum allowed length', state: $this->state);
 		}
 
 		$exp = $claims->get('exp');
@@ -99,7 +99,7 @@ final class ClaimsValidator {
 				'state' => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token is missing the required exp claim, or it is not numeric');
+			throw new AuthenticationFailedException('ID token is missing the required exp claim, or it is not numeric', state: $this->state);
 		}
 
 		$iat = $claims->get('iat');
@@ -110,7 +110,7 @@ final class ClaimsValidator {
 				'state' => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token is missing the required iat claim, or it is not numeric');
+			throw new AuthenticationFailedException('ID token is missing the required iat claim, or it is not numeric', state: $this->state);
 		}
 
 		if( (float)$exp <= (float)$iat ) {
@@ -120,7 +120,7 @@ final class ClaimsValidator {
 				'state' => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token exp is not after its own iat');
+			throw new AuthenticationFailedException('ID token exp is not after its own iat', state: $this->state);
 		}
 	}
 
@@ -149,7 +149,7 @@ final class ClaimsValidator {
 				'state'                => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token lifetime exceeds the configured maximum');
+			throw new AuthenticationFailedException('ID token lifetime exceeds the configured maximum', state: $this->state);
 		}
 	}
 
@@ -166,7 +166,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token issuer does not match the expected issuer');
+			throw new AuthenticationFailedException('ID token issuer does not match the expected issuer', state: $this->state);
 		}
 	}
 
@@ -214,7 +214,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token audience does not match any of the expected values');
+			throw new AuthenticationFailedException('ID token audience does not match any of the expected values', state: $this->state);
 		}
 
 		$untrusted = array_values(array_diff($actual, $expected));
@@ -245,7 +245,7 @@ final class ClaimsValidator {
 			'state'     => $this->state,
 		]);
 
-		throw new AuthenticationFailedException('ID token audience contains additional values not trusted by this client');
+		throw new AuthenticationFailedException('ID token audience contains additional values not trusted by this client', state: $this->state);
 	}
 
 	/**
@@ -284,7 +284,7 @@ final class ClaimsValidator {
 				'state'     => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token audience contains a malformed value');
+			throw new AuthenticationFailedException('ID token audience contains a malformed value', state: $this->state);
 		}
 
 		return array_values(array_filter($value, 'is_string'));
@@ -311,7 +311,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('ID token nonce does not match the expected value');
+			throw new AuthenticationFailedException('ID token nonce does not match the expected value', state: $this->state);
 		}
 	}
 
@@ -336,7 +336,7 @@ final class ClaimsValidator {
 				'state' => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('UserInfo response is missing the required sub claim');
+			throw new AuthenticationFailedException('UserInfo response is missing the required sub claim', state: $this->state);
 		}
 
 		if( $actual !== $expectedSubject ) {
@@ -346,7 +346,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('UserInfo response subject does not match the authenticated ID token subject');
+			throw new AuthenticationFailedException('UserInfo response subject does not match the authenticated ID token subject', state: $this->state);
 		}
 	}
 
@@ -372,7 +372,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('UserInfo response issuer does not match the expected issuer');
+			throw new AuthenticationFailedException('UserInfo response issuer does not match the expected issuer', state: $this->state);
 		}
 	}
 
@@ -395,7 +395,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('UserInfo response audience does not include the expected client id');
+			throw new AuthenticationFailedException('UserInfo response audience does not include the expected client id', state: $this->state);
 		}
 	}
 
@@ -418,7 +418,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('Refreshed ID token subject does not match the original ID token');
+			throw new AuthenticationFailedException('Refreshed ID token subject does not match the original ID token', state: $this->state);
 		}
 	}
 
@@ -446,7 +446,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('Refreshed ID token auth_time does not match the original authentication time');
+			throw new AuthenticationFailedException('Refreshed ID token auth_time does not match the original authentication time', state: $this->state);
 		}
 	}
 
@@ -473,7 +473,7 @@ final class ClaimsValidator {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('Refreshed ID token nonce does not match the original ID token');
+			throw new AuthenticationFailedException('Refreshed ID token nonce does not match the original ID token', state: $this->state);
 		}
 	}
 

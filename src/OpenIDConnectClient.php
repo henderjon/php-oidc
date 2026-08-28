@@ -56,17 +56,17 @@ final class OpenIDConnectClient implements
 		$this->assertNoProviderError($response);
 
 		if( $flow === null ) {
-			throw new AuthenticationFailedException('Unable to verify state');
+			throw new AuthenticationFailedException('Unable to verify state', state: $response->state);
 		}
 
 		if( $response->code === null ) {
-			throw new AuthenticationFailedException('Callback is missing the authorization code');
+			throw new AuthenticationFailedException('Callback is missing the authorization code', state: $flow->state);
 		}
 
 		if( $config->pkce === PkceMode::Required && $flow->codeVerifier === null ) {
 			$this->logger->error('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state ]);
 
-			throw new AuthenticationFailedException('Unable to verify PKCE code verifier');
+			throw new AuthenticationFailedException('Unable to verify PKCE code verifier', state: $flow->state);
 		}
 
 		if( $config->pkce === PkceMode::Optional && $flow->codeVerifier === null ) {
@@ -88,7 +88,7 @@ final class OpenIDConnectClient implements
 		if( $tokenResult->idToken === null ) {
 			$this->logger->error('OIDC: token endpoint response is missing id_token', [ 'state' => $flow->state ]);
 
-			throw new AuthenticationFailedException('Token response is missing id_token');
+			throw new AuthenticationFailedException('Token response is missing id_token', state: $flow->state);
 		}
 
 		// requireAtHash: false - this ID token is issued from the token endpoint, where OpenID
@@ -132,13 +132,13 @@ final class OpenIDConnectClient implements
 		$this->assertNoProviderError($response);
 
 		if( $flow === null ) {
-			throw new AuthenticationFailedException('Unable to verify state');
+			throw new AuthenticationFailedException('Unable to verify state', state: $response->state);
 		}
 
 		if( $response->idToken === null ) {
 			$this->logger->error('OIDC: callback is missing the id_token', [ 'state' => $flow->state ]);
 
-			throw new AuthenticationFailedException('Callback is missing the id_token');
+			throw new AuthenticationFailedException('Callback is missing the id_token', state: $flow->state);
 		}
 
 		// requireAtHash: true - this ID token is issued from the authorization endpoint.
@@ -281,7 +281,7 @@ final class OpenIDConnectClient implements
 				'state'             => $response->state,
 			]);
 
-			throw new AuthenticationFailedException("Provider returned an error: {$summary}");
+			throw new AuthenticationFailedException("Provider returned an error: {$summary}", state: $response->state);
 		}
 	}
 
@@ -325,7 +325,7 @@ final class OpenIDConnectClient implements
 		$issuer = $config->issuer ?? $config->providerUrl;
 
 		if( $issuer === null ) {
-			throw new AuthenticationFailedException('No issuer configured to validate the ID token against');
+			throw new AuthenticationFailedException('No issuer configured to validate the ID token against', state: $state);
 		}
 
 		$claimsValidator = $this->claimsValidator->withState($state);

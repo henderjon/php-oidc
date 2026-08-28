@@ -49,6 +49,15 @@ class TokenResultTest extends TestCase {
 		new TokenResult([ 'access_token' => '' ]);
 	}
 
+	public function testConstructCarriesTheGivenStateOnTheException(): void {
+		try {
+			new TokenResult([ 'access_token' => '' ], state: 'the-flow-state');
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException $e ) {
+			$this->assertSame('the-flow-state', $e->getState());
+		}
+	}
+
 	public function testLogsInvalidResponseFieldNamesWithoutValues(): void {
 		$logger = new ArrayLogger;
 

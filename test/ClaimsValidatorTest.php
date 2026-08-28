@@ -41,6 +41,28 @@ class ClaimsValidatorTest extends TestCase {
 		$validator->validate($this->validClaims(), 'https://other.example.com', 'the-client-id', 'the-nonce');
 	}
 
+	public function testMismatchedIssuerCarriesTheScopedStateOnTheException(): void {
+		$validator = (new ClaimsValidator)->withState('the-flow-state');
+
+		try {
+			$validator->validate($this->validClaims(), 'https://other.example.com', 'the-client-id', 'the-nonce');
+			$this->fail('Expected an AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('the-flow-state', $e->getState());
+		}
+	}
+
+	public function testAFailureWithNoScopedStateCarriesNullOnTheException(): void {
+		$validator = new ClaimsValidator;
+
+		try {
+			$validator->validate($this->validClaims(), 'https://other.example.com', 'the-client-id', 'the-nonce');
+			$this->fail('Expected an AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertNull($e->getState());
+		}
+	}
+
 	public function testMatchingAudienceAsArrayPasses(): void {
 		$validator = new ClaimsValidator;
 		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id' ] ]);
