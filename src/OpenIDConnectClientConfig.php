@@ -84,6 +84,7 @@ final class OpenIDConnectClientConfig {
 	public function __construct(
 		public readonly string $clientId,
 		public readonly string $clientSecret,
+		/** @todo v2 this will be renamed to redirectUri, matching the OIDC spec's `redirect_uri`. */
 		public readonly string $redirectUrl,
 		public readonly ?string $providerUrl = null,
 		public readonly ?string $issuer = null,
@@ -120,6 +121,7 @@ final class OpenIDConnectClientConfig {
 		);
 	}
 
+	/** @todo v2 this will be renamed to withRedirectUri, matching the OIDC spec's `redirect_uri`. */
 	public function withRedirectUrl( string $redirectUrl ): self {
 		return new self(
 			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
