@@ -364,6 +364,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <h4>Getting Started</h4>
           <ul>
             <li><a href="#OpenIDConnectClientFactory">OpenIDConnectClientFactory</a></li>
+            <li><a href="#Logging">Logging</a></li>
             <li><a href="#OpenIDConnectClientConfig">OpenIDConnectClientConfig</a></li>
             <li><a href="#PkceMode">PkceMode</a></li>
             <li><a href="#ClientAuthMethod">ClientAuthMethod</a></li>
@@ -447,6 +448,51 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         one client (e.g. multi-tenant).
       </p>
       <p>The logger defaults to a no-op - passing one is opt-in. It only ever receives detail behind a failure that already produces a deliberately generic exception.</p>
+    </div>
+
+    <!-- LOGGING -->
+    <div class="type-section" id="Logging">
+      <h2>Logging</h2>
+      <p>
+        Every log call passes a <code>context</code> array alongside the message. Which keys show
+        up depends on where the call happens, but a caller writing a log processor or a PSR-3
+        formatter that pulls specific fields out of <code>context</code> can rely on these names.
+      </p>
+      <table>
+        <thead><tr><th>Key</th><th>Type</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>state</code></td><td><code>?string</code></td><td>The authorization flow's <code>state</code> value, tying the log line to one specific redirect/callback pair. Null when a callback omitted it entirely. Truncated by <code>AuthorizationStateStore</code> before logging.</td></tr>
+          <tr><td><code>client_id</code></td><td><code>string</code></td><td>The configured <code>client_id</code> - logged when a public client builds an authorization redirect with PKCE disabled.</td></tr>
+          <tr><td><code>error</code>, <code>error_description</code></td><td><code>?string</code></td><td>The <code>error</code>/<code>error_description</code> values a provider returned on the callback query string.</td></tr>
+          <tr><td><code>url</code></td><td><code>string</code></td><td>The URL being fetched, or that failed the configured URL policy, or for which TLS verification was disabled.</td></tr>
+          <tr><td><code>endpoint</code></td><td><code>string</code></td><td>The resolved token endpoint URL being contacted.</td></tr>
+          <tr><td><code>endpoint_key</code></td><td><code>string</code></td><td>The provider-metadata key being resolved (e.g. <code>token_endpoint</code>, <code>jwks_uri</code>).</td></tr>
+          <tr><td><code>jwks_uri</code></td><td><code>string</code></td><td>The JWKS endpoint URL.</td></tr>
+          <tr><td><code>exception</code></td><td><code>Throwable</code></td><td>The underlying caught exception - a network error, a JSON decode failure, a signature verification failure.</td></tr>
+          <tr><td><code>http_status</code></td><td><code>?int</code></td><td>HTTP status code of the response that failed.</td></tr>
+          <tr><td><code>content_type</code></td><td><code>?string</code></td><td>The response's <code>Content-Type</code> header, when it didn't match what was expected.</td></tr>
+          <tr><td><code>provider_error</code></td><td><code>?string</code></td><td>The <code>error</code> field from the token endpoint's JSON error body, when present.</td></tr>
+          <tr><td><code>max_response_bytes</code></td><td><code>int</code></td><td>The configured response-size cap that was exceeded.</td></tr>
+          <tr><td><code>kid</code></td><td><code>?string</code></td><td>The ID token header's <code>kid</code> value being looked up in the JWKS.</td></tr>
+          <tr><td><code>available_kids</code></td><td><code>list&lt;string&gt;</code></td><td>The <code>kid</code> values actually present in the fetched JWKS.</td></tr>
+          <tr><td><code>key_count</code>, <code>max_keys</code></td><td><code>int</code></td><td>Number of keys in a fetched JWKS document vs. the configured maximum.</td></tr>
+          <tr><td><code>alg</code></td><td><code>string</code></td><td>The ID token's <code>alg</code> header value.</td></tr>
+          <tr><td><code>allowed_algorithms</code></td><td><code>list&lt;string&gt;</code></td><td>The configured algorithm allowlist the token's <code>alg</code> didn't match.</td></tr>
+          <tr><td><code>expected_kty</code>, <code>actual_kty</code></td><td><code>string</code></td><td>The JWK key type expected for the token's algorithm vs. the key type actually found.</td></tr>
+          <tr><td><code>header</code></td><td><code>array</code></td><td>The ID token's decoded JOSE header.</td></tr>
+          <tr><td><code>segment_count</code></td><td><code>int</code></td><td>Number of dot-separated segments found, where a JWT must have exactly three.</td></tr>
+          <tr><td><code>length</code>, <code>max</code></td><td><code>int</code></td><td>An oversized value's actual length vs. the configured or hard-coded maximum (ID token byte length, <code>sub</code> claim length).</td></tr>
+          <tr><td><code>exp</code>, <code>iat</code></td><td><code>mixed</code></td><td>The raw <code>exp</code>/<code>iat</code> claim values that failed validation.</td></tr>
+          <tr><td><code>lifetime_seconds</code>, <code>max_lifetime_seconds</code></td><td><code>int</code></td><td>Computed token lifetime (<code>exp - iat</code>) vs. the configured <code>maxTokenLifetimeSeconds</code>.</td></tr>
+          <tr><td><code>expected</code>, <code>actual</code></td><td><code>mixed</code></td><td>Generic pair used for every claim-mismatch check (issuer, audience, nonce, subject, <code>auth_time</code>, discovered issuer vs. <code>providerUrl</code>) - what this client expected vs. what was actually present.</td></tr>
+          <tr><td><code>aud</code></td><td><code>mixed</code></td><td>The raw <code>aud</code> claim value, when it contains a malformed (non-string) entry.</td></tr>
+          <tr><td><code>malformed</code></td><td><code>list&lt;mixed&gt;</code></td><td>The non-string entries filtered out of a malformed <code>aud</code> claim.</td></tr>
+          <tr><td><code>untrusted</code></td><td><code>list&lt;string&gt;</code></td><td><code>aud</code> values present on the token but outside the configured trusted set.</td></tr>
+          <tr><td><code>invalid_fields</code></td><td><code>list&lt;string&gt;</code></td><td>Names of token-response fields that were missing or the wrong type.</td></tr>
+          <tr><td><code>type</code>, <code>keys</code></td><td><code>string</code>, <code>?list&lt;string&gt;</code></td><td>The actual PHP type (<code>get_debug_type()</code>) and, if it was an array, the keys of a cached authorization flow entry that didn't have the expected shape.</td></tr>
+        </tbody>
+      </table>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 
     <!-- CONFIG -->
