@@ -299,6 +299,17 @@
         and UserInfo - each verified against <a href="https://openid.net/specs/openid-connect-core-1_0.html">OpenID Connect Core 1.0</a>
         rather than trusting a provider to have gotten it right.
       </p>
+      <div class="alert-box">
+        <strong>Client Credentials and refresh tokens are not, themselves, OIDC.</strong> Client
+        Credentials is a plain OAuth 2.0 grant (RFC 6749 §4.4) - no end user, no ID Token, nothing
+        OpenID Connect Core 1.0 ever defines a rule for. Refreshing is likewise an OAuth mechanism
+        (RFC 6749 §6); OIDC only adds rules for the ID Token half of a refresh response (§12.2,
+        see <a href="#RefreshTokenClientInterface"><code>RefreshTokenClientInterface</code></a>).
+        Both are supported here anyway because they're exactly what an app already using OIDC for
+        login typically needs elsewhere too - a background service calling its own API, or keeping
+        a session alive past its access token's lifetime - not because either belongs to the spec
+        this library is named after.
+      </div>
       <p>
         Configuration is a single immutable <a href="#OpenIDConnectClientConfig"><code>OpenIDConnectClientConfig</code></a>
         value rather than a chain of setter calls, so the same shape covers both a statically-known
