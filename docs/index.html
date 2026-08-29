@@ -836,6 +836,19 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         <li><code>throws AuthorizationStateException</code></li>
         <li><code>throws ProviderDiscoveryException</code></li>
       </ul>
+      <div class="alert-box">
+        <strong>No Hybrid Flow support.</strong> Unlike Implicit, Hybrid
+        (<code>response_type</code> combinations such as <code>code id_token</code>) isn't
+        supported at all. It inherits Implicit's URL-fragment exposure for whichever tokens come
+        back immediately, while needing a whole mechanism this library doesn't otherwise have: an
+        ID Token returned alongside a code must carry a <code>c_hash</code> claim binding it to
+        that code (OpenID Connect Core 1.0 §3.3.2.11), the same way <code>at_hash</code> binds one
+        to an access token - and nothing here validates <code>c_hash</code>. Implicit's
+        <code>at_hash</code> machinery was already required for <code>id_token token</code>, and
+        the RP conformance suite specifically drives it; Hybrid RP is its own separate, optional
+        certification profile with no equivalent forcing function, on top of being rarer in
+        practice than Implicit itself.
+      </div>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 
