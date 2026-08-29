@@ -21,3 +21,5 @@ composer require henderjon/php-oidc
 ```
 
 See the [example application](example/README.md) for basic client setup, or the [API documentation](https://henderjon.github.io/php-oidc/) for the full public API reference (docs/).
+
+See also: [packagist](https://packagist.org/packages/henderjon/php-oidc).
