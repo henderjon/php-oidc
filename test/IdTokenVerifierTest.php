@@ -200,6 +200,26 @@ class IdTokenVerifierTest extends TestCase {
 		$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret');
 	}
 
+	public function testVerifyThrowsWhenHeaderIsNotValidJson(): void {
+		$header   = JWT::urlsafeB64Encode('not json');
+		$payload  = JWT::urlsafeB64Encode(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR));
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier(new FakeHttpFetcher, logger: $logger))->withState('the-state');
+
+		try {
+			$verifier->verify("{$header}.{$payload}.sig", self::JWKS_URI, 'the-client-secret');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('ID token header is not valid JSON', $e->getMessage());
+			$this->assertInstanceOf(\JsonException::class, $e->getPrevious());
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token header is not valid JSON', $records[0]['message']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
 	public function testVerifyRejectsAlgorithmNotInTheAllowlist(): void {
 		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
@@ -420,6 +440,27 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: JWKS endpoint returned an unexpected content type', $records[0]['message']);
 		$this->assertSame('text/html', $records[0]['context']['content_type']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testVerifyThrowsOnInvalidJwksJson(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse('not json', 200));
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
+
+		$idToken = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ]);
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException $e ) {
+			$this->assertInstanceOf(\JsonException::class, $e->getPrevious());
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: JWKS endpoint returned invalid JSON', $records[0]['message']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 

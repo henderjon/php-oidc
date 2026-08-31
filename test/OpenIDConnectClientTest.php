@@ -1081,4 +1081,18 @@ class OpenIDConnectClientTest extends TestCase {
 		}
 	}
 
+	public function testFetchUserInfoThrowsOnInvalidJson(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse('not json', 200));
+
+		try {
+			$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->fail('Expected UserInfoRequestException to be thrown');
+		} catch( UserInfoRequestException $e ) {
+			$this->assertSame(200, $e->getHttpStatus());
+			$this->assertSame('not json', $e->getRawBody());
+			$this->assertInstanceOf(\JsonException::class, $e->getPrevious());
+		}
+	}
+
 }

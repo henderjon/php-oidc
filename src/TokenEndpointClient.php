@@ -132,7 +132,14 @@ final class TokenEndpointClient {
 			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", state: $this->state, previous: $e);
 		}
 
-		$decoded = json_decode($response->body, true);
+		$decodeError = null;
+
+		try {
+			$decoded = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+		} catch( \JsonException $e ) {
+			$decoded     = null;
+			$decodeError = $e;
+		}
 
 		if( $response->status !== 200 ) {
 			$error = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : "HTTP {$response->status}";
@@ -167,7 +174,7 @@ final class TokenEndpointClient {
 				'state'        => $this->state,
 			]);
 
-			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, state: $this->state);
+			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, state: $this->state, previous: $decodeError);
 		}
 
 		return new TokenResult($decoded, $this->logger, $this->state);
