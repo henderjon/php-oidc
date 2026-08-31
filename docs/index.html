@@ -1116,16 +1116,50 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
       </p>
       <h3 id="Exceptions.getState">getState<a class="section-anchor" href="#Exceptions.getState" aria-label="Link to this section">&para;</a></h3>
       <div class="method-sig">public function getState(): ?string</div>
+      <div class="alert-box">
+        Three more discrete getters exist beyond <code>getState()</code> - <code>getIdToken()</code>,
+        <code>getHttpStatus()</code>, and <code>getRawBody()</code> - each scoped to the specific
+        exception(s) that actually have something to attach. See each one's own section just below,
+        and the table's "Carries" column for which exception(s) carry which.
+      </div>
+      <h3 id="Exceptions.getIdToken">getIdToken<a class="section-anchor" href="#Exceptions.getIdToken" aria-label="Link to this section">&para;</a></h3>
+      <div class="method-sig">public function getIdToken(): ?string</div>
+      <p>
+        Only on <code>AuthenticationFailedException</code>. The raw ID token this failure happened
+        against, when one was actually obtained - null for a failure with no token yet in hand (a
+        state/nonce/PKCE mismatch, a missing authorization code, a provider-returned error, or a
+        token response missing <code>id_token</code> entirely - that last case IS the failure, so
+        there is nothing to attach). Signature/claims validation is fail-fast, so the log for
+        whichever check trips first never shows the others; decoding this (it need not be
+        signature-valid to decode) is the only way to see every claim the token carried at once.
+      </p>
+      <h3 id="Exceptions.getHttpStatus">getHttpStatus<a class="section-anchor" href="#Exceptions.getHttpStatus" aria-label="Link to this section">&para;</a></h3>
+      <div class="method-sig">public function getHttpStatus(): ?int</div>
+      <p>
+        On <code>TokenRequestException</code> and <code>UserInfoRequestException</code>. The
+        response's HTTP status, when a response was actually received - null for a transport
+        failure that never reached the server.
+      </p>
+      <h3 id="Exceptions.getRawBody">getRawBody<a class="section-anchor" href="#Exceptions.getRawBody" aria-label="Link to this section">&para;</a></h3>
+      <div class="method-sig">public function getRawBody(): ?string</div>
+      <p>
+        On <code>TokenRequestException</code> and <code>UserInfoRequestException</code>. The
+        response's raw body, when a response was actually received - null under the same condition
+        as <code>getHttpStatus()</code> above, and always the original, undecoded response text even
+        when that body turns out not to be valid JSON. For a signed (<code>application/jwt</code>)
+        UserInfo response that failed further verification or claims validation, this is the JWT
+        itself, not a JSON body.
+      </p>
       <table>
-        <thead><tr><th>Exception</th><th>Thrown when</th></tr></thead>
+        <thead><tr><th>Exception</th><th>Thrown when</th><th>Carries</th></tr></thead>
         <tbody>
-          <tr><td><code>OpenIDConnectException</code></td><td>Base class for every exception below. Never thrown directly. Carries <code>getState()</code>.</td></tr>
-          <tr><td><code>AuthenticationFailedException</code></td><td>A callback carries a provider <code>error</code>, an invalid or expired state/nonce, or an ID token that fails signature or claims validation. Also carries <code>getIdToken()</code>, the raw token this failure happened against - null when no token was obtained yet (a state/nonce/PKCE mismatch, a missing authorization code, a provider-returned error, or a token response missing <code>id_token</code> entirely).</td></tr>
-          <tr><td><code>AuthorizationStateException</code></td><td><code>AuthorizationStateStore</code> cannot persist a new authorization attempt because the underlying cache write itself failed - distinct from a clean miss on lookup (a forged, expired, or already-consumed state), which is a normal outcome, not a failure.</td></tr>
-          <tr><td><code>HttpTransportException</code></td><td>The HTTP transport itself fails (connection failure, timeout), below the level of any specific OIDC operation. Rewrapped by callers into whichever domain exception fits.</td></tr>
-          <tr><td><code>ProviderDiscoveryException</code></td><td>A provider's <code>.well-known/openid-configuration</code> or JWKS document cannot be fetched, parsed, or is missing a required endpoint.</td></tr>
-          <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response. Also carries <code>getHttpStatus()</code> and <code>getRawBody()</code>, both null for a transport failure that never reached the server.</td></tr>
-          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response. <code>getState()</code> is always null here - see above. Also carries <code>getHttpStatus()</code> and <code>getRawBody()</code>, both null for a transport failure that never reached the server - for a signed (<code>application/jwt</code>) response that failed further verification or claims validation, <code>getRawBody()</code> is the JWT itself.</td></tr>
+          <tr><td><code>OpenIDConnectException</code></td><td>Base class for every exception below. Never thrown directly.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
+          <tr><td><code>AuthenticationFailedException</code></td><td>A callback carries a provider <code>error</code>, an invalid or expired state/nonce, or an ID token that fails signature or claims validation.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getIdToken"><code>getIdToken()</code></a></td></tr>
+          <tr><td><code>AuthorizationStateException</code></td><td><code>AuthorizationStateStore</code> cannot persist a new authorization attempt because the underlying cache write itself failed - distinct from a clean miss on lookup (a forged, expired, or already-consumed state), which is a normal outcome, not a failure.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
+          <tr><td><code>HttpTransportException</code></td><td>The HTTP transport itself fails (connection failure, timeout), below the level of any specific OIDC operation. Rewrapped by callers into whichever domain exception fits.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
+          <tr><td><code>ProviderDiscoveryException</code></td><td>A provider's <code>.well-known/openid-configuration</code> or JWKS document cannot be fetched, parsed, or is missing a required endpoint.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
+          <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getHttpStatus"><code>getHttpStatus()</code></a>, <a href="#Exceptions.getRawBody"><code>getRawBody()</code></a></td></tr>
+          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response. <code>getState()</code> is always null here - see above.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getHttpStatus"><code>getHttpStatus()</code></a>, <a href="#Exceptions.getRawBody"><code>getRawBody()</code></a></td></tr>
         </tbody>
       </table>
       <div class="alert-box">
