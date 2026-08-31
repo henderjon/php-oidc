@@ -298,14 +298,20 @@ class TokenEndpointClientTest extends TestCase {
 	public function testThrowsOnInvalidJson(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse('not json', 200));
+		$logger = new ArrayLogger;
 
 		try {
-			$this->makeClient($fetcher)->requestClientCredentialsToken($this->config());
+			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
 			$this->fail('Expected a TokenRequestException to be thrown');
 		} catch( TokenRequestException $e ) {
 			$this->assertSame(200, $e->getHttpStatus());
 			$this->assertSame('not json', $e->getRawBody());
+			$this->assertInstanceOf(\JsonException::class, $e->getPrevious());
 		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertInstanceOf(\JsonException::class, $records[0]['context']['exception']);
 	}
 
 	public function testWithStateDoesNotAffectTheOriginalInstance(): void {

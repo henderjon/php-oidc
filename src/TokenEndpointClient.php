@@ -171,6 +171,7 @@ final class TokenEndpointClient {
 				'endpoint'     => $endpoint,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
+				'exception'    => $decodeError,
 				'state'        => $this->state,
 			]);
 

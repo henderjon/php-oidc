@@ -217,6 +217,7 @@ class IdTokenVerifierTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: ID token header is not valid JSON', $records[0]['message']);
+		$this->assertInstanceOf(\JsonException::class, $records[0]['context']['exception']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
@@ -461,6 +462,7 @@ class IdTokenVerifierTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: JWKS endpoint returned invalid JSON', $records[0]['message']);
+		$this->assertInstanceOf(\JsonException::class, $records[0]['context']['exception']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 

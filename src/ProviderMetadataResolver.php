@@ -166,6 +166,7 @@ final class ProviderMetadataResolver {
 				'url'          => $url,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
+				'exception'    => $decodeError,
 				'state'        => $this->state,
 			]);
 

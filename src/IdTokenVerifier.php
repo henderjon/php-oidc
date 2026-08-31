@@ -499,6 +499,7 @@ final class IdTokenVerifier {
 				'jwks_uri'     => $jwksUri,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
+				'exception'    => $decodeError,
 				'state'        => $this->state,
 			]);
 
@@ -531,7 +532,7 @@ final class IdTokenVerifier {
 		}
 
 		if( !is_array($decoded) ) {
-			$this->logger->error('OIDC: ID token header is not valid JSON', [ 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token header is not valid JSON', [ 'exception' => $decodeError, 'state' => $this->state ]);
 
 			throw new AuthenticationFailedException('ID token header is not valid JSON', state: $this->state, previous: $decodeError);
 		}

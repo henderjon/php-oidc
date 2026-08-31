@@ -277,12 +277,14 @@ class ProviderMetadataResolverTest extends TestCase {
 		try {
 			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
-		} catch( ProviderDiscoveryException ) {
+		} catch( ProviderDiscoveryException $e ) {
+			$this->assertInstanceOf(\JsonException::class, $e->getPrevious());
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: provider configuration endpoint returned invalid JSON', $records[0]['message']);
+		$this->assertInstanceOf(\JsonException::class, $records[0]['context']['exception']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
