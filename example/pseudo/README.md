@@ -36,3 +36,11 @@ library's behavior actually verified against a fake provider.
   path actually load-bearing for correctness; the proactive check is an optimization on top
   of it, not a replacement, since a provider can revoke a token early for reasons that have
   nothing to do with its nominal `expires_in`.
+- `app-exception-handling.php` - one catch block per exception type (login route, callback
+  route, a client-credentials call, `fetchUserInfo()`), each using that type's own discrete
+  getters - `getIdToken()`, `getHttpStatus()`/`getRawBody()` - alongside the `getState()`
+  every one of them carries. Has no runnable counterpart in `example/` - it exists purely to
+  show every getter side by side.
+- `app-exception-type-narrowing.php` - the same set of failures caught with a single
+  `OpenIDConnectException` clause instead, narrowed with `instanceof` to reach whichever
+  discrete getters a given subtype actually carries. Also has no runnable counterpart.
