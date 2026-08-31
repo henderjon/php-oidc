@@ -47,22 +47,29 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 			return new AuthenticationResult($originalIdToken, $originalClaims, $tokenResult->accessToken, $tokenResult->refreshToken, $tokenResult->expiresIn);
 		}
 
-		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
-		$claims  = $this->idTokenVerifier->verify($tokenResult->idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms);
+		try {
+			$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
+			$claims  = $this->idTokenVerifier->verify($tokenResult->idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms);
 
-		$this->claimsValidator->validateRequiredClaims($claims);
-		$this->claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
+			$this->claimsValidator->validateRequiredClaims($claims);
+			$this->claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
 
-		// Every comparison below is against the ORIGINAL ID token's own claims, per §12.2's
-		// "MUST be the same as in the ID Token issued when the original authentication
-		// occurred" - not against $config, even though those values usually agree with it.
-		$this->claimsValidator->validateIssuer($claims, (string)$originalClaims->get('iss'));
-		$this->claimsValidator->validateRefreshedSubject($claims, (string)$originalClaims->get('sub'));
-		$this->claimsValidator->validateAudience($claims, self::normalizedAudience($originalClaims->get('aud')));
-		$this->claimsValidator->validateRefreshedAuthTime($claims, $originalClaims->get('auth_time'));
+			// Every comparison below is against the ORIGINAL ID token's own claims, per §12.2's
+			// "MUST be the same as in the ID Token issued when the original authentication
+			// occurred" - not against $config, even though those values usually agree with it.
+			$this->claimsValidator->validateIssuer($claims, (string)$originalClaims->get('iss'));
+			$this->claimsValidator->validateRefreshedSubject($claims, (string)$originalClaims->get('sub'));
+			$this->claimsValidator->validateAudience($claims, self::normalizedAudience($originalClaims->get('aud')));
+			$this->claimsValidator->validateRefreshedAuthTime($claims, $originalClaims->get('auth_time'));
 
-		$originalNonce = $originalClaims->get('nonce');
-		$this->claimsValidator->validateRefreshedNonce($claims, is_string($originalNonce) ? $originalNonce : null);
+			$originalNonce = $originalClaims->get('nonce');
+			$this->claimsValidator->validateRefreshedNonce($claims, is_string($originalNonce) ? $originalNonce : null);
+		} catch( AuthenticationFailedException $e ) {
+			// See OpenIDConnectClient::verifyAndValidateIdToken() for why this is caught and
+			// rethrown here rather than threading the raw token into IdTokenVerifier/
+			// ClaimsValidator themselves.
+			throw new AuthenticationFailedException($e->getMessage(), idToken: $tokenResult->idToken, state: $e->getState(), previous: $e);
+		}
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken, $tokenResult->expiresIn);
 	}

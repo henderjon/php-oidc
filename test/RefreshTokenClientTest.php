@@ -133,9 +133,14 @@ class RefreshTokenClientTest extends TestCase {
 			'id_token'     => $newIdToken,
 		], JSON_THROW_ON_ERROR), 200));
 
-		$this->expectException(AuthenticationFailedException::class);
-
-		$this->makeClient($fetcher)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $this->originalClaims());
+		try {
+			$this->makeClient($fetcher)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $this->originalClaims());
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			// getIdToken() surfaces the NEW refreshed token this failure happened against,
+			// not the original one passed into refresh().
+			$this->assertSame($newIdToken, $e->getIdToken());
+		}
 	}
 
 	public function testRefreshRejectsANewIdTokenWithAMismatchedSubject(): void {

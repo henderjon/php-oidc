@@ -133,12 +133,18 @@ class OpenIDConnectClientTest extends TestCase {
 			'id_token'     => $idToken,
 		], JSON_THROW_ON_ERROR), 200));
 
-		$this->expectException(AuthenticationFailedException::class);
-
-		$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
-			'code'  => 'the-code',
-			'state' => $params['state'],
-		]));
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'code'  => 'the-code',
+				'state' => $params['state'],
+			]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			// A claims failure happens after the token is already in hand - getIdToken()
+			// surfaces it so the whole claim set can be inspected at once, not just the one
+			// claim (sub, here) that happened to be the first check to fail.
+			$this->assertSame($idToken, $e->getIdToken());
+		}
 	}
 
 	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenWithAnUntrustedExtraAudience(): void {
@@ -615,6 +621,7 @@ class OpenIDConnectClientTest extends TestCase {
 			// there is no FlowState to read it from instead.
 			$this->assertSame('Unable to verify state', $e->getMessage());
 			$this->assertSame('a-forged-state', $e->getState());
+			$this->assertNull($e->getIdToken(), 'no token was ever fetched before this failure');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ALERT);
@@ -638,6 +645,7 @@ class OpenIDConnectClientTest extends TestCase {
 		} catch( AuthenticationFailedException $e ) {
 			$this->assertSame('Unable to verify state', $e->getMessage());
 			$this->assertNull($e->getState(), 'no state was ever in the callback to surface');
+			$this->assertNull($e->getIdToken(), 'no token was ever fetched before this failure');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -744,6 +752,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
 			$this->assertSame('Token response is missing id_token', $e->getMessage());
+			$this->assertNull($e->getIdToken(), 'the missing id_token IS the failure - there is nothing to attach');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -812,10 +821,13 @@ class OpenIDConnectClientTest extends TestCase {
 			'state'        => $params['state'],
 		]);
 
-		$this->expectException(AuthenticationFailedException::class);
-		$this->expectExceptionMessage('missing the required at_hash claim');
-
-		$client->completeImplicitFlow($this->config(), $response);
+		try {
+			$client->completeImplicitFlow($this->config(), $response);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertStringContainsString('missing the required at_hash claim', $e->getMessage());
+			$this->assertSame($idToken, $e->getIdToken());
+		}
 	}
 
 	public function testImplicitFlowWithAccessTokenAndValidAtHashSucceeds(): void {
@@ -863,6 +875,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
 			$this->assertSame('Callback is missing the id_token', $e->getMessage());
+			$this->assertNull($e->getIdToken(), 'the missing id_token IS the failure - there is nothing to attach');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);

@@ -318,34 +318,43 @@ final class OpenIDConnectClient implements
 		string $state,
 		bool $requireAtHash,
 	): Claims {
-		$jwksUri         = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
-		$idTokenVerifier = $this->idTokenVerifier->withState($state);
-		$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken, $requireAtHash);
+		try {
+			$jwksUri         = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
+			$idTokenVerifier = $this->idTokenVerifier->withState($state);
+			$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken, $requireAtHash);
 
-		$issuer = $config->issuer ?? $config->providerUrl;
+			$issuer = $config->issuer ?? $config->providerUrl;
 
-		if( $issuer === null ) {
-			throw new AuthenticationFailedException('No issuer configured to validate the ID token against', state: $state);
+			if( $issuer === null ) {
+				throw new AuthenticationFailedException('No issuer configured to validate the ID token against', state: $state);
+			}
+
+			$claimsValidator = $this->claimsValidator->withState($state);
+
+			// sub/exp/iat presence and basic sanity come before anything else here - a token
+			// missing them entirely is malformed regardless of what it claims about issuer,
+			// audience, or nonce.
+			$claimsValidator->validateRequiredClaims($claims);
+			$claimsValidator->validateIssuer($claims, $issuer);
+			$claimsValidator->validateNonce($claims, $expectedNonce);
+
+			// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just
+			// defaults to clientId unless the config overrides it with a distinct expected audience.
+			// By default this also rejects any aud value outside that expected set (OpenID Connect
+			// Core 1.0 §3.1.3.7 step 3's other half) unless allowUntrustedAudiences opts out of it.
+			$claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $config->allowUntrustedAudiences);
+
+			$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
+
+			return $claims;
+		} catch( AuthenticationFailedException $e ) {
+			// Caught and rethrown with the raw token attached here, rather than threading it
+			// into IdTokenVerifier/ClaimsValidator themselves - every failure either of those
+			// collaborators can throw already bubbles up to this one boundary uncaught, so
+			// this single catch covers all of them without changing either collaborator's own
+			// signature. See AuthenticationFailedException::getIdToken().
+			throw new AuthenticationFailedException($e->getMessage(), idToken: $idToken, state: $e->getState(), previous: $e);
 		}
-
-		$claimsValidator = $this->claimsValidator->withState($state);
-
-		// sub/exp/iat presence and basic sanity come before anything else here - a token
-		// missing them entirely is malformed regardless of what it claims about issuer,
-		// audience, or nonce.
-		$claimsValidator->validateRequiredClaims($claims);
-		$claimsValidator->validateIssuer($claims, $issuer);
-		$claimsValidator->validateNonce($claims, $expectedNonce);
-
-		// The `aud` claim must always be checked (it's spec-mandated, not optional) - it just
-		// defaults to clientId unless the config overrides it with a distinct expected audience.
-		// By default this also rejects any aud value outside that expected set (OpenID Connect
-		// Core 1.0 §3.1.3.7 step 3's other half) unless allowUntrustedAudiences opts out of it.
-		$claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $config->allowUntrustedAudiences);
-
-		$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
-
-		return $claims;
 	}
 
 	/**
