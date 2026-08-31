@@ -965,11 +965,19 @@ class OpenIDConnectClientTest extends TestCase {
 
 	public function testFetchUserInfoJsonRejectsASubjectMismatch(): void {
 		$fetcher = new FakeHttpFetcher;
-		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR), 200, 'application/json'));
+		$body    = json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR);
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse($body, 200, 'application/json'));
 
-		$this->expectException(UserInfoRequestException::class);
-
-		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-2');
+		try {
+			$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-2');
+			$this->fail('Expected UserInfoRequestException to be thrown');
+		} catch( UserInfoRequestException $e ) {
+			// The subject check applies to both the signed and plain JSON response shapes -
+			// getHttpStatus()/getRawBody() surface the response either way, not just on the
+			// direct HTTP-level failures below.
+			$this->assertSame(200, $e->getHttpStatus());
+			$this->assertSame($body, $e->getRawBody());
+		}
 	}
 
 	public function testFetchUserInfoJsonRejectsAMissingSubject(): void {
@@ -1000,9 +1008,15 @@ class OpenIDConnectClientTest extends TestCase {
 		$idToken = $fixture->sign([ 'sub' => 'user-1', 'iss' => 'https://other.example.com', 'aud' => self::CLIENT_ID ]);
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse($idToken, 200, 'application/jwt'));
 
-		$this->expectException(UserInfoRequestException::class);
-
-		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+		try {
+			$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->fail('Expected UserInfoRequestException to be thrown');
+		} catch( UserInfoRequestException $e ) {
+			// getRawBody() is the signed JWT itself here, not a JSON body - decoding it shows
+			// every claim it carried, not just the issuer this particular check rejected.
+			$this->assertSame(200, $e->getHttpStatus());
+			$this->assertSame($idToken, $e->getRawBody());
+		}
 	}
 
 	public function testFetchUserInfoSignedResponseRejectsAWrongAudience(): void {
@@ -1045,18 +1059,26 @@ class OpenIDConnectClientTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse('unauthorized', 401));
 
-		$this->expectException(UserInfoRequestException::class);
-
-		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+		try {
+			$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->fail('Expected UserInfoRequestException to be thrown');
+		} catch( UserInfoRequestException $e ) {
+			$this->assertSame(401, $e->getHttpStatus());
+			$this->assertSame('unauthorized', $e->getRawBody());
+		}
 	}
 
 	public function testFetchUserInfoThrowsOnUnexpectedContentType(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse('<html>not userinfo</html>', 200, 'text/html'));
 
-		$this->expectException(UserInfoRequestException::class);
-
-		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+		try {
+			$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->fail('Expected UserInfoRequestException to be thrown');
+		} catch( UserInfoRequestException $e ) {
+			$this->assertSame(200, $e->getHttpStatus());
+			$this->assertSame('<html>not userinfo</html>', $e->getRawBody());
+		}
 	}
 
 }

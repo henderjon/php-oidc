@@ -1122,7 +1122,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
           <tr><td><code>HttpTransportException</code></td><td>The HTTP transport itself fails (connection failure, timeout), below the level of any specific OIDC operation. Rewrapped by callers into whichever domain exception fits.</td></tr>
           <tr><td><code>ProviderDiscoveryException</code></td><td>A provider's <code>.well-known/openid-configuration</code> or JWKS document cannot be fetched, parsed, or is missing a required endpoint.</td></tr>
           <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response. Also carries <code>getHttpStatus()</code> and <code>getRawBody()</code>, both null for a transport failure that never reached the server.</td></tr>
-          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response. <code>getState()</code> is always null here - see above.</td></tr>
+          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response. <code>getState()</code> is always null here - see above. Also carries <code>getHttpStatus()</code> and <code>getRawBody()</code>, both null for a transport failure that never reached the server - for a signed (<code>application/jwt</code>) response that failed further verification or claims validation, <code>getRawBody()</code> is the JWT itself.</td></tr>
         </tbody>
       </table>
       <div class="alert-box">

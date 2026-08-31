@@ -172,11 +172,11 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->status !== 200 ) {
-			throw new UserInfoRequestException("Userinfo request failed with HTTP {$response->status}");
+			throw new UserInfoRequestException("Userinfo request failed with HTTP {$response->status}", $response->status, $response->body);
 		}
 
 		if( $response->contentType === 'application/jwt' ) {
-			$claims = $this->verifySignedUserInfo($config, $response->body);
+			$claims = $this->verifySignedUserInfo($config, $response->body, $response->status);
 
 			// OpenID Connect Core 1.0 §5.3.2: iss/aud are only REQUIRED "if signed" - a plain
 			// JSON UserInfo response carries no such requirement, so these two checks are
@@ -184,24 +184,24 @@ final class OpenIDConnectClient implements
 			$issuer = $config->issuer ?? $config->providerUrl;
 
 			if( $issuer === null ) {
-				throw new UserInfoRequestException('No issuer configured to validate the signed userinfo response against');
+				throw new UserInfoRequestException('No issuer configured to validate the signed userinfo response against', $response->status, $response->body);
 			}
 
 			try {
 				$this->claimsValidator->validateUserInfoIssuer($claims, $issuer);
 				$this->claimsValidator->validateUserInfoAudience($claims, $config->clientId);
 			} catch( AuthenticationFailedException $e ) {
-				throw new UserInfoRequestException('Signed userinfo response failed claims validation', previous: $e);
+				throw new UserInfoRequestException('Signed userinfo response failed claims validation', $response->status, $response->body, previous: $e);
 			}
 		} else {
 			if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
-				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type");
+				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body);
 			}
 
 			$decoded = json_decode($response->body, true);
 
 			if( !is_array($decoded) ) {
-				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned invalid JSON");
+				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned invalid JSON", $response->status, $response->body);
 			}
 
 			$claims = new Claims($decoded);
@@ -212,7 +212,7 @@ final class OpenIDConnectClient implements
 		try {
 			$this->claimsValidator->validateUserInfoSubject($claims, $expectedSubject);
 		} catch( AuthenticationFailedException $e ) {
-			throw new UserInfoRequestException('Userinfo response failed subject validation', previous: $e);
+			throw new UserInfoRequestException('Userinfo response failed subject validation', $response->status, $response->body, previous: $e);
 		}
 
 		return $claims;
@@ -360,13 +360,13 @@ final class OpenIDConnectClient implements
 	/**
 	 * @throws UserInfoRequestException
 	 */
-	private function verifySignedUserInfo( OpenIDConnectClientConfig $config, string $jwt ): Claims {
+	private function verifySignedUserInfo( OpenIDConnectClientConfig $config, string $jwt, int $httpStatus ): Claims {
 		$jwksUri = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::JWKS_URI);
 
 		try {
 			return $this->idTokenVerifier->verify($jwt, $jwksUri, $config->clientSecret, allowedAlgorithms: $config->allowedAlgorithms);
 		} catch( AuthenticationFailedException $e ) {
-			throw new UserInfoRequestException('Signed userinfo response failed verification', previous: $e);
+			throw new UserInfoRequestException('Signed userinfo response failed verification', $httpStatus, $jwt, previous: $e);
 		}
 	}
 
