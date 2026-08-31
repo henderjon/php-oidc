@@ -365,7 +365,10 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           audience validation, UserInfo, and refresh tokens - or
           <a href="https://github.com/henderjon/php-oidc/tree/dev/example/pseudo">example/pseudo/</a>
           for a shorter, non-runnable version of each one, shaped like a real app's login route,
-          callback route, or background job instead of a mock harness.
+          callback route, or background job instead of a mock harness. That directory also has two
+          exception-handling examples with no runnable counterpart - one catch block per exception
+          type, and the same failures narrowed from a single <code>OpenIDConnectException</code>
+          catch instead.
         </p>
       </div>
     </div>
