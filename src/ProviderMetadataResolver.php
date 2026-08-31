@@ -152,17 +152,25 @@ final class ProviderMetadataResolver {
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned an unexpected content type", state: $this->state);
 		}
 
-		$decoded = json_decode($response->body, true);
+		$decoded     = null;
+		$decodeError = null;
+
+		try {
+			$decoded = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+		} catch( \JsonException $e ) {
+			$decodeError = $e;
+		}
 
 		if( !is_array($decoded) ) {
 			$this->logger->error('OIDC: provider configuration endpoint returned invalid JSON', [
 				'url'          => $url,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
+				'exception'    => $decodeError,
 				'state'        => $this->state,
 			]);
 
-			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned invalid JSON", state: $this->state);
+			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned invalid JSON", state: $this->state, previous: $decodeError);
 		}
 
 		$this->assertIssuerMatches($decoded, $providerUrl);

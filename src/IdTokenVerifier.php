@@ -485,17 +485,25 @@ final class IdTokenVerifier {
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned an unexpected content type", state: $this->state);
 		}
 
-		$decoded = json_decode($response->body, true);
+		$decoded     = null;
+		$decodeError = null;
+
+		try {
+			$decoded = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+		} catch( \JsonException $e ) {
+			$decodeError = $e;
+		}
 
 		if( !is_array($decoded) ) {
 			$this->logger->error('OIDC: JWKS endpoint returned invalid JSON', [
 				'jwks_uri'     => $jwksUri,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
+				'exception'    => $decodeError,
 				'state'        => $this->state,
 			]);
 
-			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned invalid JSON", state: $this->state);
+			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned invalid JSON", state: $this->state, previous: $decodeError);
 		}
 
 		return $decoded;
@@ -514,12 +522,19 @@ final class IdTokenVerifier {
 			throw new AuthenticationFailedException('ID token is not a well-formed JWT', state: $this->state);
 		}
 
-		$decoded = json_decode(JWT::urlsafeB64Decode($segments[0]), true);
+		$decoded     = null;
+		$decodeError = null;
+
+		try {
+			$decoded = json_decode(JWT::urlsafeB64Decode($segments[0]), true, 512, JSON_THROW_ON_ERROR);
+		} catch( \JsonException $e ) {
+			$decodeError = $e;
+		}
 
 		if( !is_array($decoded) ) {
-			$this->logger->error('OIDC: ID token header is not valid JSON', [ 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token header is not valid JSON', [ 'exception' => $decodeError, 'state' => $this->state ]);
 
-			throw new AuthenticationFailedException('ID token header is not valid JSON', state: $this->state);
+			throw new AuthenticationFailedException('ID token header is not valid JSON', state: $this->state, previous: $decodeError);
 		}
 
 		return $decoded;
