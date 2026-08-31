@@ -485,12 +485,12 @@ final class IdTokenVerifier {
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned an unexpected content type", state: $this->state);
 		}
 
+		$decoded     = null;
 		$decodeError = null;
 
 		try {
 			$decoded = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
 		} catch( \JsonException $e ) {
-			$decoded     = null;
 			$decodeError = $e;
 		}
 
@@ -521,12 +521,12 @@ final class IdTokenVerifier {
 			throw new AuthenticationFailedException('ID token is not a well-formed JWT', state: $this->state);
 		}
 
+		$decoded     = null;
 		$decodeError = null;
 
 		try {
 			$decoded = json_decode(JWT::urlsafeB64Decode($segments[0]), true, 512, JSON_THROW_ON_ERROR);
 		} catch( \JsonException $e ) {
-			$decoded     = null;
 			$decodeError = $e;
 		}
 

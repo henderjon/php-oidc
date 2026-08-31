@@ -198,12 +198,12 @@ final class OpenIDConnectClient implements
 				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body);
 			}
 
+			$decoded     = null;
 			$decodeError = null;
 
 			try {
 				$decoded = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
 			} catch( \JsonException $e ) {
-				$decoded     = null;
 				$decodeError = $e;
 			}
 

@@ -132,12 +132,12 @@ final class TokenEndpointClient {
 			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", state: $this->state, previous: $e);
 		}
 
+		$decoded     = null;
 		$decodeError = null;
 
 		try {
 			$decoded = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
 		} catch( \JsonException $e ) {
-			$decoded     = null;
 			$decodeError = $e;
 		}
 
