@@ -59,6 +59,19 @@
 
     h2 a { font-weight: bold; }
 
+    /* Section permalinks */
+    .h2-anchor {
+      opacity: 0;
+      margin-left: 0.5rem;
+      font-weight: normal;
+      text-decoration: none;
+    }
+
+    h2:hover .h2-anchor,
+    .h2-anchor:focus {
+      opacity: 1;
+    }
+
     h3 {
       font-size: 1.25rem;
       line-height: 1.25;
@@ -358,7 +371,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- INDEX -->
     <div id="index">
-      <h2>Index</h2>
+      <h2>Index<a class="h2-anchor" href="#index" aria-label="Link to this section">&para;</a></h2>
       <div class="index-columns">
         <div>
           <h4>Getting Started</h4>
@@ -429,7 +442,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- FACTORY -->
     <div class="type-section" id="OpenIDConnectClientFactory">
-      <h2>type OpenIDConnectClientFactory</h2>
+      <h2>type OpenIDConnectClientFactory<a class="h2-anchor" href="#OpenIDConnectClientFactory" aria-label="Link to this section">&para;</a></h2>
       <p>
         Assembles an <a href="#OpenIDConnectClient"><code>OpenIDConnectClient</code></a> and every
         collaborator it is composed of, from a shared HTTP fetcher, clock, and logger. A caller
@@ -470,7 +483,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- CONFIG -->
     <div class="type-section" id="OpenIDConnectClientConfig">
-      <h2>type OpenIDConnectClientConfig</h2>
+      <h2>type OpenIDConnectClientConfig<a class="h2-anchor" href="#OpenIDConnectClientConfig" aria-label="Link to this section">&para;</a></h2>
       <p>
         Everything needed to talk to one OpenID Connect provider for one call - a single immutable
         value instead of a chain of setter calls. The same shape covers both a statically-known
@@ -549,7 +562,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- LOGGING -->
     <div class="type-section" id="Logging">
-      <h2>Logging</h2>
+      <h2>Logging<a class="h2-anchor" href="#Logging" aria-label="Link to this section">&para;</a></h2>
       <p>
         Every log call passes a <code>context</code> array alongside the message. Which keys show
         up varies by call site - each one logs whatever is actually diagnostic for its own failure,
@@ -614,7 +627,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- PKCEMODE -->
     <div class="type-section" id="PkceMode">
-      <h2>enum PkceMode</h2>
+      <h2>enum PkceMode<a class="h2-anchor" href="#PkceMode" aria-label="Link to this section">&para;</a></h2>
       <p>How strictly RFC 7636 PKCE is enforced on the authorization code flow.</p>
       <div class="method-sig">enum PkceMode {
     case Disabled;
@@ -639,7 +652,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- CLIENTAUTHMETHOD -->
     <div class="type-section" id="ClientAuthMethod">
-      <h2>enum ClientAuthMethod</h2>
+      <h2>enum ClientAuthMethod<a class="h2-anchor" href="#ClientAuthMethod" aria-label="Link to this section">&para;</a></h2>
       <p>
         Which OpenID Connect Core 1.0 §9 Client Authentication method the library uses for a
         confidential client. Has no effect on a public client - there is no secret to authenticate
@@ -662,7 +675,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- FLOW INTERFACE -->
     <div class="type-section" id="AuthorizationFlowClientInterface">
-      <h2>interface AuthorizationFlowClientInterface</h2>
+      <h2>interface AuthorizationFlowClientInterface<a class="h2-anchor" href="#AuthorizationFlowClientInterface" aria-label="Link to this section">&para;</a></h2>
       <p>Interactive login: the authorization code flow (Clever, Google, Azure AD) and the implicit flow (e.g. LTI 1.3). Building a redirect never emits a response itself - it returns the URL and persists state/nonce as a side effect; the caller decides how to redirect.</p>
 
       <h3>buildAuthorizationCodeRedirect</h3>
@@ -711,7 +724,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- USERINFO INTERFACE -->
     <div class="type-section" id="UserInfoClientInterface">
-      <h2>interface UserInfoClientInterface</h2>
+      <h2>interface UserInfoClientInterface<a class="h2-anchor" href="#UserInfoClientInterface" aria-label="Link to this section">&para;</a></h2>
       <p>
         Extends <a href="#AuthorizationFlowClientInterface"><code>AuthorizationFlowClientInterface</code></a>
         rather than standing alone, since nothing fetches UserInfo without having done the
@@ -740,7 +753,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- TOKEN GRANT INTERFACE -->
     <div class="type-section" id="TokenGrantClientInterface">
-      <h2>interface TokenGrantClientInterface</h2>
+      <h2>interface TokenGrantClientInterface<a class="h2-anchor" href="#TokenGrantClientInterface" aria-label="Link to this section">&para;</a></h2>
       <p>Non-interactive token acquisition via the client credentials grant - e.g. a service-to-service integration that needs its own access token without a user in the loop.</p>
       <h3>requestClientCredentialsToken</h3>
       <div class="method-sig">public function requestClientCredentialsToken(
@@ -775,7 +788,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- REFRESH INTERFACE -->
     <div class="type-section" id="RefreshTokenClientInterface">
-      <h2>interface RefreshTokenClientInterface</h2>
+      <h2>interface RefreshTokenClientInterface<a class="h2-anchor" href="#RefreshTokenClientInterface" aria-label="Link to this section">&para;</a></h2>
       <p>
         Stands alone rather than extending <code>AuthorizationFlowClientInterface</code>: redeeming
         a refresh token does not require having just completed an interactive flow in the same
@@ -815,7 +828,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- CLIENT -->
     <div class="type-section" id="OpenIDConnectClient">
-      <h2>type OpenIDConnectClient</h2>
+      <h2>type OpenIDConnectClient<a class="h2-anchor" href="#OpenIDConnectClient" aria-label="Link to this section">&para;</a></h2>
       <p>
         The object returned by <a href="#OpenIDConnectClientFactory"><code>OpenIDConnectClientFactory::make()</code></a>.
         Implements every capability interface above -
@@ -875,7 +888,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- AUTHORIZATION REDIRECT -->
     <div class="type-section" id="AuthorizationRedirect">
-      <h2>type AuthorizationRedirect</h2>
+      <h2>type AuthorizationRedirect<a class="h2-anchor" href="#AuthorizationRedirect" aria-label="Link to this section">&para;</a></h2>
       <p>A URL to send the user-agent to next - a login redirect. The caller decides how to issue the redirect; this library never emits a response itself.</p>
       <div class="method-sig">final class AuthorizationRedirect {
     public function __construct(
@@ -887,7 +900,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
     <!-- INCOMING RESPONSE -->
     <div class="type-section" id="IncomingAuthorizationResponse">
-      <h2>type IncomingAuthorizationResponse</h2>
+      <h2>type IncomingAuthorizationResponse<a class="h2-anchor" href="#IncomingAuthorizationResponse" aria-label="Link to this section">&para;</a></h2>
       <p>
         What a provider sent back to the redirect URL - an authorization code (code flow), an ID
         token (implicit flow), or an error - parsed from a plain params array instead of reading
@@ -917,7 +930,7 @@ if ($response-&gt;hasError()) {
 
     <!-- AUTHENTICATION RESULT -->
     <div class="type-section" id="AuthenticationResult">
-      <h2>type AuthenticationResult</h2>
+      <h2>type AuthenticationResult<a class="h2-anchor" href="#AuthenticationResult" aria-label="Link to this section">&para;</a></h2>
       <p>The outcome of completing an authorization code or implicit flow, or of refreshing one.</p>
       <div class="method-sig">final class AuthenticationResult {
     public function __construct(
@@ -941,7 +954,7 @@ if ($response-&gt;hasError()) {
 
     <!-- TOKEN RESULT -->
     <div class="type-section" id="TokenResult">
-      <h2>type TokenResult</h2>
+      <h2>type TokenResult<a class="h2-anchor" href="#TokenResult" aria-label="Link to this section">&para;</a></h2>
       <p>A token endpoint response - shared by the authorization code exchange and the client credentials grant.</p>
       <div class="method-sig">final class TokenResult {
     public readonly string $accessToken;
@@ -957,7 +970,7 @@ if ($response-&gt;hasError()) {
 
     <!-- CLAIMS -->
     <div class="type-section" id="Claims">
-      <h2>type Claims</h2>
+      <h2>type Claims<a class="h2-anchor" href="#Claims" aria-label="Link to this section">&para;</a></h2>
       <p>A bag of decoded claims - from a verified ID token or a UserInfo response. One shape for both.</p>
       <div class="method-sig">final class Claims {
     public function __construct(\stdClass|array $claims)
@@ -973,7 +986,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
 
     <!-- HTTP FETCHER INTERFACE -->
     <div class="type-section" id="HttpFetcherInterface">
-      <h2>interface HttpFetcherInterface</h2>
+      <h2>interface HttpFetcherInterface<a class="h2-anchor" href="#HttpFetcherInterface" aria-label="Link to this section">&para;</a></h2>
       <p>
         The seam every collaborator talks through instead of calling curl directly. Implement this
         to plug in an existing HTTP client instead of <a href="#CurlHttpFetcher"><code>CurlHttpFetcher</code></a>.
@@ -998,7 +1011,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
 
     <!-- CURL HTTP FETCHER -->
     <div class="type-section" id="CurlHttpFetcher">
-      <h2>type CurlHttpFetcher</h2>
+      <h2>type CurlHttpFetcher<a class="h2-anchor" href="#CurlHttpFetcher" aria-label="Link to this section">&para;</a></h2>
       <p>
         The library's own <a href="#HttpFetcherInterface"><code>HttpFetcherInterface</code></a>
         implementation, and the default used by <a href="#OpenIDConnectClientFactory"><code>OpenIDConnectClientFactory</code></a>.
@@ -1027,7 +1040,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
 
     <!-- FETCH RESPONSE -->
     <div class="type-section" id="FetchResponse">
-      <h2>type FetchResponse</h2>
+      <h2>type FetchResponse<a class="h2-anchor" href="#FetchResponse" aria-label="Link to this section">&para;</a></h2>
       <div class="method-sig">final class FetchResponse {
     public function __construct(
         public readonly string $body,
@@ -1040,7 +1053,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
 
     <!-- CURRENT CLOCK -->
     <div class="type-section" id="CurrentClock">
-      <h2>type CurrentClock</h2>
+      <h2>type CurrentClock<a class="h2-anchor" href="#CurrentClock" aria-label="Link to this section">&para;</a></h2>
       <p>
         The default clock for <code>OpenIDConnectClientFactory</code> - wraps the system clock via
         PSR-20's <code>ClockInterface</code>, so tests can inject a fixed one instead.
@@ -1053,7 +1066,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
 
     <!-- MOCK CLIENT -->
     <div class="type-section" id="MockOpenIDConnectClient">
-      <h2>type MockOpenIDConnectClient</h2>
+      <h2>type MockOpenIDConnectClient<a class="h2-anchor" href="#MockOpenIDConnectClient" aria-label="Link to this section">&para;</a></h2>
       <p>
         A hand-written fake for a consuming application's own controller tests - no network, no
         cache, no real cryptography. Every canned result is a public property so a test can override
@@ -1085,7 +1098,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
 
     <!-- EXCEPTIONS -->
     <div class="type-section" id="Exceptions">
-      <h2>namespace Oidc\Exceptions</h2>
+      <h2>namespace Oidc\Exceptions<a class="h2-anchor" href="#Exceptions" aria-label="Link to this section">&para;</a></h2>
       <p>Every exception this library throws extends <code>OpenIDConnectException</code> (itself a plain <code>\RuntimeException</code>), so a caller that only wants a single catch clause for "something in this library failed" always has one available.</p>
       <p>
         <code>OpenIDConnectException</code> also carries <code>getState()</code> - the authorization
