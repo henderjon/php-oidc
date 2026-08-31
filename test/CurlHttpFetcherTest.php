@@ -255,4 +255,22 @@ class CurlHttpFetcherTest extends TestCase {
 		$this->assertSame($this->url('slow'), $records[0]['context']['url']);
 	}
 
+	public function testGenericFetchFailureLogsAnError(): void {
+		$logger  = new ArrayLogger;
+		$fetcher = new CurlHttpFetcher(timeoutSeconds: 1, logger: $logger);
+
+		try {
+			// Nothing listens on this port on localhost - curl fails with "connection
+			// refused", not CURLE_OPERATION_TIMEDOUT, exercising the generic failure branch.
+			$fetcher->fetch('http://127.0.0.1:1/unreachable', null);
+			$this->fail('Expected HttpTransportException to be thrown');
+		} catch( HttpTransportException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: request to the provider failed', $records[0]['message']);
+		$this->assertSame('http://127.0.0.1:1/unreachable', $records[0]['context']['url']);
+	}
+
 }
