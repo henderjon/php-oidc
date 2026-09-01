@@ -1055,44 +1055,126 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 	}
 
+	public function testFetchUserInfoThrowsOnTransportFailure(): void {
+		$fetcher   = new FakeHttpFetcher;
+		$transport = new HttpTransportException('connection refused');
+		$fetcher->failWith(self::USERINFO_ENDPOINT, $transport);
+		$logger = new ArrayLogger;
+
+		try {
+			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->fail('Expected UserInfoRequestException to be thrown');
+		} catch( UserInfoRequestException $e ) {
+			$this->assertSame($transport, $e->getPrevious());
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: unable to reach userinfo endpoint', $records[0]['message']);
+		$this->assertSame($transport, $records[0]['context']['exception']);
+		$this->assertNoPiiInContext($records[0]['context']);
+	}
+
 	public function testFetchUserInfoThrowsOnNonSuccessStatus(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse('unauthorized', 401));
+		$logger = new ArrayLogger;
 
 		try {
-			$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 			$this->fail('Expected UserInfoRequestException to be thrown');
 		} catch( UserInfoRequestException $e ) {
 			$this->assertSame(401, $e->getHttpStatus());
 			$this->assertSame('unauthorized', $e->getRawBody());
 		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: userinfo endpoint returned an unsuccessful response', $records[0]['message']);
+		$this->assertSame(401, $records[0]['context']['http_status']);
+		$this->assertNoPiiInContext($records[0]['context']);
 	}
 
 	public function testFetchUserInfoThrowsOnUnexpectedContentType(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse('<html>not userinfo</html>', 200, 'text/html'));
+		$logger = new ArrayLogger;
 
 		try {
-			$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 			$this->fail('Expected UserInfoRequestException to be thrown');
 		} catch( UserInfoRequestException $e ) {
 			$this->assertSame(200, $e->getHttpStatus());
 			$this->assertSame('<html>not userinfo</html>', $e->getRawBody());
 		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: userinfo endpoint returned an unexpected content type', $records[0]['message']);
+		$this->assertSame('text/html', $records[0]['context']['content_type']);
+		$this->assertNoPiiInContext($records[0]['context']);
 	}
 
 	public function testFetchUserInfoThrowsOnInvalidJson(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse('not json', 200));
+		$logger = new ArrayLogger;
 
 		try {
-			$this->makeClient($fetcher)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 			$this->fail('Expected UserInfoRequestException to be thrown');
 		} catch( UserInfoRequestException $e ) {
 			$this->assertSame(200, $e->getHttpStatus());
 			$this->assertSame('not json', $e->getRawBody());
 			$this->assertInstanceOf(\JsonException::class, $e->getPrevious());
 		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: userinfo endpoint returned invalid JSON', $records[0]['message']);
+		$this->assertInstanceOf(\JsonException::class, $records[0]['context']['exception']);
+		$this->assertNoPiiInContext($records[0]['context']);
+	}
+
+	public function testFetchUserInfoSignedResponseWithNoIssuerConfigured(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$idToken = $fixture->sign([ 'sub' => 'user-1' ]);
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse($idToken, 200, 'application/jwt'));
+		$logger = new ArrayLogger;
+
+		$config = new OpenIDConnectClientConfig(
+			clientId: self::CLIENT_ID,
+			clientSecret: self::CLIENT_SECRET,
+			redirectUrl: self::REDIRECT_URL,
+			endpointOverrides: [
+				ProviderMetadataResolver::JWKS_URI          => self::JWKS_URI,
+				ProviderMetadataResolver::USERINFO_ENDPOINT => self::USERINFO_ENDPOINT,
+			],
+		);
+
+		try {
+			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($config, 'the-access-token', 'user-1');
+			$this->fail('Expected UserInfoRequestException to be thrown');
+		} catch( UserInfoRequestException $e ) {
+			$this->assertSame('No issuer configured to validate the signed userinfo response against https://issuer.example.com/userinfo', $e->getMessage());
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: no issuer configured to validate the signed userinfo response against', $records[0]['message']);
+		$this->assertNoPiiInContext($records[0]['context']);
+	}
+
+	/**
+	 * @param array<string,mixed> $context
+	 */
+	private function assertNoPiiInContext( array $context ): void {
+		$this->assertArrayNotHasKey('body', $context);
+		$this->assertArrayNotHasKey('raw_body', $context);
+		$this->assertArrayNotHasKey('claims', $context);
+		$this->assertArrayNotHasKey('jwt', $context);
 	}
 
 }
