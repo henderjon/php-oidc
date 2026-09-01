@@ -121,6 +121,11 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 					'url'   => $url,
 					'error' => curl_error($handle),
 				]);
+			} else {
+				$this->logger->error('OIDC: request to the provider failed', [
+					'url'   => $url,
+					'error' => curl_error($handle),
+				]);
 			}
 
 			throw new HttpTransportException(sprintf('Request to %s failed: %s', $url, curl_error($handle)));
