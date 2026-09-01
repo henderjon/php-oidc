@@ -369,7 +369,7 @@ final class OpenIDConnectClient implements
 			$issuer = $config->issuer ?? $config->providerUrl;
 
 			if( $issuer === null ) {
-				throw new AuthenticationFailedException('No issuer configured to validate the ID token against', state: $state);
+				throw new AuthenticationFailedException('No issuer configured against which to validate the ID token', state: $state);
 			}
 
 			$claimsValidator = $this->claimsValidator->withState($state);
