@@ -1163,7 +1163,7 @@ class OpenIDConnectClientTest extends TestCase {
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
-		$this->assertSame('OIDC: no issuer configured to validate the signed userinfo response against', $records[0]['message']);
+		$this->assertSame('OIDC: no issuer configured against which to validate the signed userinfo response', $records[0]['message']);
 		$this->assertNoPiiInContext($records[0]['context']);
 	}
 
