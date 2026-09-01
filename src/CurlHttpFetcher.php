@@ -63,7 +63,7 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 			$this->logger->alert('OIDC: TLS certificate and hostname verification is disabled for this request - never use this outside local development', [ 'url' => $url ]);
 		}
 
-		$handle = $this->getHandle();
+		$handle = $this->getHandle($url);
 
 		curl_setopt($handle, CURLOPT_URL, $url);
 		curl_setopt($handle, CURLOPT_HTTPHEADER, $this->formatHeaders($headers));
@@ -157,9 +157,9 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 		return trim(explode(';', $contentType, 2)[0]);
 	}
 
-	private function getHandle(): \CurlHandle {
+	private function getHandle( string $url ): \CurlHandle {
 		if( $this->handle === null ) {
-			$this->handle = curl_init() ?: throw new \RuntimeException('Unable to initialize curl');
+			$this->handle = curl_init() ?: throw new \RuntimeException("Unable to initialize curl for {$url}");
 			curl_setopt($this->handle, CURLOPT_CONNECTTIMEOUT, $this->timeoutSeconds);
 			curl_setopt($this->handle, CURLOPT_TIMEOUT, $this->timeoutSeconds);
 			curl_setopt($this->handle, CURLOPT_LOW_SPEED_LIMIT, self::LOW_SPEED_LIMIT_BYTES_PER_SECOND);
