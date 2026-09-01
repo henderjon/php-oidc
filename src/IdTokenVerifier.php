@@ -307,12 +307,13 @@ final class IdTokenVerifier {
 
 		if( $selectedKid === null ) {
 			$this->logger->error('OIDC: unable to find a matching JWKS key for this ID token', [
+				'jwks_uri'       => $jwksUri,
 				'kid'            => $kid,
 				'available_kids' => array_keys($keySet),
 				'state'          => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('Unable to find a matching JWKS key for this ID token', state: $this->state);
+			throw new AuthenticationFailedException("Unable to find a matching JWKS key for this ID token in {$jwksUri}", state: $this->state);
 		}
 
 		$this->assertKeyTypeMatchesAlgorithm($jwks, $selectedKid, $alg, $jwksUri);
@@ -338,7 +339,7 @@ final class IdTokenVerifier {
 			'state'     => $this->state,
 		]);
 
-		throw new AuthenticationFailedException('JWKS document exceeds the maximum number of keys', state: $this->state);
+		throw new AuthenticationFailedException("JWKS document from {$jwksUri} exceeds the maximum number of keys", state: $this->state);
 	}
 
 	/**

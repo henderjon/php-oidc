@@ -152,7 +152,7 @@ final class TokenEndpointClient {
 				'state'          => $this->state,
 			]);
 
-			throw new TokenRequestException("Token request failed: {$error}", $response->status, $response->body, state: $this->state);
+			throw new TokenRequestException("Token request to {$endpoint} failed: {$error}", $response->status, $response->body, state: $this->state);
 		}
 
 		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {

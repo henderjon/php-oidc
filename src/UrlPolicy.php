@@ -98,7 +98,7 @@ final class UrlPolicy {
 	 * punish a caller who never uses discovery at all.
 	 */
 	private static function defaultAllowedHost( OpenIDConnectClientConfig $config ): ?string {
-		$providerUrl = $config->issuer ?? $config->providerUrl;
+		$providerUrl = $config->resolveIssuer();
 
 		if( $providerUrl === null ) {
 			return null;
