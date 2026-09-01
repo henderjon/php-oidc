@@ -293,4 +293,15 @@ final class OpenIDConnectClientConfig {
 		);
 	}
 
+	/**
+	 * The provider identity to fetch discovery from and validate everything else against:
+	 * `issuer`, when configured, or `providerUrl` as its fallback - never the other way
+	 * around. `providerUrl` exists for a caller that has not yet confirmed the provider's
+	 * canonical issuer (e.g. a base URL known before discovery has ever run); once `issuer`
+	 * is set, it always wins. Null when neither is configured.
+	 */
+	public function resolveIssuer(): ?string {
+		return $this->issuer ?? $this->providerUrl;
+	}
+
 }

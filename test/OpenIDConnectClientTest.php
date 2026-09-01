@@ -751,13 +751,14 @@ class OpenIDConnectClientTest extends TestCase {
 			]));
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
-			$this->assertSame('Token response is missing id_token', $e->getMessage());
+			$this->assertSame("Token response from " . self::TOKEN_ENDPOINT . " is missing id_token", $e->getMessage());
 			$this->assertNull($e->getIdToken(), 'the missing id_token IS the failure - there is nothing to attach');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: token endpoint response is missing id_token', $records[0]['message']);
+		$this->assertSame(self::TOKEN_ENDPOINT, $records[0]['context']['endpoint']);
 		$this->assertSame($params['state'], $records[0]['context']['state']);
 	}
 
