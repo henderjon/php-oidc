@@ -168,10 +168,22 @@ final class OpenIDConnectClient implements
 				'Accept'        => 'application/json',
 			]);
 		} catch( HttpTransportException $e ) {
+			$this->logger->error('OIDC: unable to reach userinfo endpoint', [
+				'endpoint'    => $endpoint,
+				'http_status' => null,
+				'exception'   => $e,
+			]);
+
 			throw new UserInfoRequestException("Unable to reach userinfo endpoint {$endpoint}", previous: $e);
 		}
 
 		if( $response->status !== 200 ) {
+			$this->logger->error('OIDC: userinfo endpoint returned an unsuccessful response', [
+				'endpoint'     => $endpoint,
+				'http_status'  => $response->status,
+				'content_type' => $response->contentType,
+			]);
+
 			throw new UserInfoRequestException("Userinfo request failed with HTTP {$response->status}", $response->status, $response->body);
 		}
 
@@ -184,6 +196,12 @@ final class OpenIDConnectClient implements
 			$issuer = $config->issuer ?? $config->providerUrl;
 
 			if( $issuer === null ) {
+				$this->logger->error('OIDC: no issuer configured to validate the signed userinfo response against', [
+					'endpoint'     => $endpoint,
+					'http_status'  => $response->status,
+					'content_type' => $response->contentType,
+				]);
+
 				throw new UserInfoRequestException('No issuer configured to validate the signed userinfo response against', $response->status, $response->body);
 			}
 
@@ -191,10 +209,19 @@ final class OpenIDConnectClient implements
 				$this->claimsValidator->validateUserInfoIssuer($claims, $issuer);
 				$this->claimsValidator->validateUserInfoAudience($claims, $config->clientId);
 			} catch( AuthenticationFailedException $e ) {
+				// ClaimsValidator already logs the specific reason (missing/mismatched issuer
+				// or audience) before throwing - nothing further to add here, matching how
+				// verifyAndValidateIdToken() rethrows the same collaborator's exceptions.
 				throw new UserInfoRequestException('Signed userinfo response failed claims validation', $response->status, $response->body, previous: $e);
 			}
 		} else {
 			if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
+				$this->logger->error('OIDC: userinfo endpoint returned an unexpected content type', [
+					'endpoint'     => $endpoint,
+					'http_status'  => $response->status,
+					'content_type' => $response->contentType,
+				]);
+
 				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body);
 			}
 
@@ -208,6 +235,13 @@ final class OpenIDConnectClient implements
 			}
 
 			if( !is_array($decoded) ) {
+				$this->logger->error('OIDC: userinfo endpoint returned invalid JSON', [
+					'endpoint'     => $endpoint,
+					'http_status'  => $response->status,
+					'content_type' => $response->contentType,
+					'exception'    => $decodeError,
+				]);
+
 				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, previous: $decodeError);
 			}
 
@@ -219,6 +253,8 @@ final class OpenIDConnectClient implements
 		try {
 			$this->claimsValidator->validateUserInfoSubject($claims, $expectedSubject);
 		} catch( AuthenticationFailedException $e ) {
+			// ClaimsValidator already logs the specific reason before throwing - see the
+			// matching comment on the iss/aud catch above.
 			throw new UserInfoRequestException('Userinfo response failed subject validation', $response->status, $response->body, previous: $e);
 		}
 
@@ -373,6 +409,8 @@ final class OpenIDConnectClient implements
 		try {
 			return $this->idTokenVerifier->verify($jwt, $jwksUri, $config->clientSecret, allowedAlgorithms: $config->allowedAlgorithms);
 		} catch( AuthenticationFailedException $e ) {
+			// IdTokenVerifier already logs the specific reason before throwing - see the
+			// matching comment on the claims-validation catch above.
 			throw new UserInfoRequestException('Signed userinfo response failed verification', $httpStatus, $jwt, previous: $e);
 		}
 	}
