@@ -196,7 +196,7 @@ final class OpenIDConnectClient implements
 			$issuer = $config->issuer ?? $config->providerUrl;
 
 			if( $issuer === null ) {
-				$this->logger->error('OIDC: no issuer configured to validate the signed userinfo response against', [
+				$this->logger->error('OIDC: no issuer configured against which to validate the signed userinfo response', [
 					'endpoint'     => $endpoint,
 					'http_status'  => $response->status,
 					'content_type' => $response->contentType,
