@@ -367,6 +367,36 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertCount(1, $fetcher->requests, 'withState() must not throw away memoization already built up before scoping');
 	}
 
+	/**
+	 * withState() copies `$discovered` into the new instance rather than mutating the
+	 * original (see its docblock), which today is safe only because PHP arrays are
+	 * copy-on-write value types - a later regression that shared the array by reference
+	 * instead (e.g. `$scoped->discovered = &$this->discovered`) would make a document fetched
+	 * through one instance silently show up as already-memoized in the other. Fetching
+	 * something new through the scoped copy, then asking the ORIGINAL for the same provider,
+	 * forces a second real fetch only if the two `$discovered` caches are genuinely
+	 * independent.
+	 */
+	public function testWithStateDoesNotShareLaterMemoizationWithTheOriginalInstance(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'issuer'                 => 'https://issuer.example.com',
+				'token_endpoint'         => 'https://issuer.example.com/token',
+				'authorization_endpoint' => 'https://issuer.example.com/authorize',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
+		$config   = $this->configWithProviderUrl();
+
+		$scoped = $resolver->withState('the-state');
+		$scoped->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$resolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
+
+		$this->assertCount(2, $fetcher->requests, 'a document fetched through a scoped copy must not appear pre-memoized on the original instance');
+	}
+
 	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo('https://issuer.example.com/.well-known/openid-configuration', new FetchResponse('not found', 404));
