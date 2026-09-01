@@ -212,7 +212,7 @@ final class OpenIDConnectClient implements
 				// ClaimsValidator already logs the specific reason (missing/mismatched issuer
 				// or audience) before throwing - nothing further to add here, matching how
 				// verifyAndValidateIdToken() rethrows the same collaborator's exceptions.
-				throw new UserInfoRequestException('Signed userinfo response failed claims validation', $response->status, $response->body, previous: $e);
+				throw new UserInfoRequestException("Signed userinfo response from {$endpoint} failed claims validation", $response->status, $response->body, previous: $e);
 			}
 		} else {
 			if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {
@@ -255,7 +255,7 @@ final class OpenIDConnectClient implements
 		} catch( AuthenticationFailedException $e ) {
 			// ClaimsValidator already logs the specific reason before throwing - see the
 			// matching comment on the iss/aud catch above.
-			throw new UserInfoRequestException('Userinfo response failed subject validation', $response->status, $response->body, previous: $e);
+			throw new UserInfoRequestException("Userinfo response from {$endpoint} failed subject validation", $response->status, $response->body, previous: $e);
 		}
 
 		return $claims;
@@ -411,7 +411,7 @@ final class OpenIDConnectClient implements
 		} catch( AuthenticationFailedException $e ) {
 			// IdTokenVerifier already logs the specific reason before throwing - see the
 			// matching comment on the claims-validation catch above.
-			throw new UserInfoRequestException('Signed userinfo response failed verification', $httpStatus, $jwt, previous: $e);
+			throw new UserInfoRequestException("Signed userinfo response failed verification against {$jwksUri}", $httpStatus, $jwt, previous: $e);
 		}
 	}
 
