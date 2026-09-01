@@ -316,7 +316,7 @@ final class IdTokenVerifier {
 			throw new AuthenticationFailedException("Unable to find a matching JWKS key for this ID token in {$jwksUri}", state: $this->state);
 		}
 
-		$this->assertKeyTypeMatchesAlgorithm($jwks, $selectedKid, $alg);
+		$this->assertKeyTypeMatchesAlgorithm($jwks, $selectedKid, $alg, $jwksUri);
 
 		return $keySet[$selectedKid];
 	}
@@ -423,7 +423,7 @@ final class IdTokenVerifier {
 	 * @param array<string,mixed> $jwks
 	 * @throws AuthenticationFailedException
 	 */
-	private function assertKeyTypeMatchesAlgorithm( array $jwks, string $selectedKid, string $alg ): void {
+	private function assertKeyTypeMatchesAlgorithm( array $jwks, string $selectedKid, string $alg, string $jwksUri ): void {
 		$expectedKty = self::expectedKtyFor($alg);
 
 		if( $expectedKty === null ) {
@@ -446,6 +446,7 @@ final class IdTokenVerifier {
 
 			if( $actualKty !== $expectedKty ) {
 				$this->logger->error('OIDC: JWKS key type does not match the ID token algorithm', [
+					'jwks_uri'     => $jwksUri,
 					'alg'          => $alg,
 					'expected_kty' => $expectedKty,
 					'actual_kty'   => $actualKty,
@@ -453,7 +454,7 @@ final class IdTokenVerifier {
 					'state'        => $this->state,
 				]);
 
-				throw new AuthenticationFailedException('JWKS key type does not match the ID token algorithm', state: $this->state);
+				throw new AuthenticationFailedException("JWKS key type does not match the ID token algorithm for the key in {$jwksUri}", state: $this->state);
 			}
 
 			return;
