@@ -267,12 +267,27 @@ final class IdTokenVerifier {
 		$jwks = $this->fetchJwks($jwksUri);
 		$this->assertKeyCountWithinLimit($jwks, $jwksUri);
 
-		// firebase/php-jwt throws its own exception (UnexpectedValueException,
-		// InvalidArgumentException, ...) for a malformed, missing, or empty "keys" member -
-		// none of which is an AuthenticationFailedException. Every other malformed-input path
-		// in this class becomes one of those, logged first; this call is not an exception to
-		// that just because the rejection happens inside a dependency instead of this class's
-		// own code.
+		// JWK::parseKeySet() itself throws for a missing or empty "keys" member, but a present
+		// non-array value (a string, say) reaches its own internal foreach() unchecked, which
+		// PHP downgrades to a warning rather than an error - harmless to the exception/log
+		// behavior below, but still a PHP-level warning this class can avoid causing in the
+		// first place, rather than merely surviving. Every other malformed-input path in this
+		// class is checked before it can reach code that was not written expecting bad input.
+		if( !is_array($jwks['keys'] ?? null) ) {
+			$this->logger->error('OIDC: unable to parse the JWKS document', [
+				'jwks_uri' => $jwksUri,
+				'state'    => $this->state,
+			]);
+
+			throw new AuthenticationFailedException('Unable to parse the JWKS document', state: $this->state);
+		}
+
+		// JWK::parseKeySet() still throws its own exception (UnexpectedValueException,
+		// InvalidArgumentException, ...) for a "keys" array whose entries do not each parse as
+		// a valid key - none of which is an AuthenticationFailedException. This class's other
+		// malformed-input paths become one of those, logged first; this call is not an
+		// exception to that just because the rejection happens inside a dependency instead of
+		// this class's own code.
 		try {
 			$keySet = JWK::parseKeySet($jwks, $alg);
 		} catch( \Exception $e ) {

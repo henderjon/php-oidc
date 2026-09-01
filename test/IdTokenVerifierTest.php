@@ -506,10 +506,12 @@ class IdTokenVerifierTest extends TestCase {
 	}
 
 	/**
-	 * firebase/php-jwt's JWK::parseKeySet() throws its own exception (UnexpectedValueException,
-	 * InvalidArgumentException, ...) for a "keys" value that is present but not an array,
-	 * before this class's own key-type check ever runs. Confirmed this directly against
-	 * JWK::parseKeySet() while investigating this fix - it is not merely theoretical.
+	 * A present-but-non-array "keys" value (a string, here) is rejected by
+	 * resolveAsymmetricKey()'s own guard before JWK::parseKeySet() is ever called - not by
+	 * catching that dependency's own exception. Confirmed directly against
+	 * JWK::parseKeySet() while investigating: without this guard, a string "keys" value
+	 * reaches its internal foreach() unchecked and triggers a PHP warning on its way to
+	 * still throwing - this guard avoids causing the warning, not just the exception.
 	 */
 	public function testVerifyWrapsAStringJwksKeysValue(): void {
 		$fetcher = new FakeHttpFetcher;
