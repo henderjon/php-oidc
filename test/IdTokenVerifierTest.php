@@ -340,6 +340,7 @@ class IdTokenVerifierTest extends TestCase {
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
+		$this->assertSame(self::JWKS_URI, $records[0]['context']['jwks_uri']);
 		$this->assertSame('RS256', $records[0]['context']['alg']);
 		$this->assertSame('RSA', $records[0]['context']['expected_kty']);
 		$this->assertSame('EC', $records[0]['context']['actual_kty']);

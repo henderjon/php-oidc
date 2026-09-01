@@ -82,12 +82,17 @@ final class ProviderMetadataResolver {
 		$value    = $document[$endpointKey] ?? null;
 
 		if( !is_string($value) || $value === '' ) {
+			// fetchWellKnownConfiguration() already rejected a null resolveIssuer() before
+			// ever returning $document, so it is guaranteed non-null here.
+			$providerUrl = $config->resolveIssuer();
+
 			$this->logger->error('OIDC: provider configuration is missing the requested endpoint', [
 				'endpoint_key' => $endpointKey,
+				'provider_url' => $providerUrl,
 				'state'        => $this->state,
 			]);
 
-			throw new ProviderDiscoveryException("Provider configuration is missing '{$endpointKey}'", state: $this->state);
+			throw new ProviderDiscoveryException("Provider configuration from {$providerUrl} is missing '{$endpointKey}'", state: $this->state);
 		}
 
 		$this->assertUrlAllowed($value, $config, $endpointKey);
@@ -100,7 +105,7 @@ final class ProviderMetadataResolver {
 	 * @return array<string,mixed>
 	 */
 	private function fetchWellKnownConfiguration( OpenIDConnectClientConfig $config ): array {
-		$providerUrl = $config->providerUrl ?? $config->issuer;
+		$providerUrl = $config->resolveIssuer();
 
 		if( $providerUrl === null ) {
 			$this->logger->error('OIDC: cannot discover provider configuration without a providerUrl or issuer', [ 'state' => $this->state ]);
@@ -192,7 +197,7 @@ final class ProviderMetadataResolver {
 			'state'        => $this->state,
 		]);
 
-		throw new ProviderDiscoveryException("Endpoint '{$endpointKey}' resolved to a URL that does not satisfy the configured URL policy", state: $this->state);
+		throw new ProviderDiscoveryException("Endpoint '{$endpointKey}' resolved to {$url}, which does not satisfy the configured URL policy", state: $this->state);
 	}
 
 	/**
@@ -220,7 +225,7 @@ final class ProviderMetadataResolver {
 			'state'    => $this->state,
 		]);
 
-		throw new ProviderDiscoveryException('Provider configuration issuer does not match the URL used to fetch it', state: $this->state);
+		throw new ProviderDiscoveryException("Provider configuration issuer does not match {$providerUrl}, the URL used to fetch it", state: $this->state);
 	}
 
 }
