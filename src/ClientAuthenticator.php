@@ -31,6 +31,12 @@ final class ClientAuthenticator {
 			return [ $params, $headers ];
 		}
 
+		// RFC 6749 §2.3.1 requires the client id and secret to each be percent-encoded before
+		// joining with ":" and base64-encoding - plain HTTP Basic (RFC 7617) has no such step,
+		// but OAuth2 adds it so a ":"/"@"/"%" inside either value cannot be mistaken for the
+		// credential separator. rawurlencode(), not urlencode() - Appendix B's encoding is
+		// "application/x-www-form-urlencoded" with one override, escaping space as %20 rather
+		// than "+".
 		$headers['Authorization'] = 'Basic ' . base64_encode(rawurlencode($config->clientId) . ':' . rawurlencode($config->clientSecret));
 
 		return [ $params, $headers ];
