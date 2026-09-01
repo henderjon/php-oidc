@@ -279,7 +279,7 @@ final class IdTokenVerifier {
 				'state'    => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('Unable to parse the JWKS document', state: $this->state);
+			throw new AuthenticationFailedException("Unable to parse the JWKS document from {$jwksUri}", state: $this->state);
 		}
 
 		// JWK::parseKeySet() still throws its own exception (UnexpectedValueException,
@@ -297,7 +297,7 @@ final class IdTokenVerifier {
 				'state'     => $this->state,
 			]);
 
-			throw new AuthenticationFailedException('Unable to parse the JWKS document', state: $this->state, previous: $e);
+			throw new AuthenticationFailedException("Unable to parse the JWKS document from {$jwksUri}", state: $this->state, previous: $e);
 		}
 
 		$selectedKid = match( true ) {
