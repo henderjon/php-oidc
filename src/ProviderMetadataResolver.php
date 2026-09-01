@@ -197,7 +197,7 @@ final class ProviderMetadataResolver {
 			'state'        => $this->state,
 		]);
 
-		throw new ProviderDiscoveryException("Endpoint '{$endpointKey}' resolved to a URL that does not satisfy the configured URL policy", state: $this->state);
+		throw new ProviderDiscoveryException("Endpoint '{$endpointKey}' resolved to {$url}, which does not satisfy the configured URL policy", state: $this->state);
 	}
 
 	/**
@@ -225,7 +225,7 @@ final class ProviderMetadataResolver {
 			'state'    => $this->state,
 		]);
 
-		throw new ProviderDiscoveryException('Provider configuration issuer does not match the URL used to fetch it', state: $this->state);
+		throw new ProviderDiscoveryException("Provider configuration issuer does not match {$providerUrl}, the URL used to fetch it", state: $this->state);
 	}
 
 }
