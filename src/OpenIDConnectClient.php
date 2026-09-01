@@ -86,9 +86,14 @@ final class OpenIDConnectClient implements
 		$tokenResult = $tokenEndpointClient->exchangeAuthorizationCode($config, $response->code, $flow->codeVerifier);
 
 		if( $tokenResult->idToken === null ) {
-			$this->logger->error('OIDC: token endpoint response is missing id_token', [ 'state' => $flow->state ]);
+			// exchangeAuthorizationCode() above already resolved the token endpoint
+			// successfully through this same scoped resolver, so this is a memoized read,
+			// not a second fetch.
+			$endpoint = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
 
-			throw new AuthenticationFailedException('Token response is missing id_token', state: $flow->state);
+			$this->logger->error('OIDC: token endpoint response is missing id_token', [ 'endpoint' => $endpoint, 'state' => $flow->state ]);
+
+			throw new AuthenticationFailedException("Token response from {$endpoint} is missing id_token", state: $flow->state);
 		}
 
 		// requireAtHash: false - this ID token is issued from the token endpoint, where OpenID
@@ -193,7 +198,7 @@ final class OpenIDConnectClient implements
 			// OpenID Connect Core 1.0 §5.3.2: iss/aud are only REQUIRED "if signed" - a plain
 			// JSON UserInfo response carries no such requirement, so these two checks are
 			// scoped to this branch only.
-			$issuer = $config->issuer ?? $config->providerUrl;
+			$issuer = $config->resolveIssuer();
 
 			if( $issuer === null ) {
 				$this->logger->error('OIDC: no issuer configured against which to validate the signed userinfo response', [
@@ -366,7 +371,7 @@ final class OpenIDConnectClient implements
 			$idTokenVerifier = $this->idTokenVerifier->withState($state);
 			$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken, $requireAtHash);
 
-			$issuer = $config->issuer ?? $config->providerUrl;
+			$issuer = $config->resolveIssuer();
 
 			if( $issuer === null ) {
 				throw new AuthenticationFailedException('No issuer configured against which to validate the ID token', state: $state);
