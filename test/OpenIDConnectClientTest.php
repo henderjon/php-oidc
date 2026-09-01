@@ -1158,7 +1158,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($config, 'the-access-token', 'user-1');
 			$this->fail('Expected UserInfoRequestException to be thrown');
 		} catch( UserInfoRequestException $e ) {
-			$this->assertSame('No issuer configured to validate the signed userinfo response against', $e->getMessage());
+			$this->assertSame('No issuer configured to validate the signed userinfo response against https://issuer.example.com/userinfo', $e->getMessage());
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);

@@ -184,7 +184,7 @@ final class OpenIDConnectClient implements
 				'content_type' => $response->contentType,
 			]);
 
-			throw new UserInfoRequestException("Userinfo request failed with HTTP {$response->status}", $response->status, $response->body);
+			throw new UserInfoRequestException("Userinfo request to {$endpoint} failed with HTTP {$response->status}", $response->status, $response->body);
 		}
 
 		if( $response->contentType === 'application/jwt' ) {
@@ -202,7 +202,7 @@ final class OpenIDConnectClient implements
 					'content_type' => $response->contentType,
 				]);
 
-				throw new UserInfoRequestException('No issuer configured to validate the signed userinfo response against', $response->status, $response->body);
+				throw new UserInfoRequestException("No issuer configured to validate the signed userinfo response against {$endpoint}", $response->status, $response->body);
 			}
 
 			try {
