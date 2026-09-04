@@ -90,6 +90,8 @@ class RefreshTokenClientTest extends TestCase {
 		$refresh = $records[array_key_last($records)];
 		$this->assertSame('OIDC: refresh response carried no new ID token - the original ID token and claims carry forward unchanged', $refresh['message']);
 		$this->assertTrue($refresh['context']['has_refresh_token']);
+		$this->assertSame(self::CLIENT_ID, $refresh['context']['client_id']);
+		$this->assertSame('user-1', $refresh['context']['sub']);
 	}
 
 	public function testRefreshWithNoNewIdTokenAndNoNewRefreshTokenLogsThatAtDebugLevel(): void {
@@ -156,6 +158,7 @@ class RefreshTokenClientTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::DEBUG);
 		$refresh = $records[array_key_last($records)];
 		$this->assertSame('OIDC: refreshed ID token validated against the original claims', $refresh['message']);
+		$this->assertSame(self::CLIENT_ID, $refresh['context']['client_id']);
 		$this->assertSame('user-1', $refresh['context']['sub']);
 		$this->assertSame(self::ISSUER, $refresh['context']['iss']);
 	}

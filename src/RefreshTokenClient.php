@@ -57,7 +57,13 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 		if( $tokenResult->idToken === null ) {
 			// accessToken is unconditionally present on any TokenResult - see its own
 			// constructor - so only refreshToken is worth reporting presence of here.
+			// client_id and sub are both available before the token endpoint is ever called -
+			// there is no state for a refresh (see class docblock), but these two identify
+			// which client and which user this refresh belongs to, which is what a caller
+			// actually wants to filter these logs by.
 			$this->logger->debug('OIDC: refresh response carried no new ID token - the original ID token and claims carry forward unchanged', [
+				'client_id'         => $config->clientId,
+				'sub'               => $originalClaims->get('sub'),
 				'has_refresh_token' => $tokenResult->refreshToken !== null,
 			]);
 
@@ -91,10 +97,14 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 		// sub/iss are standard, non-secret JWT claims - see OpenIDConnectClient's own equivalent
 		// debug log for the same reasoning. Neither is redundant with the original claims logged
 		// wherever the original authentication happened: this confirms what the REFRESHED token
-		// itself validated to, not merely that it round-tripped the same values.
+		// itself validated to, not merely that it round-tripped the same values. client_id is
+		// added for the same reason as the sibling debug log above - not itself validated here
+		// (that already happened via ClientAuthenticator, further down the call chain), just
+		// carried along so this log line can be filtered by client the same way.
 		$this->logger->debug('OIDC: refreshed ID token validated against the original claims', [
-			'sub' => $claims->get('sub'),
-			'iss' => $claims->get('iss'),
+			'client_id' => $config->clientId,
+			'sub'       => $claims->get('sub'),
+			'iss'       => $claims->get('iss'),
 		]);
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken, $tokenResult->expiresIn);
