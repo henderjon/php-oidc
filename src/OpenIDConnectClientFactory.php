@@ -34,7 +34,7 @@ class OpenIDConnectClientFactory {
 	}
 
 	public function make( CacheInterface $stateCache, string $cacheKeySuffix = "" ): OpenIDConnectClient {
-		$providerMetadataResolver = new ProviderMetadataResolver($this->httpFetcher, new UrlPolicy, $this->logger);
+		$providerMetadataResolver = new ProviderMetadataResolver($this->httpFetcher, new UrlPolicy($this->logger), $this->logger);
 		$idTokenVerifier          = new IdTokenVerifier($this->httpFetcher, $this->clock, logger: $this->logger);
 		$claimsValidator          = new ClaimsValidator($this->logger);
 		$tokenEndpointClient      = new TokenEndpointClient($this->httpFetcher, $providerMetadataResolver, $this->logger);
