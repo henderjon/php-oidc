@@ -19,10 +19,11 @@ use Psr\SimpleCache\CacheInterface;
  * ClaimsValidator, and TokenEndpointClient instances rather than getting fresh ones - all four
  * are stateless collaborators already being constructed once per make() call regardless.
  *
- * The logger defaults to a no-op, so passing one is opt-in. It only ever
- * receives detail behind a failure that already produces (or is about to
- * produce) a deliberately generic exception - see AuthorizationStateStore
- * and OpenIDConnectClient for what gets logged and why.
+ * The logger defaults to a no-op, so passing one is opt-in. It receives detail behind a
+ * failure that already produces (or is about to produce) a deliberately generic exception, and
+ * - across every collaborator wired together here - a debug-level trace of what each one did
+ * on the ordinary success path too. See each collaborator's own docblock for exactly what it
+ * logs and why.
  */
 class OpenIDConnectClientFactory {
 
@@ -46,7 +47,7 @@ class OpenIDConnectClientFactory {
 			$claimsValidator,
 			$tokenEndpointClient,
 			$this->httpFetcher,
-			new RefreshTokenClient($providerMetadataResolver, $idTokenVerifier, $claimsValidator, $tokenEndpointClient),
+			new RefreshTokenClient($providerMetadataResolver, $idTokenVerifier, $claimsValidator, $tokenEndpointClient, $this->logger),
 			$this->logger,
 		);
 	}
