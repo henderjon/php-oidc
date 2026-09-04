@@ -452,8 +452,23 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertArrayNotHasKey('code_challenge', $params);
 		$this->assertArrayNotHasKey('code_challenge_method', $params);
 		// A confidential client (has a client secret) isn't the case PKCE exists to guard -
-		// no nudge alert expected here, unlike the public-client case below.
+		// no nudge alert expected here, unlike the public-client case below. The mode is still
+		// visible in the debug log either way, though - see the next assertion.
 		$this->assertSame([], $logger->recordsAboveDebug());
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertSame('Disabled', $records[array_key_last($records)]['context']['pkce']);
+	}
+
+	public function testBuildRedirectLogsTheConfiguredPkceModeByName(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$client->buildAuthorizationCodeRedirect($this->config()->withPkce(PkceMode::Required));
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertSame('Required', $records[array_key_last($records)]['context']['pkce']);
 	}
 
 	public function testPublicClientWithPkceDisabledLogsAnAlert(): void {

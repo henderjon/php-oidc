@@ -334,11 +334,16 @@ final class OpenIDConnectClient implements
 		// back into the verifier. 'state' is also already inside 'params' (needed there to
 		// reconstruct the actual redirect URL) - repeated here as its own top-level key so this
 		// log line can be found the same way every other collaborator's debug logging is found,
-		// by 'state' alone, without knowing to look inside 'params' first.
+		// by 'state' alone, without knowing to look inside 'params' first. 'pkce' makes the
+		// mode explicit rather than something a reader has to infer from whether 'params'
+		// happens to contain code_challenge/code_challenge_method - the only place a
+		// confidential client's own PKCE-disabled choice is visible at all (see buildRedirect()'s
+		// own alert above, which is scoped to a public client specifically).
 		$this->logger->debug('OIDC: building an authorization redirect', [
 			'authorization_endpoint' => $authorizationEndpoint,
 			'params'                 => $params,
 			'state'                  => $flow->state,
+			'pkce'                   => $config->pkce->name,
 		]);
 
 		return new AuthorizationRedirect($this->appendQuery($authorizationEndpoint, $params));
