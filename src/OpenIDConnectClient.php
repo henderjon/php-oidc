@@ -295,6 +295,22 @@ final class OpenIDConnectClient implements
 
 		$flow = $this->stateStore->start(codeVerifier: $codeVerifier);
 
+		// array_merge($config->extraAuthParams, [...]) below always lets the second array win
+		// on a key collision - silently, with nothing distinguishing "extraAuthParams never set
+		// this" from "extraAuthParams set it and it got overridden anyway." The final params are
+		// logged either way a few lines down, but only this line says a collision happened at all.
+		$overriddenExtraAuthParamKeys = array_values(array_intersect(
+			array_keys($config->extraAuthParams),
+			[ 'response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce' ],
+		));
+
+		if( $overriddenExtraAuthParamKeys !== [] ) {
+			$this->logger->debug('OIDC: extraAuthParams collided with a reserved param and was overridden', [
+				'overridden_keys' => $overriddenExtraAuthParamKeys,
+				'state'           => $flow->state,
+			]);
+		}
+
 		$params = array_merge($config->extraAuthParams, [
 			'response_type' => $responseType,
 			'client_id'     => $config->clientId,

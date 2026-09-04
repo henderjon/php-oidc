@@ -97,6 +97,8 @@ final class TokenEndpointClient {
 	 * @throws TokenRequestException
 	 */
 	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [], array $extraParams = [] ): TokenResult {
+		$this->logOverriddenReservedParams($extraParams, [ 'grant_type', 'scope' ]);
+
 		$params = array_merge($extraParams, [ 'grant_type' => 'client_credentials' ]);
 
 		// scope is reserved even when $scopes is empty - "no scopes requested" must not leave
@@ -214,6 +216,30 @@ final class TokenEndpointClient {
 		]);
 
 		return new TokenResult($decoded, $this->logger, $this->state);
+	}
+
+	/**
+	 * `array_merge($extraParams, [...])` always lets the second array win on a key collision -
+	 * silently, with nothing distinguishing "the caller never set this" from "the caller set it
+	 * and it got overridden anyway." A caller passing `scope` or `grant_type` in `$extraParams`
+	 * instead of through `$scopes` (or at all) is exactly the kind of mistake this exists to
+	 * surface - the request debug log a few lines down shows the final params either way, but
+	 * only this line says a collision actually happened.
+	 *
+	 * @param array<string,mixed> $extraParams
+	 * @param list<string> $reservedKeys
+	 */
+	private function logOverriddenReservedParams( array $extraParams, array $reservedKeys ): void {
+		$overriddenKeys = array_values(array_intersect(array_keys($extraParams), $reservedKeys));
+
+		if( $overriddenKeys === [] ) {
+			return;
+		}
+
+		$this->logger->debug('OIDC: extraParams collided with a reserved param and was overridden', [
+			'overridden_keys' => $overriddenKeys,
+			'state'           => $this->state,
+		]);
 	}
 
 	/**

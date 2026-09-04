@@ -125,6 +125,19 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertSame('client_credentials', $body['grant_type']);
 	}
 
+	public function testRequestClientCredentialsTokenLogsWhenExtraParamsOverridesGrantType(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config(), extraParams: [ 'grant_type' => 'authorization_code' ]);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$collision = $records[0];
+		$this->assertSame('OIDC: extraParams collided with a reserved param and was overridden', $collision['message']);
+		$this->assertSame([ 'grant_type' ], $collision['context']['overridden_keys']);
+	}
+
 	public function testRequestClientCredentialsTokenExtraParamsCannotOverrideScope(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
@@ -133,6 +146,35 @@ class TokenEndpointClientTest extends TestCase {
 
 		parse_str((string)$fetcher->requests[0]['body'], $body);
 		$this->assertSame('read', $body['scope']);
+	}
+
+	public function testRequestClientCredentialsTokenLogsWhenExtraParamsOverridesScope(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config(), [ 'read' ], [ 'scope' => 'forged' ]);
+
+		$this->assertSame(
+			[ 'scope' ],
+			$logger->recordsAt(LogLevel::DEBUG)[0]['context']['overridden_keys'],
+		);
+	}
+
+	public function testRequestClientCredentialsTokenDoesNotLogAnythingWhenExtraParamsHasNoCollision(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config(), [ 'read' ], [ 'audience' => 'https://api.example.com' ]);
+
+		$this->assertSame(
+			[],
+			array_values(array_filter(
+				$logger->recordsAt(LogLevel::DEBUG),
+				static fn ( array $record ): bool => $record['message'] === 'OIDC: extraParams collided with a reserved param and was overridden',
+			)),
+		);
 	}
 
 	public function testRequestClientCredentialsTokenExtraParamsScopeIsReservedEvenWithNoScopesRequested(): void {

@@ -101,6 +101,37 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame('none', $params['prompt']);
 	}
 
+	public function testExtraAuthParamsCollisionWithProtocolParamsIsLoggedAtDebugLevel(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+		$config  = $this->config()->withExtraAuthParams([ 'client_id' => 'a-forged-client-id', 'scope' => 'forged', 'prompt' => 'none' ]);
+
+		$client->buildAuthorizationCodeRedirect($config);
+
+		$records   = $logger->recordsAt(LogLevel::DEBUG);
+		$collision = $records[array_key_last($records) - 1];
+		$this->assertSame('OIDC: extraAuthParams collided with a reserved param and was overridden', $collision['message']);
+		$this->assertSame([ 'client_id', 'scope' ], $collision['context']['overridden_keys']);
+	}
+
+	public function testExtraAuthParamsWithNoCollisionDoesNotLogAnything(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+		$config  = $this->config()->withExtraAuthParams([ 'prompt' => 'none' ]);
+
+		$client->buildAuthorizationCodeRedirect($config);
+
+		$this->assertSame(
+			[],
+			array_values(array_filter(
+				$logger->recordsAt(LogLevel::DEBUG),
+				static fn ( array $record ): bool => $record['message'] === 'OIDC: extraAuthParams collided with a reserved param and was overridden',
+			)),
+		);
+	}
+
 	public function testCompleteAuthorizationCodeFlowFullCycle(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;
