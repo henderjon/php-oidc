@@ -19,11 +19,17 @@ use Psr\Log\LoggerInterface;
  * `$allowedLevels` is a discrete set, not a range - any combination of PSR-3's eight levels
  * (see Psr\Log\LogLevel) is valid, including combinations no linear severity ordering could
  * express together (`debug` and `critical`, say, with everything between them excluded).
+ *
+ * Include `LogLevels::ALL` in `$allowedLevels` to opt into every level unconditionally,
+ * including a level outside PSR-3's own eight constants - a caller with its own non-standard
+ * level cannot otherwise be included just by enumerating LogLevel's constants by hand. See
+ * LogLevels' own docblock.
  */
 final class LogLevelFilterLogger extends AbstractLogger {
 
 	/**
-	 * @param list<string> $allowedLevels One or more of Psr\Log\LogLevel's constants.
+	 * @param list<string> $allowedLevels One or more of Psr\Log\LogLevel's constants, or
+	 *                                    LogLevels::ALL to allow every level unconditionally.
 	 */
 	public function __construct(
 		private readonly LoggerInterface $logger,
@@ -32,7 +38,7 @@ final class LogLevelFilterLogger extends AbstractLogger {
 	}
 
 	public function log( $level, string|\Stringable $message, array $context = [] ): void {
-		if( !in_array($level, $this->allowedLevels, true) ) {
+		if( !in_array(LogLevels::ALL, $this->allowedLevels, true) && !in_array($level, $this->allowedLevels, true) ) {
 			return;
 		}
 

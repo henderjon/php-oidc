@@ -384,6 +384,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
             <li><a href="#OpenIDConnectClientConfig">OpenIDConnectClientConfig</a></li>
             <li><a href="#Logging">Logging</a></li>
             <li><a href="#LogLevelFilterLogger">LogLevelFilterLogger</a></li>
+            <li><a href="#LogLevels">LogLevels</a></li>
             <li><a href="#PkceMode">PkceMode</a></li>
             <li><a href="#ClientAuthMethod">ClientAuthMethod</a></li>
           </ul>
@@ -660,6 +661,36 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       <pre>$logger = new LogLevelFilterLogger($yourAppLogger, [ LogLevel::DEBUG ]);
 
 $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
+      <p>
+        Include <a href="#LogLevels"><code>LogLevels::ALL</code></a> in <code>$allowedLevels</code>
+        to opt into every level unconditionally, including one outside PSR-3's own eight
+        constants:
+      </p>
+      <pre>$logger = new LogLevelFilterLogger($yourAppLogger, [ LogLevels::ALL ]);</pre>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- LOG LEVELS -->
+    <div class="type-section" id="LogLevels">
+      <h2>type LogLevels<a class="section-anchor" href="#LogLevels" aria-label="Link to this section">&para;</a></h2>
+      <p>
+        A level value <a href="#LogLevelFilterLogger"><code>LogLevelFilterLogger</code></a>
+        recognizes as "every level, unconditionally" - including a level outside PSR-3's own
+        eight defined constants (<code>Psr\Log\LogLevel</code>). PSR-3 never restricts a log
+        call's level to those eight; any string is a legal level for a caller that defines its
+        own. Enumerating <code>LogLevel</code>'s constants by hand cannot express "let everything
+        through" for that reason - a custom level would still be silently dropped, since it would
+        never appear in that list. <code>ALL</code> is an explicit escape hatch from that.
+      </p>
+      <div class="method-sig">final class LogLevels {
+    const ALL = '*';
+}</div>
+      <p>
+        Not itself a real level - never pass it to a logger's own <code>log()</code>/
+        <code>debug()</code>/etc. methods, only into
+        <a href="#LogLevelFilterLogger"><code>LogLevelFilterLogger</code></a>'s
+        <code>$allowedLevels</code>.
+      </p>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 
