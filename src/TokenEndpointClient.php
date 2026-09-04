@@ -149,6 +149,7 @@ final class TokenEndpointClient {
 				'http_status' => null,
 				'exception'   => $e,
 				'state'       => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", state: $this->state, previous: $e);
@@ -172,6 +173,7 @@ final class TokenEndpointClient {
 				'provider_error' => is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null,
 				'content_type'   => $response->contentType,
 				'state'          => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new TokenRequestException("Token request to {$endpoint} failed: {$error}", $response->status, $response->body, state: $this->state);
@@ -183,6 +185,7 @@ final class TokenEndpointClient {
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new TokenRequestException("Token endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body, state: $this->state);
@@ -195,6 +198,7 @@ final class TokenEndpointClient {
 				'content_type' => $response->contentType,
 				'exception'    => $decodeError,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, state: $this->state, previous: $decodeError);

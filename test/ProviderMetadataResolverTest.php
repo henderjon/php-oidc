@@ -52,6 +52,11 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertSame('OIDC: endpoint URL does not satisfy the configured URL policy', $records[0]['message']);
 		$this->assertSame(ProviderMetadataResolver::TOKEN_ENDPOINT, $records[0]['context']['endpoint_key']);
 		$this->assertSame('http://issuer.example.com/token', $records[0]['context']['url']);
+		// false here does not mean "confirmed benign" - a policy-violating endpoint could
+		// still reflect a compromised or misconfigured provider. It just is not one of the
+		// small curated set of call sites this library can call security_relevant with
+		// confidence.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testResolveRejectsADiscoveredEndpointThatViolatesTheUrlPolicy(): void {

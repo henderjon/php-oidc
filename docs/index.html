@@ -589,7 +589,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>debug</code></td><td>The happy path of nearly every collaborator - what was sent, what came back, what was decided. The bulk of this library's log volume.</td></tr>
           <tr><td><code>warning</code></td><td>A fail-open decision that still proceeds anyway - an Optional PKCE flow completing with no <code>code_verifier</code> - or a runtime event worth a human's attention that is not itself a configuration choice - a callback whose <code>state</code> matched no pending authorization attempt at all (<code>AuthorizationStateStore</code>; see that method's own docblock for the several distinct things a miss there could mean).</td></tr>
           <tr><td><code>info</code></td><td>An outcome PSR-16's own cache interface cannot distinguish from a real failure - <code>AuthorizationStateStore::consume()</code>, when the cache backend reports a delete as possibly not having cleared the entry.</td></tr>
-          <tr><td><code>error</code></td><td>Every validation, fetch, or parse failure across every collaborator - by far the largest share of non-<code>debug</code> volume. Always paired with the exception this library is about to throw.</td></tr>
+          <tr><td><code>error</code></td><td>Every validation, fetch, or parse failure across every collaborator - by far the largest share of non-<code>debug</code> volume. Always paired with the exception this library is about to throw. Every call at this level also carries a <code>security_relevant</code> boolean - see below.</td></tr>
           <tr><td><code>alert</code></td><td>Reserved for a configuration choice worth a developer's own review, not a runtime event: TLS verification actively disabled for a request (<code>CurlHttpFetcher</code>), an untrusted <code>aud</code> value let through by explicit config opt-out (<code>ClaimsValidator</code>), or a public client building an authorization redirect with PKCE disabled (<code>OpenIDConnectClient</code>).</td></tr>
         </tbody>
       </table>
@@ -610,6 +610,24 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         library throws carries the same <code>state</code> value too, via
         <code>getState()</code> - see <a href="#Exceptions">Exceptions</a> - so a caller catching
         one directly gets the same correlation id without having to opt into a logger at all.
+      </p>
+      <p>
+        Every <code>error</code>-level call also carries a <code>security_relevant</code> boolean,
+        orthogonal to the level itself - it does not change what <code>error</code>, <code>warning</code>,
+        or <code>alert</code> mean, only whether this particular failure is one this library can call a
+        likely attack indicator with real confidence. It is <code>true</code> on a small, deliberately
+        narrow set of call sites where the failure is essentially unexplainable except as tampering or
+        forgery: an ID token declaring the <code>"none"</code> algorithm, a signature that fails
+        verification, an <code>at_hash</code> that does not match the access token, a JWKS key type that
+        does not match the token's algorithm, and a <code>nonce</code> that does not match the one this
+        client generated. Every other <code>error</code> call - the other 61, as of this writing - carries
+        <code>security_relevant: false</code>. That does <em>not</em> mean "confirmed benign" - a
+        misconfigured provider, a network blip, and a genuine attack that happens not to fit one of the
+        five curated shapes above all log <code>false</code> identically. It means only "not in this small
+        curated set," not "safe to ignore." A caller wanting a lightweight tamper/attack signal can filter
+        on this key without having to enumerate message strings or guess at severity; a caller wanting
+        every failure still gets every failure, since the key never suppresses anything, it only adds a
+        flag alongside.
       </p>
       <p>
         The three classes that fetch and validate an HTTP response - <code>TokenEndpointClient</code>,
@@ -655,6 +673,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>invalid_fields</code></td><td><code>list&lt;string&gt;</code></td><td>Names of token-response fields that were missing or the wrong type.</td></tr>
           <tr><td><code>invalid_field_values</code></td><td><code>array&lt;string,mixed&gt;</code></td><td>Each name in <code>invalid_fields</code> mapped to what it actually contained (<code>null</code> when entirely missing). Safe to log verbatim - a field only lands here for having the wrong shape, never for holding a validly-typed value, so nothing here can be a real access/refresh/id token.</td></tr>
           <tr><td><code>type</code>, <code>keys</code></td><td><code>string</code>, <code>?list&lt;string&gt;</code></td><td>The actual PHP type (<code>get_debug_type()</code>) and, if it was an array, the keys of a cached authorization flow entry that didn't have the expected shape.</td></tr>
+          <tr><td><code>security_relevant</code></td><td><code>bool</code></td><td>Present on every <code>error</code>-level call. <code>true</code> only on the small curated set of likely attack indicators described above; <code>false</code> everywhere else, which means "not in that set," not "confirmed benign."</td></tr>
         </tbody>
       </table>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>

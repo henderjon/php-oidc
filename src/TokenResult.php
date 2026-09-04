@@ -60,6 +60,7 @@ final class TokenResult {
 				'invalid_fields'       => array_keys($invalidFieldValues),
 				'invalid_field_values' => $invalidFieldValues,
 				'state'                => $state,
+				'security_relevant' => false,
 			]);
 		}
 

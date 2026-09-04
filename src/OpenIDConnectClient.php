@@ -64,7 +64,7 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $config->pkce === PkceMode::Required && $flow->codeVerifier === null ) {
-			$this->logger->error('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state ]);
+			$this->logger->error('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('Unable to verify PKCE code verifier', state: $flow->state);
 		}
@@ -107,7 +107,7 @@ final class OpenIDConnectClient implements
 			// not a second fetch.
 			$endpoint = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
 
-			$this->logger->error('OIDC: token endpoint response is missing id_token', [ 'endpoint' => $endpoint, 'state' => $flow->state ]);
+			$this->logger->error('OIDC: token endpoint response is missing id_token', [ 'endpoint' => $endpoint, 'state' => $flow->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException("Token response from {$endpoint} is missing id_token", state: $flow->state);
 		}
@@ -159,7 +159,7 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->idToken === null ) {
-			$this->logger->error('OIDC: callback is missing the id_token', [ 'state' => $flow->state ]);
+			$this->logger->error('OIDC: callback is missing the id_token', [ 'state' => $flow->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('Callback is missing the id_token', state: $flow->state);
 		}
@@ -197,6 +197,7 @@ final class OpenIDConnectClient implements
 				'endpoint'    => $endpoint,
 				'http_status' => null,
 				'exception'   => $e,
+				'security_relevant' => false,
 			]);
 
 			throw new UserInfoRequestException("Unable to reach userinfo endpoint {$endpoint}", previous: $e);
@@ -207,6 +208,7 @@ final class OpenIDConnectClient implements
 				'endpoint'     => $endpoint,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
+				'security_relevant' => false,
 			]);
 
 			throw new UserInfoRequestException("Userinfo request to {$endpoint} failed with HTTP {$response->status}", $response->status, $response->body);
@@ -225,6 +227,7 @@ final class OpenIDConnectClient implements
 					'endpoint'     => $endpoint,
 					'http_status'  => $response->status,
 					'content_type' => $response->contentType,
+					'security_relevant' => false,
 				]);
 
 				throw new UserInfoRequestException("No issuer configured to validate the signed userinfo response against {$endpoint}", $response->status, $response->body);
@@ -245,6 +248,7 @@ final class OpenIDConnectClient implements
 					'endpoint'     => $endpoint,
 					'http_status'  => $response->status,
 					'content_type' => $response->contentType,
+					'security_relevant' => false,
 				]);
 
 				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body);
@@ -265,6 +269,7 @@ final class OpenIDConnectClient implements
 					'http_status'  => $response->status,
 					'content_type' => $response->contentType,
 					'exception'    => $decodeError,
+					'security_relevant' => false,
 				]);
 
 				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, previous: $decodeError);
@@ -390,6 +395,7 @@ final class OpenIDConnectClient implements
 				'error'             => $response->error,
 				'error_description' => $response->errorDescription,
 				'state'             => $response->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException("Provider returned an error: {$summary}", state: $response->state);
@@ -407,7 +413,7 @@ final class OpenIDConnectClient implements
 	 */
 	private function consumeFlow( IncomingAuthorizationResponse $response ): ?FlowState {
 		if( $response->state === null ) {
-			$this->logger->error('OIDC: callback is missing the state parameter', [ 'state' => null ]);
+			$this->logger->error('OIDC: callback is missing the state parameter', [ 'state' => null, 'security_relevant' => false ]);
 
 			return null;
 		}

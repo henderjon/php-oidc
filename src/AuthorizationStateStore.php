@@ -87,7 +87,7 @@ final class AuthorizationStateStore {
 		], $this->ttlSeconds);
 
 		if( !$stored ) {
-			$this->logger->error('OIDC: failed to persist a new authorization attempt', [ 'state' => $this->loggableState($state) ]);
+			$this->logger->error('OIDC: failed to persist a new authorization attempt', [ 'state' => $this->loggableState($state), 'security_relevant' => false ]);
 
 			throw new AuthorizationStateException('Unable to persist authorization state', state: $this->loggableState($state));
 		}
@@ -133,6 +133,7 @@ final class AuthorizationStateStore {
 				'state' => $this->loggableState($state),
 				'type'  => get_debug_type($flow),
 				'keys'  => is_array($flow) ? array_keys($flow) : null,
+				'security_relevant' => false,
 			]);
 
 			return null;

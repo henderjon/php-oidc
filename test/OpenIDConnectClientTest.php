@@ -532,6 +532,10 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: PKCE code verifier missing for a Required flow', $records[0]['message']);
 		$this->assertSame($params['state'], $records[0]['context']['state']);
+		// A missing verifier for a Required flow is a client-side integration bug, not an
+		// attack indicator - it stays outside the small curated set of error() calls marked
+		// security_relevant: true.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testOptionalPkceProceedsWithoutAVerifierWhenNoneWasStored(): void {

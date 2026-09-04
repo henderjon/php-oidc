@@ -118,6 +118,7 @@ final class IdTokenVerifier {
 				'length' => strlen($idToken),
 				'max'    => self::MAX_ID_TOKEN_LENGTH_BYTES,
 				'state'  => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token exceeds the maximum allowed length', state: $this->state);
@@ -132,7 +133,7 @@ final class IdTokenVerifier {
 		$this->logger->debug('OIDC: decoded ID token header', [ 'header' => $header, 'state' => $this->state ]);
 
 		if( isset($header['enc']) ) {
-			$this->logger->error('OIDC: ID token is encrypted (JWE), which is not supported', [ 'header' => $header, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token is encrypted (JWE), which is not supported', [ 'header' => $header, 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('Encrypted ID tokens (JWE) are not supported', state: $this->state);
 		}
@@ -140,7 +141,7 @@ final class IdTokenVerifier {
 		$alg = $header['alg'] ?? null;
 
 		if( !is_string($alg) || $alg === '' ) {
-			$this->logger->error('OIDC: ID token is missing its alg header', [ 'header' => $header, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token is missing its alg header', [ 'header' => $header, 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('ID token is missing its alg header', state: $this->state);
 		}
@@ -171,7 +172,7 @@ final class IdTokenVerifier {
 	 */
 	private function assertAlgorithmAllowed( string $alg, array $allowedAlgorithms, string $clientSecret ): void {
 		if( $alg === 'none' ) {
-			$this->logger->error('OIDC: ID token declares the "none" algorithm', [ 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token declares the "none" algorithm', [ 'state' => $this->state, 'security_relevant' => true ]);
 
 			throw new AuthenticationFailedException('ID token algorithm "none" is not allowed', state: $this->state);
 		}
@@ -181,13 +182,14 @@ final class IdTokenVerifier {
 				'alg'                => $alg,
 				'allowed_algorithms' => $allowedAlgorithms,
 				'state'              => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException("ID token algorithm \"{$alg}\" is not allowed", state: $this->state);
 		}
 
 		if( str_starts_with($alg, 'HS') && $clientSecret === '' ) {
-			$this->logger->error('OIDC: ID token uses an HMAC algorithm but no client secret is configured', [ 'alg' => $alg, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token uses an HMAC algorithm but no client secret is configured', [ 'alg' => $alg, 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException("ID token algorithm \"{$alg}\" requires a client secret", state: $this->state);
 		}
@@ -210,7 +212,7 @@ final class IdTokenVerifier {
 			// happens to reveal about why decoding failed) lives only in the log, matching
 			// every other failure in this class and in ClaimsValidator. `previous` still
 			// carries the original exception for anything inspecting the chain directly.
-			$this->logger->error('OIDC: ID token signature verification failed', [ 'exception' => $e, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token signature verification failed', [ 'exception' => $e, 'state' => $this->state, 'security_relevant' => true ]);
 
 			throw new AuthenticationFailedException('ID token verification failed', state: $this->state, previous: $e);
 		} finally {
@@ -233,7 +235,7 @@ final class IdTokenVerifier {
 
 		if( $atHash === null ) {
 			if( $requireAtHash ) {
-				$this->logger->error('OIDC: ID token is missing the required at_hash claim for an access token issued alongside it', [ 'alg' => $alg, 'state' => $this->state ]);
+				$this->logger->error('OIDC: ID token is missing the required at_hash claim for an access token issued alongside it', [ 'alg' => $alg, 'state' => $this->state, 'security_relevant' => false ]);
 
 				throw new AuthenticationFailedException('ID token is missing the required at_hash claim', state: $this->state);
 			}
@@ -259,6 +261,7 @@ final class IdTokenVerifier {
 				'expected_at_hash' => $expected,
 				'actual_at_hash'   => (string)$atHash,
 				'state'            => $this->state,
+				'security_relevant' => true,
 			]);
 
 			throw new AuthenticationFailedException('ID token at_hash does not match the access token', state: $this->state);
@@ -283,6 +286,7 @@ final class IdTokenVerifier {
 			$this->logger->error('OIDC: unable to parse the JWKS document', [
 				'jwks_uri' => $jwksUri,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException("Unable to parse the JWKS document from {$jwksUri}", state: $this->state);
@@ -301,6 +305,7 @@ final class IdTokenVerifier {
 				'jwks_uri'  => $jwksUri,
 				'exception' => $e,
 				'state'     => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException("Unable to parse the JWKS document from {$jwksUri}", state: $this->state, previous: $e);
@@ -317,6 +322,7 @@ final class IdTokenVerifier {
 				'kid'            => $kid,
 				'available_kids' => array_keys($keySet),
 				'state'          => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException("Unable to find a matching JWKS key for this ID token in {$jwksUri}", state: $this->state);
@@ -350,6 +356,7 @@ final class IdTokenVerifier {
 			'key_count' => count($keys),
 			'max_keys'  => self::MAX_JWKS_KEYS,
 			'state'     => $this->state,
+			'security_relevant' => false,
 		]);
 
 		throw new AuthenticationFailedException("JWKS document from {$jwksUri} exceeds the maximum number of keys", state: $this->state);
@@ -465,6 +472,7 @@ final class IdTokenVerifier {
 					'actual_kty'   => $actualKty,
 					'kid'          => $selectedKid,
 					'state'        => $this->state,
+					'security_relevant' => true,
 				]);
 
 				throw new AuthenticationFailedException("JWKS key type does not match the ID token algorithm for the key in {$jwksUri}", state: $this->state);
@@ -488,6 +496,7 @@ final class IdTokenVerifier {
 				'content_type' => null,
 				'exception'    => $e,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Unable to fetch JWKS from {$jwksUri}", state: $this->state, previous: $e);
@@ -499,6 +508,7 @@ final class IdTokenVerifier {
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned HTTP {$response->status}", state: $this->state);
@@ -510,6 +520,7 @@ final class IdTokenVerifier {
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned an unexpected content type", state: $this->state);
@@ -531,6 +542,7 @@ final class IdTokenVerifier {
 				'content_type' => $response->contentType,
 				'exception'    => $decodeError,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("JWKS endpoint {$jwksUri} returned invalid JSON", state: $this->state, previous: $decodeError);
@@ -547,7 +559,7 @@ final class IdTokenVerifier {
 		$segments = explode('.', $idToken);
 
 		if( count($segments) !== 3 ) {
-			$this->logger->error('OIDC: ID token is not a well-formed JWT', [ 'segment_count' => count($segments), 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token is not a well-formed JWT', [ 'segment_count' => count($segments), 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('ID token is not a well-formed JWT', state: $this->state);
 		}
@@ -562,7 +574,7 @@ final class IdTokenVerifier {
 		}
 
 		if( !is_array($decoded) ) {
-			$this->logger->error('OIDC: ID token header is not valid JSON', [ 'exception' => $decodeError, 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token header is not valid JSON', [ 'exception' => $decodeError, 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('ID token header is not valid JSON', state: $this->state, previous: $decodeError);
 		}

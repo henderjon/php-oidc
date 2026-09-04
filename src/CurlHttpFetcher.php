@@ -118,6 +118,7 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 				$this->logger->error('OIDC: response exceeded the maximum allowed size and was aborted', [
 					'url'                => $url,
 					'max_response_bytes' => $this->maxResponseBytes,
+					'security_relevant' => false,
 				]);
 
 				throw new HttpTransportException(sprintf('Response from %s exceeded the maximum allowed size of %d bytes', $url, $this->maxResponseBytes));
@@ -131,11 +132,13 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 				$this->logger->error('OIDC: request was aborted by a connect, total, or low-speed timeout', [
 					'url'   => $url,
 					'error' => curl_error($handle),
+					'security_relevant' => false,
 				]);
 			} else {
 				$this->logger->error('OIDC: request to the provider failed', [
 					'url'   => $url,
 					'error' => curl_error($handle),
+					'security_relevant' => false,
 				]);
 			}
 

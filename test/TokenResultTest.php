@@ -78,6 +78,9 @@ class TokenResultTest extends TestCase {
 			$records[0]['context']['invalid_field_values'],
 		);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// A malformed token response is an ordinary shape failure, not one of the curated
+		// high-confidence attack indicators - security_relevant stays false.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testLogsNullAsTheValueForAnEntirelyMissingAccessToken(): void {

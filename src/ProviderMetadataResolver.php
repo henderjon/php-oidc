@@ -96,6 +96,7 @@ final class ProviderMetadataResolver {
 				'endpoint_key' => $endpointKey,
 				'provider_url' => $providerUrl,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration from {$providerUrl} is missing '{$endpointKey}'", state: $this->state);
@@ -120,7 +121,7 @@ final class ProviderMetadataResolver {
 		$providerUrl = $config->resolveIssuer();
 
 		if( $providerUrl === null ) {
-			$this->logger->error('OIDC: cannot discover provider configuration without a providerUrl or issuer', [ 'state' => $this->state ]);
+			$this->logger->error('OIDC: cannot discover provider configuration without a providerUrl or issuer', [ 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new ProviderDiscoveryException('Cannot discover provider configuration without a providerUrl or issuer', state: $this->state);
 		}
@@ -159,6 +160,7 @@ final class ProviderMetadataResolver {
 				'content_type' => null,
 				'exception'    => $e,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Unable to fetch provider configuration from {$url}", state: $this->state, previous: $e);
@@ -170,6 +172,7 @@ final class ProviderMetadataResolver {
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned HTTP {$response->status}", state: $this->state);
@@ -181,6 +184,7 @@ final class ProviderMetadataResolver {
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned an unexpected content type", state: $this->state);
@@ -202,6 +206,7 @@ final class ProviderMetadataResolver {
 				'content_type' => $response->contentType,
 				'exception'    => $decodeError,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned invalid JSON", state: $this->state, previous: $decodeError);
@@ -231,6 +236,7 @@ final class ProviderMetadataResolver {
 			'endpoint_key' => $endpointKey,
 			'url'          => $url,
 			'state'        => $this->state,
+			'security_relevant' => false,
 		]);
 
 		throw new ProviderDiscoveryException("Endpoint '{$endpointKey}' resolved to {$url}, which does not satisfy the configured URL policy", state: $this->state);
@@ -264,6 +270,7 @@ final class ProviderMetadataResolver {
 			'expected' => $providerUrl,
 			'actual'   => $issuer,
 			'state'    => $this->state,
+			'security_relevant' => false,
 		]);
 
 		throw new ProviderDiscoveryException("Provider configuration issuer does not match {$providerUrl}, the URL used to fetch it", state: $this->state);

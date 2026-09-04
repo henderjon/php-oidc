@@ -128,6 +128,9 @@ class AuthorizationStateStoreTest extends TestCase {
 		$this->assertSame('OIDC: cached authorization flow entry is not the expected shape', $records[0]['message']);
 		$this->assertSame('some-state', $records[0]['context']['state']);
 		$this->assertSame('string', $records[0]['context']['type']);
+		// A corrupted cache entry is an infrastructure problem, not an attack indicator - it
+		// stays outside the small curated set of error() calls marked security_relevant: true.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testConsumeLogsWhenNoFlowMatchesTheGivenState(): void {

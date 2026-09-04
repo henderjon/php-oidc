@@ -224,6 +224,9 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertSame(400, $records[0]['context']['http_status']);
 		$this->assertSame('invalid_grant', $records[0]['context']['provider_error']);
 		$this->assertNull($records[0]['context']['state'], 'client credentials is non-interactive - there is no flow to correlate with');
+		// A rejected grant is an ordinary provider-side failure, not one of the curated
+		// high-confidence attack indicators - security_relevant stays false.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testExchangeAuthorizationCodeLogsTheGivenStateOnFailure(): void {

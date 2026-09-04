@@ -236,6 +236,9 @@ class CurlHttpFetcherTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame($this->url('discovery'), $records[0]['context']['url']);
 		$this->assertSame(10, $records[0]['context']['max_response_bytes']);
+		// A transport-level failure is not one of the curated high-confidence attack
+		// indicators - security_relevant stays false.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testTimeoutLogsAnError(): void {
