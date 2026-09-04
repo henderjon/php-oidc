@@ -117,7 +117,13 @@ final class AuthorizationStateStore {
 		$deleted = $this->cache->delete($key);
 
 		if( $flow === null ) {
-			$this->logger->alert('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
+			// warning, not alert: alert is reserved for a configuration choice worth a
+			// developer's own review (CurlHttpFetcher's TLS-disabled flag,
+			// ClaimsValidator's allowUntrustedAudiences opt-out) - a state that matches
+			// nothing is a runtime event, not something anyone configured, even though it
+			// is still worth a human's attention. See this method's own docblock for the
+			// several distinct things a miss here could mean.
+			$this->logger->warning('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
 
 			return null;
 		}

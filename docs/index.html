@@ -587,10 +587,10 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         <thead><tr><th>Level</th><th>Fires when...</th></tr></thead>
         <tbody>
           <tr><td><code>debug</code></td><td>The happy path of nearly every collaborator - what was sent, what came back, what was decided. The bulk of this library's log volume.</td></tr>
-          <tr><td><code>warning</code></td><td>A fail-open decision that still proceeds anyway - a public client building an authorization redirect with PKCE disabled, or an Optional PKCE flow completing with no <code>code_verifier</code>.</td></tr>
+          <tr><td><code>warning</code></td><td>A fail-open decision that still proceeds anyway (a public client building an authorization redirect with PKCE disabled, an Optional PKCE flow completing with no <code>code_verifier</code>), or a runtime event worth a human's attention that is not itself a configuration choice - a callback whose <code>state</code> matched no pending authorization attempt at all (<code>AuthorizationStateStore</code>; see that method's own docblock for the several distinct things a miss there could mean).</td></tr>
           <tr><td><code>notice</code></td><td>An outcome PSR-16's own cache interface cannot distinguish from a real failure - <code>AuthorizationStateStore::consume()</code>, when the cache backend reports a delete as possibly not having cleared the entry.</td></tr>
           <tr><td><code>error</code></td><td>Every validation, fetch, or parse failure across every collaborator - by far the largest share of non-<code>debug</code> volume. Always paired with the exception this library is about to throw.</td></tr>
-          <tr><td><code>alert</code></td><td>A signal meant to stand out from routine operational noise: TLS verification actively disabled for a request (<code>CurlHttpFetcher</code>), an untrusted <code>aud</code> value let through by explicit config opt-out (<code>ClaimsValidator</code>), or a callback whose <code>state</code> matched no pending authorization attempt at all (<code>AuthorizationStateStore</code>).</td></tr>
+          <tr><td><code>alert</code></td><td>Reserved for a configuration choice worth a developer's own review, not a runtime event: TLS verification actively disabled for a request (<code>CurlHttpFetcher</code>), or an untrusted <code>aud</code> value let through by explicit config opt-out (<code>ClaimsValidator</code>).</td></tr>
         </tbody>
       </table>
       <p>

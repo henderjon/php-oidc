@@ -135,7 +135,7 @@ class AuthorizationStateStoreTest extends TestCase {
 
 		$this->assertNull($this->makeStore($logger)->consume('never-started'));
 
-		$records = $logger->recordsAt(LogLevel::ALERT);
+		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
 		$this->assertSame('never-started', $records[0]['context']['state']);
@@ -190,7 +190,7 @@ class AuthorizationStateStoreTest extends TestCase {
 
 		$this->assertNull($this->makeStore($logger)->consume($oversizedState));
 
-		$records = $logger->recordsAt(LogLevel::ALERT);
+		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertLessThan(100, strlen($records[0]['context']['state']));
 		$this->assertStringStartsWith(str_repeat('a', 64), $records[0]['context']['state']);
@@ -222,7 +222,7 @@ class AuthorizationStateStoreTest extends TestCase {
 		$store->consume('never-started');
 
 		// Nothing was found to begin with, so delete() failing here is meaningless - only
-		// the "no pending flow found" alert should fire, not a second one about deletion.
+		// the "no pending flow found" warning should fire, not a second one about deletion.
 		$records = $logger->records;
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);

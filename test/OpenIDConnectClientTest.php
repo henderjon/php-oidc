@@ -712,7 +712,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->assertNull($e->getIdToken(), 'no token was ever fetched before this failure');
 		}
 
-		$records = $logger->recordsAt(LogLevel::ALERT);
+		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
 		$this->assertSame('a-forged-state', $records[0]['context']['state']);
