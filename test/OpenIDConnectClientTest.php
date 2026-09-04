@@ -452,24 +452,24 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertArrayNotHasKey('code_challenge', $params);
 		$this->assertArrayNotHasKey('code_challenge_method', $params);
 		// A confidential client (has a client secret) isn't the case PKCE exists to guard -
-		// no nudge warning expected here, unlike the public-client case below.
+		// no nudge alert expected here, unlike the public-client case below.
 		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
-	public function testPublicClientWithPkceDisabledLogsAWarning(): void {
+	public function testPublicClientWithPkceDisabledLogsAnAlert(): void {
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;
 		$client  = $this->makeClient($fetcher, logger: $logger);
 
 		$client->buildAuthorizationCodeRedirect($this->config()->withClientSecret(''));
 
-		$records = $logger->recordsAt(LogLevel::WARNING);
+		$records = $logger->recordsAt(LogLevel::ALERT);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: public client is building an authorization redirect with PKCE disabled', $records[0]['message']);
 		$this->assertSame(self::CLIENT_ID, $records[0]['context']['client_id']);
 	}
 
-	public function testPublicClientWithPkceEnabledDoesNotLogTheDisabledWarning(): void {
+	public function testPublicClientWithPkceEnabledDoesNotLogTheDisabledAlert(): void {
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;
 		$client  = $this->makeClient($fetcher, logger: $logger);
@@ -479,7 +479,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
-	public function testPublicClientBuildingAnImplicitFlowRedirectDoesNotLogThePkceWarning(): void {
+	public function testPublicClientBuildingAnImplicitFlowRedirectDoesNotLogThePkceAlert(): void {
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;
 		$client  = $this->makeClient($fetcher, logger: $logger);

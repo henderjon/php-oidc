@@ -287,8 +287,12 @@ final class OpenIDConnectClient implements
 		// A public client (no client secret) has nothing else proving it is who it claims to
 		// be - RFC 9700 treats PKCE as effectively mandatory for exactly this client class.
 		// This does not force it on: deciding that is this config's job, not this library's.
+		// alert, not warning: this is a configuration choice worth a developer's own review
+		// (see AuthorizationStateStore::consume() for the warning/alert distinction), the same
+		// category as CurlHttpFetcher's TLS-disabled flag and ClaimsValidator's
+		// allowUntrustedAudiences opt-out - not a runtime event.
 		if( $responseType === 'code' && $config->pkce === PkceMode::Disabled && $config->clientSecret === '' ) {
-			$this->logger->warning('OIDC: public client is building an authorization redirect with PKCE disabled', [
+			$this->logger->alert('OIDC: public client is building an authorization redirect with PKCE disabled', [
 				'client_id' => $config->clientId,
 			]);
 		}
