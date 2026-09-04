@@ -4,6 +4,8 @@ namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Interfaces\RefreshTokenClientInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * Redeems a refresh token at the Token Endpoint (OpenID Connect Core 1.0 §12). Stands apart
@@ -17,10 +19,18 @@ use Oidc\Interfaces\RefreshTokenClientInterface;
  * actually includes a new `id_token` - the spec is explicit it might not. When it does not,
  * the original ID token and claims are still valid and are carried forward unchanged.
  *
- * Takes no LoggerInterface of its own, unlike its sibling collaborators - every failure this
- * class can produce is already detected and logged by whichever collaborator actually finds
- * it (TokenEndpointClient, IdTokenVerifier, ClaimsValidator). This class has no failure
- * condition of its own to log.
+ * Every FAILURE this class can produce is still detected and logged by whichever collaborator
+ * actually finds it (TokenEndpointClient, IdTokenVerifier, ClaimsValidator) - this class has no
+ * failure condition of its own. `$logger` exists only for the one thing that is specific to a
+ * refresh and would otherwise be invisible even on success: whether the response carried a new
+ * `id_token` at all, and, when it did, that it actually passed §12.2's checks against the
+ * original claims. Neither of those two outcomes belongs to a deeper collaborator to log -
+ * TokenEndpointClient already logs the token response's own shape, and IdTokenVerifier/
+ * ClaimsValidator log the individual claim checks only on the failure path - so without a
+ * debug log here, "why isn't my refresh rotating the ID token" has nothing in this class to
+ * look at even when nothing failed. No `state` is logged alongside either record: unlike every
+ * other collaborator's debug logging, a refresh has no in-flight flow to correlate with (see
+ * above) - there is no `state` here to log in the first place.
  */
 final class RefreshTokenClient implements RefreshTokenClientInterface {
 
@@ -29,6 +39,7 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 		private readonly IdTokenVerifier $idTokenVerifier,
 		private readonly ClaimsValidator $claimsValidator,
 		private readonly TokenEndpointClient $tokenEndpointClient,
+		private readonly LoggerInterface $logger = new NullLogger,
 	) {
 	}
 
@@ -44,6 +55,12 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 		$tokenResult = $this->tokenEndpointClient->refreshToken($config, $refreshToken);
 
 		if( $tokenResult->idToken === null ) {
+			// accessToken is unconditionally present on any TokenResult - see its own
+			// constructor - so only refreshToken is worth reporting presence of here.
+			$this->logger->debug('OIDC: refresh response carried no new ID token - the original ID token and claims carry forward unchanged', [
+				'has_refresh_token' => $tokenResult->refreshToken !== null,
+			]);
+
 			return new AuthenticationResult($originalIdToken, $originalClaims, $tokenResult->accessToken, $tokenResult->refreshToken, $tokenResult->expiresIn);
 		}
 
@@ -70,6 +87,15 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 			// ClaimsValidator themselves.
 			throw new AuthenticationFailedException($e->getMessage(), idToken: $tokenResult->idToken, state: $e->getState(), previous: $e);
 		}
+
+		// sub/iss are standard, non-secret JWT claims - see OpenIDConnectClient's own equivalent
+		// debug log for the same reasoning. Neither is redundant with the original claims logged
+		// wherever the original authentication happened: this confirms what the REFRESHED token
+		// itself validated to, not merely that it round-tripped the same values.
+		$this->logger->debug('OIDC: refreshed ID token validated against the original claims', [
+			'sub' => $claims->get('sub'),
+			'iss' => $claims->get('iss'),
+		]);
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken, $tokenResult->expiresIn);
 	}

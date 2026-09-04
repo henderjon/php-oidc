@@ -53,6 +53,7 @@ class RefreshTokenClientTest extends TestCase {
 			new IdTokenVerifier($fetcher, logger: $logger),
 			new ClaimsValidator($logger),
 			new TokenEndpointClient($fetcher, $providerMetadataResolver, $logger),
+			$logger,
 		);
 	}
 
@@ -73,6 +74,36 @@ class RefreshTokenClientTest extends TestCase {
 		$this->assertSame('the-new-access-token', $result->accessToken);
 		$this->assertSame('the-new-refresh-token', $result->refreshToken);
 		$this->assertSame(3600, $result->expiresIn);
+	}
+
+	public function testRefreshWithNoNewIdTokenLogsThatAtDebugLevel(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token'  => 'the-new-access-token',
+			'refresh_token' => 'the-new-refresh-token',
+		], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $this->originalClaims());
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$refresh = $records[array_key_last($records)];
+		$this->assertSame('OIDC: refresh response carried no new ID token - the original ID token and claims carry forward unchanged', $refresh['message']);
+		$this->assertTrue($refresh['context']['has_refresh_token']);
+	}
+
+	public function testRefreshWithNoNewIdTokenAndNoNewRefreshTokenLogsThatAtDebugLevel(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-new-access-token',
+		], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $this->originalClaims());
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$refresh = $records[array_key_last($records)];
+		$this->assertFalse($refresh['context']['has_refresh_token']);
 	}
 
 	public function testRefreshWithAMatchingNewIdTokenSucceeds(): void {
@@ -99,6 +130,34 @@ class RefreshTokenClientTest extends TestCase {
 		$this->assertSame($newIdToken, $result->idToken);
 		$this->assertSame('user-1', $result->claims->get('sub'));
 		$this->assertSame('the-new-access-token', $result->accessToken);
+	}
+
+	public function testRefreshWithAMatchingNewIdTokenLogsTheValidatedClaimsAtDebugLevel(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+
+		$newIdToken = $fixture->sign([
+			'iss'       => self::ISSUER,
+			'sub'       => 'user-1',
+			'aud'       => self::CLIENT_ID,
+			'auth_time' => 1_699_999_000,
+			'nonce'     => 'the-nonce',
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-new-access-token',
+			'id_token'     => $newIdToken,
+		], JSON_THROW_ON_ERROR), 200));
+		$logger         = new ArrayLogger;
+		$originalClaims = $this->originalClaims([ 'auth_time' => 1_699_999_000, 'nonce' => 'the-nonce' ]);
+
+		$this->makeClient($fetcher, $logger)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $originalClaims);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$refresh = $records[array_key_last($records)];
+		$this->assertSame('OIDC: refreshed ID token validated against the original claims', $refresh['message']);
+		$this->assertSame('user-1', $refresh['context']['sub']);
+		$this->assertSame(self::ISSUER, $refresh['context']['iss']);
 	}
 
 	public function testRefreshAllowsANewIdTokenWithNoNonceEvenWhenTheOriginalHadOne(): void {
