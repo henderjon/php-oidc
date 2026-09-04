@@ -142,7 +142,7 @@ final class AuthorizationStateStore {
 			// PSR-16 delete() is as ambiguous as get() about why it failed - "may not have
 			// been cleared" rather than a firm claim, since some backends report false for
 			// a key that was already gone, not only for a real error.
-			$this->logger->notice('OIDC: consumed authorization flow entry may not have been cleared from the cache', [
+			$this->logger->info('OIDC: consumed authorization flow entry may not have been cleared from the cache', [
 				'state' => $this->loggableState($state),
 			]);
 		}

@@ -205,11 +205,11 @@ class AuthorizationStateStoreTest extends TestCase {
 		$consumed = $store->consume($started->state);
 
 		// The lookup and shape were both fine - only delete()'s own confirmation failed - so
-		// the caller still gets a usable flow back. This must not fail closed on top of the
-		// notice; that would make an unconfirmed delete look like a missing flow instead.
+		// the caller still gets a usable flow back. This must not fail closed on top of this
+		// log; that would make an unconfirmed delete look like a missing flow instead.
 		$this->assertNotNull($consumed);
 
-		$records = $logger->recordsAt(LogLevel::NOTICE);
+		$records = $logger->recordsAt(LogLevel::INFO);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: consumed authorization flow entry may not have been cleared from the cache', $records[0]['message']);
 		$this->assertSame($started->state, $records[0]['context']['state']);
