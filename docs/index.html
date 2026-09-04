@@ -570,6 +570,16 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
     <div class="type-section" id="Logging">
       <h2>Logging<a class="section-anchor" href="#Logging" aria-label="Link to this section">&para;</a></h2>
       <p>
+        This library's logging is deliberately, sometimes irritatingly, noisy at the
+        <code>debug</code> level - most collaborators trace their own happy path in addition to
+        every failure, by design, so a request can be followed step by step without anything
+        having failed at all. That is a lot of log volume to hand a caller's own logger
+        unfiltered. <a href="#LogLevelFilterLogger"><code>LogLevelFilterLogger</code></a> exists
+        specifically to mediate it - wrap your own logger in one to receive only the levels you
+        actually want, rather than reconfiguring or replacing your logger just to cope with the
+        noise.
+      </p>
+      <p>
         Every log call passes a <code>context</code> array alongside the message. Which keys show
         up varies by call site - each one logs whatever is actually diagnostic for its own failure,
         not a single fixed envelope - but related call sites agree on the same names and shapes for
@@ -651,6 +661,15 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         array $allowedLevels,
     )
 }</div>
+      <p>
+        <code>$allowedLevels</code> is opt-in, not opt-out, for the same reason this class exists
+        at all (see <a href="#Logging">Logging</a>): the default posture toward this library's
+        noise is to filter all of it, not to let everything through until told otherwise. Pass
+        an empty array and every log call is dropped, including a level a caller might assume
+        always gets through, such as <code>error</code> - nothing passes unless its exact level
+        is named in the array (or <a href="#LogLevels"><code>LogLevels::ALL</code></a> is
+        included).
+      </p>
       <p>
         <code>$allowedLevels</code> is a discrete set, not a range - any combination is valid,
         including combinations no linear severity ordering could express together
