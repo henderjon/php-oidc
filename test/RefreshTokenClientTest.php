@@ -57,6 +57,19 @@ class RefreshTokenClientTest extends TestCase {
 		);
 	}
 
+	/**
+	 * @return array{level: mixed, message: string, context: array<string,mixed>}
+	 */
+	private function findRecord( ArrayLogger $logger, string $message ): array {
+		foreach( $logger->recordsAt(LogLevel::DEBUG) as $record ) {
+			if( $record['message'] === $message ) {
+				return $record;
+			}
+		}
+
+		$this->fail("No debug record found with message: {$message}");
+	}
+
 	public function testRefreshWithNoNewIdTokenReturnsTheOriginalIdTokenAndClaims(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
@@ -236,6 +249,52 @@ class RefreshTokenClientTest extends TestCase {
 		$this->expectException(AuthenticationFailedException::class);
 
 		$this->makeClient($fetcher)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $this->originalClaims());
+	}
+
+	public function testRefreshLogsWhenOriginalClaimsAudContainsNonStringEntries(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+
+		$newIdToken = $fixture->sign([ 'iss' => self::ISSUER, 'sub' => 'user-1', 'aud' => self::CLIENT_ID ]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-new-access-token',
+			'id_token'     => $newIdToken,
+		], JSON_THROW_ON_ERROR), 200));
+		$logger         = new ArrayLogger;
+		$originalClaims = $this->originalClaims([ 'aud' => [ self::CLIENT_ID, 42, 'another-trusted-audience' ] ]);
+
+		// The malformed entry does not prevent an otherwise-valid refresh from succeeding - only
+		// the well-formed entries are dropped from the normalized list, not the whole thing.
+		$this->makeClient($fetcher, $logger)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $originalClaims);
+
+		$normalized = $this->findRecord($logger, 'OIDC: originalClaims aud contained non-string entries, dropped');
+		$this->assertSame([ self::CLIENT_ID, 42, 'another-trusted-audience' ], $normalized['context']['aud']);
+		$this->assertSame([ 42 ], $normalized['context']['malformed']);
+	}
+
+	public function testRefreshLogsWhenOriginalClaimsAudIsNotAStringOrArray(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+
+		$newIdToken = $fixture->sign([ 'iss' => self::ISSUER, 'sub' => 'user-1', 'aud' => self::CLIENT_ID ]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-new-access-token',
+			'id_token'     => $newIdToken,
+		], JSON_THROW_ON_ERROR), 200));
+		$logger         = new ArrayLogger;
+		$originalClaims = $this->originalClaims([ 'aud' => 12345 ]);
+
+		try {
+			$this->makeClient($fetcher, $logger)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $originalClaims);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$normalized = $this->findRecord($logger, 'OIDC: originalClaims aud was not a string or array, treated as empty');
+		$this->assertSame(12345, $normalized['context']['aud']);
+		$this->assertSame('int', $normalized['context']['type']);
 	}
 
 	public function testRefreshRejectsANewIdTokenWithAMismatchedAuthTime(): void {

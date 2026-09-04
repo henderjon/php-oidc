@@ -21,14 +21,16 @@ use Psr\Log\NullLogger;
  *
  * Every FAILURE this class can produce is still detected and logged by whichever collaborator
  * actually finds it (TokenEndpointClient, IdTokenVerifier, ClaimsValidator) - this class has no
- * failure condition of its own. `$logger` exists only for the one thing that is specific to a
- * refresh and would otherwise be invisible even on success: whether the response carried a new
- * `id_token` at all, and, when it did, that it actually passed §12.2's checks against the
- * original claims. Neither of those two outcomes belongs to a deeper collaborator to log -
- * TokenEndpointClient already logs the token response's own shape, and IdTokenVerifier/
- * ClaimsValidator log the individual claim checks only on the failure path - so without a
- * debug log here, "why isn't my refresh rotating the ID token" has nothing in this class to
- * look at even when nothing failed. No `state` is logged alongside either record: unlike every
+ * failure condition of its own. `$logger` exists for what is specific to a refresh and would
+ * otherwise be invisible even on success: whether the response carried a new `id_token` at all,
+ * and, when it did, that it actually passed §12.2's checks against the original claims -
+ * neither belongs to a deeper collaborator to log, since TokenEndpointClient only logs the
+ * token response's own shape and IdTokenVerifier/ClaimsValidator log claim checks only on the
+ * failure path, so without a debug log here "why isn't my refresh rotating the ID token" has
+ * nothing in this class to look at even when nothing failed. It also covers one silent
+ * transformation of caller-controlled input: normalizedAudience() below normalizes a malformed
+ * `originalClaims` `aud` away rather than rejecting it, and that normalization is itself logged
+ * - see that method's own docblock. No `state` is logged alongside any of these: unlike every
  * other collaborator's debug logging, a refresh has no in-flight flow to correlate with (see
  * above) - there is no `state` here to log in the first place.
  */
@@ -82,7 +84,7 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 			// occurred" - not against $config, even though those values usually agree with it.
 			$this->claimsValidator->validateIssuer($claims, (string)$originalClaims->get('iss'));
 			$this->claimsValidator->validateRefreshedSubject($claims, (string)$originalClaims->get('sub'));
-			$this->claimsValidator->validateAudience($claims, self::normalizedAudience($originalClaims->get('aud')));
+			$this->claimsValidator->validateAudience($claims, $this->normalizedAudience($originalClaims->get('aud')));
 			$this->claimsValidator->validateRefreshedAuthTime($claims, $originalClaims->get('auth_time'));
 
 			$originalNonce = $originalClaims->get('nonce');
@@ -113,16 +115,40 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 	/**
 	 * Mirrors ClaimsValidator::toStringList()'s own normalization, since $originalClaims is
 	 * caller-controlled data (the caller's own stored copy of a previously-validated token),
-	 * the same trust level toStringList() already assumes for its own callers.
+	 * the same trust level toStringList() already assumes for its own callers - so a malformed
+	 * `aud` here is silently normalized away rather than rejected outright the way
+	 * ClaimsValidator::toActualAudienceList() treats the same shape on the incoming token
+	 * (untrusted, and rejected loudly by default). "Silently" only means no exception; logged
+	 * at debug level either way, since $originalClaims should already be trustworthy by the
+	 * time a caller has one to pass in - a malformed `aud` here is a caller-side surprise worth
+	 * a trace, not a routine, expected shape.
 	 *
 	 * @return list<string>|string
 	 */
-	private static function normalizedAudience( mixed $value ): array|string {
+	private function normalizedAudience( mixed $value ): array|string {
 		if( is_array($value) ) {
-			return array_values(array_filter($value, 'is_string'));
+			$normalized = array_values(array_filter($value, 'is_string'));
+
+			if( count($normalized) !== count($value) ) {
+				$this->logger->debug('OIDC: originalClaims aud contained non-string entries, dropped', [
+					'aud'       => $value,
+					'malformed' => array_values(array_filter($value, static fn ( mixed $item ): bool => !is_string($item))),
+				]);
+			}
+
+			return $normalized;
 		}
 
-		return is_string($value) ? $value : '';
+		if( is_string($value) ) {
+			return $value;
+		}
+
+		$this->logger->debug('OIDC: originalClaims aud was not a string or array, treated as empty', [
+			'aud'  => $value,
+			'type' => get_debug_type($value),
+		]);
+
+		return '';
 	}
 
 }
