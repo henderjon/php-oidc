@@ -102,6 +102,8 @@ final class OpenIDConnectClient implements
 		// authorization-endpoint-issued case below.
 		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: false);
 
+		$this->logger->debug('OIDC: authorization code flow completed', [ 'state' => $flow->state ]);
+
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken, $tokenResult->expiresIn);
 	}
 
@@ -152,6 +154,8 @@ final class OpenIDConnectClient implements
 		// $response->accessToken is null (a bare `id_token` response, not `id_token token`).
 		$providerMetadataResolver = $this->providerMetadataResolver->withState($flow->state);
 		$claims                   = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: true);
+
+		$this->logger->debug('OIDC: implicit flow completed', [ 'state' => $flow->state ]);
 
 		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
 	}
@@ -263,6 +267,12 @@ final class OpenIDConnectClient implements
 			throw new UserInfoRequestException("Userinfo response from {$endpoint} failed subject validation", $response->status, $response->body, previous: $e);
 		}
 
+		$this->logger->debug('OIDC: userinfo fetched and validated', [
+			'endpoint'     => $endpoint,
+			'http_status'  => $response->status,
+			'content_type' => $response->contentType,
+		]);
+
 		return $claims;
 	}
 
@@ -298,6 +308,14 @@ final class OpenIDConnectClient implements
 			$params['code_challenge']        = Pkce::challengeFor($codeVerifier);
 			$params['code_challenge_method'] = 'S256';
 		}
+
+		// Safe to log every one of these in full - none is a secret. code_verifier itself
+		// never appears here, only the S256 challenge derived from it, which is not reversible
+		// back into the verifier.
+		$this->logger->debug('OIDC: building an authorization redirect', [
+			'authorization_endpoint' => $authorizationEndpoint,
+			'params'                 => $params,
+		]);
 
 		return new AuthorizationRedirect($this->appendQuery($authorizationEndpoint, $params));
 	}
@@ -393,6 +411,17 @@ final class OpenIDConnectClient implements
 			$claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $config->allowUntrustedAudiences);
 
 			$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
+
+			// sub/iss/aud/exp are standard, non-secret JWT claims - safe to log in full, unlike
+			// the token they came from (see verifySignedUserInfo() and TokenEndpointClient for
+			// where the actual token strings get partial-reveal treatment instead).
+			$this->logger->debug('OIDC: ID token claims validated', [
+				'state'  => $state,
+				'issuer' => $issuer,
+				'sub'    => $claims->get('sub'),
+				'aud'    => $claims->get('aud'),
+				'exp'    => $claims->get('exp'),
+			]);
 
 			return $claims;
 		} catch( AuthenticationFailedException $e ) {

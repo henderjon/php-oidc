@@ -70,6 +70,22 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertNotEmpty($params['nonce']);
 	}
 
+	public function testBuildAuthorizationCodeRedirectLogsTheBuiltParamsAtDebugLevel(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$build   = $records[array_key_last($records)];
+		$this->assertSame('OIDC: building an authorization redirect', $build['message']);
+		$this->assertSame(self::AUTHORIZATION_ENDPOINT, $build['context']['authorization_endpoint']);
+		$this->assertSame($params['state'], $build['context']['params']['state']);
+		$this->assertSame($params['nonce'], $build['context']['params']['nonce']);
+	}
+
 	public function testExtraAuthParamsCannotOverrideProtocolParams(): void {
 		$fetcher  = new FakeHttpFetcher;
 		$client   = $this->makeClient($fetcher);
@@ -109,6 +125,43 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame('the-access-token', $result->accessToken);
 		$this->assertSame($idToken, $result->idToken);
 		$this->assertSame(3600, $result->expiresIn);
+	}
+
+	public function testCompleteAuthorizationCodeFlowLogsValidatedClaimsAndCompletionAtDebugLevel(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$logger = new ArrayLogger;
+		$client = $this->makeClient($fetcher, logger: $logger);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'sub'   => 'user-1',
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$response = new IncomingAuthorizationResponse([ 'code' => 'the-code', 'state' => $params['state'] ]);
+		$client->completeAuthorizationCodeFlow($this->config(), $response);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$claimsValidated = $records[array_key_last($records) - 1];
+		$completed       = $records[array_key_last($records)];
+
+		$this->assertSame('OIDC: ID token claims validated', $claimsValidated['message']);
+		$this->assertSame('user-1', $claimsValidated['context']['sub']);
+		$this->assertSame(self::CLIENT_ID, $claimsValidated['context']['aud']);
+		$this->assertSame(self::ISSUER, $claimsValidated['context']['issuer']);
+
+		$this->assertSame('OIDC: authorization code flow completed', $completed['message']);
+		$this->assertSame($params['state'], $completed['context']['state']);
 	}
 
 	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenMissingSub(): void {
@@ -365,7 +418,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertArrayNotHasKey('code_challenge_method', $params);
 		// A confidential client (has a client secret) isn't the case PKCE exists to guard -
 		// no nudge warning expected here, unlike the public-client case below.
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
 	public function testPublicClientWithPkceDisabledLogsAWarning(): void {
@@ -388,7 +441,7 @@ class OpenIDConnectClientTest extends TestCase {
 
 		$client->buildAuthorizationCodeRedirect($this->config()->withClientSecret('')->withPkce(PkceMode::Required));
 
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
 	public function testPublicClientBuildingAnImplicitFlowRedirectDoesNotLogThePkceWarning(): void {
@@ -402,7 +455,7 @@ class OpenIDConnectClientTest extends TestCase {
 		// PKCE only applies to the authorization code flow - no code to intercept in the
 		// implicit flow, so no code_challenge and no nudge about it being disabled.
 		$this->assertArrayNotHasKey('code_challenge', $params);
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
 	public function testRequiredPkceFailsClosedWhenTheVerifierIsMissingAtCompletion(): void {
@@ -786,6 +839,32 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame('user-1', $result->claims->get('sub'));
 	}
 
+	public function testCompleteImplicitFlowLogsCompletionAtDebugLevel(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$logger = new ArrayLogger;
+		$client = $this->makeClient($fetcher, logger: $logger);
+
+		$redirect = $client->buildImplicitFlowRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'iss'   => self::ISSUER,
+			'aud'   => self::CLIENT_ID,
+			'sub'   => 'user-1',
+			'nonce' => $params['nonce'],
+		]);
+
+		$response = new IncomingAuthorizationResponse([ 'id_token' => $idToken, 'state' => $params['state'] ]);
+		$client->completeImplicitFlow($this->config(), $response);
+
+		$records  = $logger->recordsAt(LogLevel::DEBUG);
+		$completed = $records[array_key_last($records)];
+		$this->assertSame('OIDC: implicit flow completed', $completed['message']);
+		$this->assertSame($params['state'], $completed['context']['state']);
+	}
+
 	public function testBuildImplicitFlowRedirectWithAccessTokenRequestsIdTokenToken(): void {
 		$client = $this->makeClient(new FakeHttpFetcher);
 
@@ -949,6 +1028,20 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame('user-1', $claims->get('sub'));
 		$this->assertSame('user@example.com', $claims->get('email'));
 		$this->assertSame('Bearer the-access-token', $fetcher->requests[0]['headers']['Authorization']);
+	}
+
+	public function testFetchUserInfoLogsSuccessAtDebugLevel(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR), 200, 'application/json'));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$fetched = $records[array_key_last($records)];
+		$this->assertSame('OIDC: userinfo fetched and validated', $fetched['message']);
+		$this->assertSame(self::USERINFO_ENDPOINT, $fetched['context']['endpoint']);
+		$this->assertSame(200, $fetched['context']['http_status']);
 	}
 
 	/**
