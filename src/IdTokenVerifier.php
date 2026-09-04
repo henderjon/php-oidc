@@ -125,6 +125,12 @@ final class IdTokenVerifier {
 
 		$header = $this->decodeHeader($idToken);
 
+		// The JOSE header carries no secret material - see the class docblock - so it is
+		// already logged in full elsewhere in this class on the JWE-rejection branch below;
+		// logging it here too shows which alg/kid a token declared even when verification
+		// goes on to succeed, not only when it fails.
+		$this->logger->debug('OIDC: decoded ID token header', [ 'header' => $header, 'state' => $this->state ]);
+
 		if( isset($header['enc']) ) {
 			$this->logger->error('OIDC: ID token is encrypted (JWE), which is not supported', [ 'header' => $header, 'state' => $this->state ]);
 
@@ -317,6 +323,13 @@ final class IdTokenVerifier {
 		}
 
 		$this->assertKeyTypeMatchesAlgorithm($jwks, $selectedKid, $alg, $jwksUri);
+
+		$this->logger->debug('OIDC: selected a JWKS key for ID token verification', [
+			'jwks_uri'       => $jwksUri,
+			'kid'            => $selectedKid,
+			'available_kids' => array_keys($keySet),
+			'state'          => $this->state,
+		]);
 
 		return $keySet[$selectedKid];
 	}

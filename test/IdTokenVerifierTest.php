@@ -37,6 +37,36 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
 
+	public function testVerifyLogsTheDecodedHeaderAtDebugLevel(): void {
+		$fixture  = new RsaKeyFixture;
+		$idToken  = $fixture->sign([ 'iss' => 'https://issuer.example.com', 'sub' => 'user-1' ]);
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier($this->fetcherWithJwks($fixture), logger: $logger);
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused-client-secret');
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertSame('OIDC: decoded ID token header', $records[0]['message']);
+		$this->assertSame('RS256', $records[0]['context']['header']['alg']);
+		$this->assertSame(RsaKeyFixture::KEY_ID, $records[0]['context']['header']['kid']);
+	}
+
+	public function testVerifyLogsTheSelectedJwksKeyAtDebugLevel(): void {
+		$fixture  = new RsaKeyFixture;
+		$idToken  = $fixture->sign([ 'iss' => 'https://issuer.example.com', 'sub' => 'user-1' ]);
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier($this->fetcherWithJwks($fixture), logger: $logger);
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused-client-secret');
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$keySelection = $records[array_key_last($records)];
+		$this->assertSame('OIDC: selected a JWKS key for ID token verification', $keySelection['message']);
+		$this->assertSame(self::JWKS_URI, $keySelection['context']['jwks_uri']);
+		$this->assertSame(RsaKeyFixture::KEY_ID, $keySelection['context']['kid']);
+		$this->assertSame([ RsaKeyFixture::KEY_ID ], $keySelection['context']['available_kids']);
+	}
+
 	public function testVerifyRs256TokenWithNoKidFallsBackToTheSoleKey(): void {
 		$fixture  = new RsaKeyFixture;
 		$idToken  = $fixture->sign([ 'sub' => 'user-1' ], keyId: null);
@@ -822,7 +852,7 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
-	public function testSuccessfulVerifyDoesNotLogAnything(): void {
+	public function testSuccessfulVerifyDoesNotLogAboveDebug(): void {
 		$fixture  = new RsaKeyFixture;
 		$idToken  = $fixture->sign([ 'iss' => 'https://issuer.example.com', 'sub' => 'user-1' ]);
 		$logger   = new ArrayLogger;
@@ -830,7 +860,7 @@ class IdTokenVerifierTest extends TestCase {
 
 		$verifier->verify($idToken, self::JWKS_URI, 'unused-client-secret');
 
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
 	public function testWithStateDoesNotAffectTheOriginalInstance(): void {
