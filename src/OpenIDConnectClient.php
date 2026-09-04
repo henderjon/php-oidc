@@ -73,6 +73,22 @@ final class OpenIDConnectClient implements
 			// Optional fails open by design (see PkceMode), but that is a silent downgrade of
 			// exactly the protection PKCE exists to provide - log it rather than let it pass
 			// with no signal at all.
+			//
+			// Not eviction, not an attack, and nothing crashed. code_verifier is stored
+			// alongside nonce in the single cache entry AuthorizationStateStore::start() writes
+			// for this flow - get() returns that whole entry or nothing, so a found flow with a
+			// null code_verifier means null is exactly what was written there, not something
+			// lost afterward. The only way to write null is for buildRedirect() to have run
+			// with pkce === Disabled for this same config. A warning here is therefore a
+			// configuration inconsistency between two points in time for the same exchange: the
+			// redirect was built with PKCE off, but completion is running with pkce: Optional.
+			// Either a bug in the calling application (two code paths constructing the config
+			// differently, or a config change that landed mid-flight between redirect and
+			// callback) or a deliberate rollout strategy - turning PKCE on gradually,
+			// tolerating in-flight redirects issued before the flag flipped, which is arguably
+			// what Optional exists for. Worth calling "misconfigured" in the loose sense that
+			// the two config-construction points disagree with each other - not broken
+			// infrastructure, not nefarious.
 			$this->logger->warning('OIDC: PKCE code verifier missing for an Optional flow - proceeding without one', [ 'state' => $flow->state ]);
 		}
 
