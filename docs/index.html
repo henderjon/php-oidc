@@ -652,19 +652,24 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
     )
 }</div>
       <p>
-        <code>$allowedLevels</code> is a discrete set, not a range - any combination of PSR-3's
-        eight levels (<code>Psr\Log\LogLevel</code>) is valid, including combinations no linear
-        severity ordering could express together (<code>debug</code> and <code>critical</code>,
-        say, with everything between them excluded). Pass it wherever this library expects a
+        <code>$allowedLevels</code> is a discrete set, not a range - any combination is valid,
+        including combinations no linear severity ordering could express together
+        (<code>debug</code> and <code>critical</code>, say, with everything between them
+        excluded). This class never validates a level against PSR-3's own eight constants
+        (<code>Psr\Log\LogLevel</code>) - it is a plain string comparison, so
+        <code>$allowedLevels</code> can equally well hold PSR-3's own levels, a caller's own
+        custom level, or a mix of both. Pass it wherever this library expects a
         <code>Psr\Log\LoggerInterface</code>, e.g. <code>OpenIDConnectClientFactory</code>:
       </p>
       <pre>$logger = new LogLevelFilterLogger($yourAppLogger, [ LogLevel::DEBUG ]);
 
 $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       <p>
-        Include <a href="#LogLevels"><code>LogLevels::ALL</code></a> in <code>$allowedLevels</code>
-        to opt into every level unconditionally, including one outside PSR-3's own eight
-        constants:
+        <a href="#LogLevels"><code>LogLevels::ALL</code></a> is a different, narrower thing from
+        "this array can hold a custom level": it means every level, without having to name any
+        of them - the one case not reachable just by listing levels, custom or not, since it
+        does not require knowing in advance which levels might ever be logged. Include it in
+        <code>$allowedLevels</code> to opt into every level unconditionally:
       </p>
       <pre>$logger = new LogLevelFilterLogger($yourAppLogger, [ LogLevels::ALL ]);</pre>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
