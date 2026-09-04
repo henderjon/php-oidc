@@ -75,6 +75,12 @@ final class ProviderMetadataResolver {
 			$value = $config->endpointOverrides[$endpointKey];
 			$this->assertUrlAllowed($value, $config, $endpointKey);
 
+			$this->logger->debug('OIDC: resolved endpoint from a config override', [
+				'endpoint_key' => $endpointKey,
+				'value'        => $value,
+				'state'        => $this->state,
+			]);
+
 			return $value;
 		}
 
@@ -97,6 +103,12 @@ final class ProviderMetadataResolver {
 
 		$this->assertUrlAllowed($value, $config, $endpointKey);
 
+		$this->logger->debug('OIDC: resolved endpoint from provider discovery', [
+			'endpoint_key' => $endpointKey,
+			'value'        => $value,
+			'state'        => $this->state,
+		]);
+
 		return $value;
 	}
 
@@ -114,6 +126,11 @@ final class ProviderMetadataResolver {
 		}
 
 		if( isset($this->discovered[$providerUrl]) ) {
+			$this->logger->debug('OIDC: reusing an already-fetched provider configuration', [
+				'provider_url' => $providerUrl,
+				'state'        => $this->state,
+			]);
+
 			return $this->discovered[$providerUrl];
 		}
 
@@ -180,6 +197,12 @@ final class ProviderMetadataResolver {
 
 		$this->assertIssuerMatches($decoded, $providerUrl);
 
+		$this->logger->debug('OIDC: fetched a fresh provider configuration', [
+			'provider_url'         => $providerUrl,
+			'advertised_endpoints' => array_keys($decoded),
+			'state'                => $this->state,
+		]);
+
 		return $this->discovered[$providerUrl] = $decoded;
 	}
 
@@ -216,6 +239,11 @@ final class ProviderMetadataResolver {
 		$issuer = $document['issuer'] ?? null;
 
 		if( is_string($issuer) && rtrim($issuer, '/') === rtrim($providerUrl, '/') ) {
+			$this->logger->debug('OIDC: provider configuration issuer matches the URL used to fetch it', [
+				'issuer' => $issuer,
+				'state'  => $this->state,
+			]);
+
 			return;
 		}
 

@@ -344,7 +344,68 @@ class ProviderMetadataResolverTest extends TestCase {
 
 		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
+	}
+
+	public function testResolveLogsAnOverrideAsItsOwnSource(): void {
+		$fetcher  = new FakeHttpFetcher;
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
+		$config   = $this->configWithProviderUrl([ ProviderMetadataResolver::AUTHORIZATION_ENDPOINT => 'https://issuer.example.com/authorize' ]);
+
+		$resolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertSame('OIDC: resolved endpoint from a config override', $records[0]['message']);
+		$this->assertSame(ProviderMetadataResolver::AUTHORIZATION_ENDPOINT, $records[0]['context']['endpoint_key']);
+		$this->assertSame('https://issuer.example.com/authorize', $records[0]['context']['value']);
+	}
+
+	public function testResolveLogsADiscoveredEndpointAndTheFreshFetchAndTheIssuerMatch(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://issuer.example.com',
+				'token_endpoint' => 'https://issuer.example.com/token',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
+
+		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertSame('OIDC: provider configuration issuer matches the URL used to fetch it', $records[0]['message']);
+		$this->assertSame('OIDC: fetched a fresh provider configuration', $records[1]['message']);
+		$this->assertSame([ 'issuer', 'token_endpoint' ], $records[1]['context']['advertised_endpoints']);
+		$this->assertSame('OIDC: resolved endpoint from provider discovery', $records[2]['message']);
+		$this->assertSame('https://issuer.example.com/token', $records[2]['context']['value']);
+	}
+
+	public function testResolveLogsReusingAnAlreadyFetchedDocumentOnASecondCall(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'issuer'                 => 'https://issuer.example.com',
+				'token_endpoint'         => 'https://issuer.example.com/token',
+				'authorization_endpoint' => 'https://issuer.example.com/authorize',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
+		$config   = $this->configWithProviderUrl();
+
+		$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$resolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
+
+		$reuseRecords = array_values(array_filter(
+			$logger->recordsAt(LogLevel::DEBUG),
+			static fn ( array $record ): bool => $record['message'] === 'OIDC: reusing an already-fetched provider configuration',
+		));
+		$this->assertCount(1, $reuseRecords);
+		$this->assertSame('https://issuer.example.com', $reuseRecords[0]['context']['provider_url']);
 	}
 
 	public function testWithStateCarriesOverAlreadyDiscoveredDocuments(): void {
