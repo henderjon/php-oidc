@@ -22,6 +22,11 @@ use Psr\Log\NullLogger;
  * it is a long-lived, static credential, not a one-time code or short-lived token, so repeatedly
  * logging even a partial reveal of it still accumulates real exposure over the client's entire
  * lifetime. See Redact for the same partial-reveal handling used everywhere else in this module.
+ *
+ * `$state` is likewise passed in rather than held (this class stays stateless), purely so its
+ * debug logs carry the same correlation id as everything else TokenEndpointClient's caller
+ * touches for the same flow. Null for a grant with no in-flight flow (client credentials,
+ * refresh) - there is nothing to correlate with in that case, not a missing value.
  */
 final class ClientAuthenticator {
 
@@ -29,13 +34,13 @@ final class ClientAuthenticator {
 	 * @param array<string,string|list<string>> $params
 	 * @return array{0: array<string,string|list<string>>, 1: array<string,string>} [params, headers]
 	 */
-	public static function apply( OpenIDConnectClientConfig $config, array $params, LoggerInterface $logger = new NullLogger ): array {
+	public static function apply( OpenIDConnectClientConfig $config, array $params, LoggerInterface $logger = new NullLogger, ?string $state = null ): array {
 		$headers = [ 'Content-Type' => 'application/x-www-form-urlencoded' ];
 
 		if( $config->clientSecret === '' ) {
 			$params['client_id'] = $config->clientId;
 
-			$logger->debug('OIDC: authenticating as a public client with no client secret', [ 'client_id' => $config->clientId ]);
+			$logger->debug('OIDC: authenticating as a public client with no client secret', [ 'client_id' => $config->clientId, 'state' => $state ]);
 
 			return [ $params, $headers ];
 		}
@@ -44,7 +49,7 @@ final class ClientAuthenticator {
 			$params['client_id']     = $config->clientId;
 			$params['client_secret'] = $config->clientSecret;
 
-			$logger->debug('OIDC: authenticating with client_secret_post', [ 'client_id' => $config->clientId ]);
+			$logger->debug('OIDC: authenticating with client_secret_post', [ 'client_id' => $config->clientId, 'state' => $state ]);
 
 			return [ $params, $headers ];
 		}
@@ -57,7 +62,7 @@ final class ClientAuthenticator {
 		// than "+".
 		$headers['Authorization'] = 'Basic ' . base64_encode(rawurlencode($config->clientId) . ':' . rawurlencode($config->clientSecret));
 
-		$logger->debug('OIDC: authenticating with client_secret_basic', [ 'client_id' => $config->clientId ]);
+		$logger->debug('OIDC: authenticating with client_secret_basic', [ 'client_id' => $config->clientId, 'state' => $state ]);
 
 		return [ $params, $headers ];
 	}

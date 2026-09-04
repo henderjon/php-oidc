@@ -311,10 +311,14 @@ final class OpenIDConnectClient implements
 
 		// Safe to log every one of these in full - none is a secret. code_verifier itself
 		// never appears here, only the S256 challenge derived from it, which is not reversible
-		// back into the verifier.
+		// back into the verifier. 'state' is also already inside 'params' (needed there to
+		// reconstruct the actual redirect URL) - repeated here as its own top-level key so this
+		// log line can be found the same way every other collaborator's debug logging is found,
+		// by 'state' alone, without knowing to look inside 'params' first.
 		$this->logger->debug('OIDC: building an authorization redirect', [
 			'authorization_endpoint' => $authorizationEndpoint,
 			'params'                 => $params,
+			'state'                  => $flow->state,
 		]);
 
 		return new AuthorizationRedirect($this->appendQuery($authorizationEndpoint, $params));

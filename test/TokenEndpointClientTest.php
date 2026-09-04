@@ -366,6 +366,21 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertStringNotContainsString('the-authorization-code', json_encode($records));
 	}
 
+	public function testWhenScopedTheStateReachesBothItsOwnLogsAndClientAuthenticatorsThroughTheSameLogger(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeScopedClient($fetcher, $logger, 'the-flow-state')->exchangeAuthorizationCode($this->config(), 'the-code');
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertGreaterThanOrEqual(2, count($records));
+
+		foreach( $records as $record ) {
+			$this->assertSame('the-flow-state', $record['context']['state'], "every debug record for a scoped call must carry the same state - got: {$record['message']}");
+		}
+	}
+
 	public function testRefreshTokenLogsTheRequestWithTheRefreshTokenPartiallyRedacted(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));

@@ -99,6 +99,16 @@ class ClientAuthenticatorTest extends TestCase {
 		$this->assertSame('OIDC: authenticating with client_secret_basic', $records[0]['message']);
 		$this->assertSame('the-client-id', $records[0]['context']['client_id']);
 		$this->assertArrayNotHasKey('client_secret', $records[0]['context']);
+		$this->assertNull($records[0]['context']['state'], 'no state was passed in - not a missing value, there is nothing to correlate with');
+	}
+
+	public function testLogsTheGivenStateForCorrelationWithTheRestOfTheFlow(): void {
+		$config = new OpenIDConnectClientConfig('the-client-id', 'the-client-secret', 'https://example.com/callback');
+		$logger = new ArrayLogger;
+
+		ClientAuthenticator::apply($config, [ 'grant_type' => 'authorization_code' ], $logger, 'the-flow-state');
+
+		$this->assertSame('the-flow-state', $logger->recordsAt(LogLevel::DEBUG)[0]['context']['state']);
 	}
 
 	public function testPostMethodLogsWhichMethodWasChosenWithoutTheSecret(): void {
@@ -113,6 +123,7 @@ class ClientAuthenticatorTest extends TestCase {
 		$this->assertSame('OIDC: authenticating with client_secret_post', $records[0]['message']);
 		$this->assertSame('the-client-id', $records[0]['context']['client_id']);
 		$this->assertArrayNotHasKey('client_secret', $records[0]['context']);
+		$this->assertNull($records[0]['context']['state']);
 	}
 
 	public function testPublicClientLogsAuthenticatingWithNoSecret(): void {
@@ -125,6 +136,7 @@ class ClientAuthenticatorTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: authenticating as a public client with no client secret', $records[0]['message']);
 		$this->assertSame('the-client-id', $records[0]['context']['client_id']);
+		$this->assertNull($records[0]['context']['state']);
 	}
 
 }

@@ -84,6 +84,10 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame(self::AUTHORIZATION_ENDPOINT, $build['context']['authorization_endpoint']);
 		$this->assertSame($params['state'], $build['context']['params']['state']);
 		$this->assertSame($params['nonce'], $build['context']['params']['nonce']);
+		// Repeated as its own top-level key, not just nested in 'params' - so this log line can
+		// be found the same way every other collaborator's debug logging is found, by 'state'
+		// alone.
+		$this->assertSame($params['state'], $build['context']['state']);
 	}
 
 	public function testExtraAuthParamsCannotOverrideProtocolParams(): void {

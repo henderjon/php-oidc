@@ -137,7 +137,7 @@ final class TokenEndpointClient {
 			'state'    => $this->state,
 		]);
 
-		[ $params, $headers ] = ClientAuthenticator::apply($config, $params, $this->logger);
+		[ $params, $headers ] = ClientAuthenticator::apply($config, $params, $this->logger, $this->state);
 
 		try {
 			$response = $this->httpFetcher->fetch($endpoint, $this->buildRequestBody($params), $headers);
