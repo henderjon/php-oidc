@@ -204,6 +204,12 @@ final class TokenEndpointClient {
 			'id_token'      => self::redactedField($decoded, 'id_token'),
 			'refresh_token' => self::redactedField($decoded, 'refresh_token'),
 			'expires_in'    => $decoded['expires_in'] ?? null,
+			// Neither is secret - unlike the three fields above, both are logged in full. scope
+			// in particular is worth seeing next to the request's own 'params.scope' (see the
+			// debug log at the top of this method): a provider narrowing what was requested is
+			// a common integration surprise, easy to miss without the two side by side.
+			'scope'         => self::plainField($decoded, 'scope'),
+			'token_type'    => self::plainField($decoded, 'token_type'),
 			'state'         => $this->state,
 		]);
 
@@ -229,6 +235,16 @@ final class TokenEndpointClient {
 	 */
 	private static function redactedField( array $decoded, string $key ): ?string {
 		return is_string($decoded[$key] ?? null) ? Redact::partial($decoded[$key]) : null;
+	}
+
+	/**
+	 * Like redactedField(), but for a field that is not sensitive at all - returned as-is
+	 * rather than through Redact::partial().
+	 *
+	 * @param array<string,mixed> $decoded
+	 */
+	private static function plainField( array $decoded, string $key ): ?string {
+		return is_string($decoded[$key] ?? null) ? $decoded[$key] : null;
 	}
 
 	/**

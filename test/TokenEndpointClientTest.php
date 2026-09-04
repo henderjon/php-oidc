@@ -417,6 +417,24 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertStringNotContainsString('the-returned-refresh-token', json_encode($records));
 	}
 
+	public function testSuccessfulResponseLogsScopeAndTokenTypeInFullSinceNeitherIsSecret(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'x',
+			'scope'        => 'read write',
+			'token_type'   => 'Bearer',
+		], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config(), [ 'read', 'write' ]);
+
+		$records  = $logger->recordsAt(LogLevel::DEBUG);
+		$response = $records[array_key_last($records)];
+
+		$this->assertSame('read write', $response['context']['scope']);
+		$this->assertSame('Bearer', $response['context']['token_type']);
+	}
+
 	public function testSuccessfulResponseLogsNullForAnAbsentToken(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
@@ -429,6 +447,8 @@ class TokenEndpointClientTest extends TestCase {
 
 		$this->assertNull($response['context']['id_token']);
 		$this->assertNull($response['context']['refresh_token']);
+		$this->assertNull($response['context']['scope']);
+		$this->assertNull($response['context']['token_type']);
 	}
 
 }
