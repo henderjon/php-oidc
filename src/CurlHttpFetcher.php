@@ -63,6 +63,17 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 			$this->logger->alert('OIDC: TLS certificate and hostname verification is disabled for this request - never use this outside local development', [ 'url' => $url ]);
 		}
 
+		// Header/body VALUES are never logged here, only whether a body is present and which
+		// header names were sent - this class has no idea which of them carry a client_secret,
+		// an authorization code, or a bearer token, since every caller (discovery, token,
+		// userinfo, JWKS) shares this one seam. A caller that wants a value logged decides that,
+		// and how much of it, for itself - see TokenEndpointClient and ClientAuthenticator.
+		$this->logger->debug('OIDC: sending HTTP request', [
+			'url'          => $url,
+			'has_body'     => $body !== null,
+			'header_names' => array_keys($headers),
+		]);
+
 		$handle = $this->getHandle($url);
 
 		curl_setopt($handle, CURLOPT_URL, $url);
@@ -132,10 +143,19 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 		}
 
 		$contentType = curl_getinfo($handle, CURLINFO_CONTENT_TYPE);
+		$status      = (int)curl_getinfo($handle, CURLINFO_HTTP_CODE);
+
+		$this->logger->debug('OIDC: received HTTP response', [
+			'url'          => $url,
+			'http_status'  => $status,
+			'content_type' => $contentType,
+			'body_bytes'   => strlen($buffer),
+			'elapsed_ms'   => round(curl_getinfo($handle, CURLINFO_TOTAL_TIME) * 1000, 1),
+		]);
 
 		return new FetchResponse(
 			body: $buffer,
-			status: (int)curl_getinfo($handle, CURLINFO_HTTP_CODE),
+			status: $status,
 			contentType: is_string($contentType) ? $this->stripParameters($contentType) : null,
 		);
 	}
