@@ -376,11 +376,33 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 
 		$records = $logger->recordsAt(LogLevel::DEBUG);
-		$this->assertSame('OIDC: provider configuration issuer matches the URL used to fetch it', $records[0]['message']);
-		$this->assertSame('OIDC: fetched a fresh provider configuration', $records[1]['message']);
-		$this->assertSame([ 'issuer', 'token_endpoint' ], $records[1]['context']['advertised_endpoints']);
-		$this->assertSame('OIDC: resolved endpoint from provider discovery', $records[2]['message']);
-		$this->assertSame('https://issuer.example.com/token', $records[2]['context']['value']);
+		$this->assertSame('OIDC: discovering provider configuration via /.well-known/openid-configuration', $records[0]['message']);
+		$this->assertSame('https://issuer.example.com/.well-known/openid-configuration', $records[0]['context']['discovery_url']);
+		$this->assertSame('OIDC: provider configuration issuer matches the URL used to fetch it', $records[1]['message']);
+		$this->assertSame('OIDC: fetched a fresh provider configuration', $records[2]['message']);
+		$this->assertSame([ 'issuer', 'token_endpoint' ], $records[2]['context']['advertised_endpoints']);
+		$this->assertSame('https://issuer.example.com/.well-known/openid-configuration', $records[2]['context']['discovery_url']);
+		$this->assertSame('OIDC: resolved endpoint from provider discovery', $records[3]['message']);
+		$this->assertSame('https://issuer.example.com/token', $records[3]['context']['value']);
+	}
+
+	public function testResolveLogsTheDiscoveryUrlBeforeFetchingIt(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://issuer.example.com',
+				'token_endpoint' => 'https://issuer.example.com/token',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
+
+		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+
+		$discovering = $logger->recordsAt(LogLevel::DEBUG)[0];
+		$this->assertSame('https://issuer.example.com', $discovering['context']['provider_url']);
+		$this->assertSame('https://issuer.example.com/.well-known/openid-configuration', $discovering['context']['discovery_url']);
 	}
 
 	public function testResolveLogsReusingAnAlreadyFetchedDocumentOnASecondCall(): void {

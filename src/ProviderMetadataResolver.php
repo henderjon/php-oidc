@@ -134,7 +134,19 @@ final class ProviderMetadataResolver {
 			return $this->discovered[$providerUrl];
 		}
 
+		// OpenID Connect Discovery 1.0 §4: the provider's configuration document always lives
+		// at this well-known suffix appended to the issuer/providerUrl - never a URL configured
+		// separately, and never anything a caller chooses. Logged explicitly, by name, rather
+		// than leaving the convention only implicit in $url's own value - the "issuer plus
+		// /.well-known/openid-configuration" rule is exactly the detail worth restating every
+		// time discovery actually happens.
 		$url = rtrim($providerUrl, '/') . '/.well-known/openid-configuration';
+
+		$this->logger->debug('OIDC: discovering provider configuration via /.well-known/openid-configuration', [
+			'provider_url'  => $providerUrl,
+			'discovery_url' => $url,
+			'state'         => $this->state,
+		]);
 
 		$this->assertUrlAllowed($url, $config, 'discovery');
 
@@ -199,6 +211,7 @@ final class ProviderMetadataResolver {
 
 		$this->logger->debug('OIDC: fetched a fresh provider configuration', [
 			'provider_url'         => $providerUrl,
+			'discovery_url'        => $url,
 			'advertised_endpoints' => array_keys($decoded),
 			'state'                => $this->state,
 		]);
