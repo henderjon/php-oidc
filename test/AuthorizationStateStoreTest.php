@@ -148,7 +148,40 @@ class AuthorizationStateStoreTest extends TestCase {
 
 		$store->consume($started->state);
 
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
+	}
+
+	public function testStartLogsThePersistedAttemptAtDebugLevel(): void {
+		$logger = new ArrayLogger;
+		$flow   = $this->makeStore($logger)->start();
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: persisted a new authorization attempt', $records[0]['message']);
+		$this->assertSame($flow->state, $records[0]['context']['state']);
+		$this->assertSame(600, $records[0]['context']['ttl_seconds']);
+		$this->assertFalse($records[0]['context']['has_code_verifier']);
+	}
+
+	public function testStartLogsHasCodeVerifierTrueWhenOneIsGiven(): void {
+		$logger = new ArrayLogger;
+		$this->makeStore($logger)->start(codeVerifier: 'the-code-verifier');
+
+		$this->assertTrue($logger->recordsAt(LogLevel::DEBUG)[0]['context']['has_code_verifier']);
+	}
+
+	public function testConsumeLogsTheConsumedAttemptAtDebugLevel(): void {
+		$logger  = new ArrayLogger;
+		$store   = $this->makeStore($logger);
+		$started = $store->start(codeVerifier: 'the-code-verifier');
+
+		$store->consume($started->state);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$consumed = $records[array_key_last($records)];
+		$this->assertSame('OIDC: consumed an authorization attempt', $consumed['message']);
+		$this->assertSame($started->state, $consumed['context']['state']);
+		$this->assertTrue($consumed['context']['has_code_verifier']);
 	}
 
 	public function testConsumeTruncatesAnOverlongStateBeforeLogging(): void {

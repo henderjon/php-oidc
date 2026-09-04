@@ -92,6 +92,12 @@ final class AuthorizationStateStore {
 			throw new AuthorizationStateException('Unable to persist authorization state', state: $this->loggableState($state));
 		}
 
+		$this->logger->debug('OIDC: persisted a new authorization attempt', [
+			'state'             => $this->loggableState($state),
+			'ttl_seconds'       => $this->ttlSeconds,
+			'has_code_verifier' => $codeVerifier !== null,
+		]);
+
 		return new FlowState($state, $nonce, $codeVerifier);
 	}
 
@@ -136,8 +142,14 @@ final class AuthorizationStateStore {
 		}
 
 		$codeVerifier = $flow['code_verifier'] ?? null;
+		$codeVerifier = is_string($codeVerifier) ? $codeVerifier : null;
 
-		return new FlowState($state, $flow['nonce'], is_string($codeVerifier) ? $codeVerifier : null);
+		$this->logger->debug('OIDC: consumed an authorization attempt', [
+			'state'             => $this->loggableState($state),
+			'has_code_verifier' => $codeVerifier !== null,
+		]);
+
+		return new FlowState($state, $flow['nonce'], $codeVerifier);
 	}
 
 	/**
