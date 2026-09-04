@@ -17,6 +17,19 @@ use Psr\Log\NullLogger;
  */
 final class TokenEndpointClient {
 
+	/**
+	 * Param keys, among the ones this class's own callers put in $params, whose values are
+	 * single-use or short-lived - an authorization code, a refresh token, a PKCE verifier -
+	 * safe to partially reveal at debug level via Redact so one log line can be correlated with
+	 * another. `client_secret` is never one of these: request() logs $params before handing
+	 * them to ClientAuthenticator::apply(), the only place that ever adds client_secret to the
+	 * body, and that class's own debug logging never reveals it at all - see its docblock for
+	 * why a long-lived static credential gets different treatment than these do.
+	 *
+	 * @var list<string>
+	 */
+	private const SENSITIVE_PARAM_KEYS = [ 'code', 'refresh_token', 'code_verifier' ];
+
 	public function __construct(
 		private readonly HttpFetcherInterface $httpFetcher,
 		private readonly ProviderMetadataResolver $providerMetadataResolver,
@@ -116,8 +129,15 @@ final class TokenEndpointClient {
 	 * @throws TokenRequestException
 	 */
 	private function request( OpenIDConnectClientConfig $config, array $params ): TokenResult {
-		$endpoint             = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
-		[ $params, $headers ] = ClientAuthenticator::apply($config, $params);
+		$endpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+
+		$this->logger->debug('OIDC: requesting a token', [
+			'endpoint' => $endpoint,
+			'params'   => self::redactedParams($params),
+			'state'    => $this->state,
+		]);
+
+		[ $params, $headers ] = ClientAuthenticator::apply($config, $params, $this->logger);
 
 		try {
 			$response = $this->httpFetcher->fetch($endpoint, $this->buildRequestBody($params), $headers);
@@ -178,7 +198,37 @@ final class TokenEndpointClient {
 			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, state: $this->state, previous: $decodeError);
 		}
 
+		$this->logger->debug('OIDC: token endpoint returned a token', [
+			'endpoint'      => $endpoint,
+			'access_token'  => self::redactedField($decoded, 'access_token'),
+			'id_token'      => self::redactedField($decoded, 'id_token'),
+			'refresh_token' => self::redactedField($decoded, 'refresh_token'),
+			'expires_in'    => $decoded['expires_in'] ?? null,
+			'state'         => $this->state,
+		]);
+
 		return new TokenResult($decoded, $this->logger, $this->state);
+	}
+
+	/**
+	 * @param array<string,string|list<string>> $params
+	 * @return array<string,string|list<string>>
+	 */
+	private static function redactedParams( array $params ): array {
+		foreach( self::SENSITIVE_PARAM_KEYS as $key ) {
+			if( isset($params[$key]) && is_string($params[$key]) ) {
+				$params[$key] = Redact::partial($params[$key]);
+			}
+		}
+
+		return $params;
+	}
+
+	/**
+	 * @param array<string,mixed> $decoded
+	 */
+	private static function redactedField( array $decoded, string $key ): ?string {
+		return is_string($decoded[$key] ?? null) ? Redact::partial($decoded[$key]) : null;
 	}
 
 	/**

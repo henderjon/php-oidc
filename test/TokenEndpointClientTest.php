@@ -349,4 +349,86 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertStringContainsString('client_id=the-client-id', $fetcher->requests[0]['body']);
 	}
 
+	public function testExchangeAuthorizationCodeLogsTheRequestWithTheCodePartiallyRedacted(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->exchangeAuthorizationCode($this->config(), 'the-authorization-code');
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$request = $records[0];
+
+		$this->assertSame('OIDC: requesting a token', $request['message']);
+		$this->assertSame(self::TOKEN_ENDPOINT, $request['context']['endpoint']);
+		$this->assertSame('authorization_code', $request['context']['params']['grant_type']);
+		$this->assertSame(Redact::partial('the-authorization-code'), $request['context']['params']['code']);
+		$this->assertStringNotContainsString('the-authorization-code', json_encode($records));
+	}
+
+	public function testRefreshTokenLogsTheRequestWithTheRefreshTokenPartiallyRedacted(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->refreshToken($this->config(), 'the-original-refresh-token');
+
+		$request = $logger->recordsAt(LogLevel::DEBUG)[0];
+
+		$this->assertSame(Redact::partial('the-original-refresh-token'), $request['context']['params']['refresh_token']);
+	}
+
+	public function testRequestNeverLogsTheClientSecretEvenRedacted(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$config = $this->config()->withClientAuthMethod(ClientAuthMethod::Post);
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($config);
+
+		// Not even Redact::partial('the-client-secret') should appear - client_secret is
+		// excluded from every debug record this class and ClientAuthenticator produce, unlike
+		// the short-lived values above. See ClientAuthenticator's docblock for why.
+		$this->assertStringNotContainsString('the-client-secret', json_encode($logger->records));
+	}
+
+	public function testSuccessfulResponseLogsThePartiallyRedactedTokens(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token'  => 'the-returned-access-token',
+			'id_token'       => 'the-returned-id-token-value',
+			'refresh_token'  => 'the-returned-refresh-token',
+			'expires_in'     => 3600,
+		], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
+
+		$records  = $logger->recordsAt(LogLevel::DEBUG);
+		$response = $records[array_key_last($records)];
+
+		$this->assertSame('OIDC: token endpoint returned a token', $response['message']);
+		$this->assertSame(Redact::partial('the-returned-access-token'), $response['context']['access_token']);
+		$this->assertSame(Redact::partial('the-returned-id-token-value'), $response['context']['id_token']);
+		$this->assertSame(Redact::partial('the-returned-refresh-token'), $response['context']['refresh_token']);
+		$this->assertSame(3600, $response['context']['expires_in']);
+		$this->assertStringNotContainsString('the-returned-access-token', json_encode($records));
+		$this->assertStringNotContainsString('the-returned-id-token-value', json_encode($records));
+		$this->assertStringNotContainsString('the-returned-refresh-token', json_encode($records));
+	}
+
+	public function testSuccessfulResponseLogsNullForAnAbsentToken(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
+
+		$records  = $logger->recordsAt(LogLevel::DEBUG);
+		$response = $records[array_key_last($records)];
+
+		$this->assertNull($response['context']['id_token']);
+		$this->assertNull($response['context']['refresh_token']);
+	}
+
 }
