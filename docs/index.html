@@ -383,7 +383,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
             <li><a href="#OpenIDConnectClientFactory">OpenIDConnectClientFactory</a></li>
             <li><a href="#OpenIDConnectClientConfig">OpenIDConnectClientConfig</a></li>
             <li><a href="#Logging">Logging</a></li>
-            <li><a href="#LevelAllowlistLogger">LevelAllowlistLogger</a></li>
+            <li><a href="#LogLevelFilterLogger">LogLevelFilterLogger</a></li>
             <li><a href="#PkceMode">PkceMode</a></li>
             <li><a href="#ClientAuthMethod">ClientAuthMethod</a></li>
           </ul>
@@ -631,8 +631,8 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
     </div>
 
     <!-- LEVEL ALLOWLIST LOGGER -->
-    <div class="type-section" id="LevelAllowlistLogger">
-      <h2>type LevelAllowlistLogger<a class="section-anchor" href="#LevelAllowlistLogger" aria-label="Link to this section">&para;</a></h2>
+    <div class="type-section" id="LogLevelFilterLogger">
+      <h2>type LogLevelFilterLogger<a class="section-anchor" href="#LogLevelFilterLogger" aria-label="Link to this section">&para;</a></h2>
       <p>
         A PSR-3 decorator that forwards a log call to the wrapped logger only when its level is
         in an explicit allow-list, dropping every other level outright. A conventional "minimum
@@ -643,7 +643,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         different verbosity, temporarily on during troubleshooting) without also receiving, or
         reconfiguring, everything else your logger already handles.
       </p>
-      <div class="method-sig">final class LevelAllowlistLogger extends Psr\Log\AbstractLogger {
+      <div class="method-sig">final class LogLevelFilterLogger extends Psr\Log\AbstractLogger {
     public function __construct(
         Psr\Log\LoggerInterface $logger,
         array $allowedLevels,
@@ -656,7 +656,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         say, with everything between them excluded). Pass it wherever this library expects a
         <code>Psr\Log\LoggerInterface</code>, e.g. <code>OpenIDConnectClientFactory</code>:
       </p>
-      <pre>$logger = new LevelAllowlistLogger($yourAppLogger, [ LogLevel::DEBUG ]);
+      <pre>$logger = new LogLevelFilterLogger($yourAppLogger, [ LogLevel::DEBUG ]);
 
 $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>

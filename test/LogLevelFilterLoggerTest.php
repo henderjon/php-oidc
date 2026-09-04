@@ -6,11 +6,11 @@ use Oidc\Fakes\ArrayLogger;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 
-class LevelAllowlistLoggerTest extends TestCase {
+class LogLevelFilterLoggerTest extends TestCase {
 
 	public function testForwardsAnAllowedLevel(): void {
 		$inner = new ArrayLogger;
-		$logger = new LevelAllowlistLogger($inner, [ LogLevel::DEBUG ]);
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ]);
 
 		$logger->debug('a debug message', [ 'key' => 'value' ]);
 
@@ -22,7 +22,7 @@ class LevelAllowlistLoggerTest extends TestCase {
 
 	public function testDropsALevelNotInTheAllowlist(): void {
 		$inner  = new ArrayLogger;
-		$logger = new LevelAllowlistLogger($inner, [ LogLevel::DEBUG ]);
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ]);
 
 		$logger->error('an error message');
 
@@ -31,7 +31,7 @@ class LevelAllowlistLoggerTest extends TestCase {
 
 	public function testAllowsMultipleLevelsAtOnce(): void {
 		$inner  = new ArrayLogger;
-		$logger = new LevelAllowlistLogger($inner, [ LogLevel::DEBUG, LogLevel::CRITICAL ]);
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG, LogLevel::CRITICAL ]);
 
 		$logger->debug('a debug message');
 		$logger->warning('a warning message');
@@ -45,7 +45,7 @@ class LevelAllowlistLoggerTest extends TestCase {
 
 	public function testAnEmptyAllowlistDropsEverything(): void {
 		$inner  = new ArrayLogger;
-		$logger = new LevelAllowlistLogger($inner, []);
+		$logger = new LogLevelFilterLogger($inner, []);
 
 		$logger->emergency('an emergency message');
 		$logger->debug('a debug message');
@@ -58,7 +58,7 @@ class LevelAllowlistLoggerTest extends TestCase {
 		// log() with that level - this proves the allowlist actually governs all eight, not
 		// just the generic log() call sites exercised above.
 		$inner  = new ArrayLogger;
-		$logger = new LevelAllowlistLogger($inner, [
+		$logger = new LogLevelFilterLogger($inner, [
 			LogLevel::EMERGENCY, LogLevel::ALERT, LogLevel::CRITICAL, LogLevel::ERROR,
 			LogLevel::WARNING, LogLevel::NOTICE, LogLevel::INFO, LogLevel::DEBUG,
 		]);
@@ -80,7 +80,7 @@ class LevelAllowlistLoggerTest extends TestCase {
 
 	public function testDefaultContextIsAnEmptyArray(): void {
 		$inner  = new ArrayLogger;
-		$logger = new LevelAllowlistLogger($inner, [ LogLevel::DEBUG ]);
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ]);
 
 		$logger->debug('a debug message');
 

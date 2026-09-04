@@ -20,7 +20,7 @@ use Psr\Log\LoggerInterface;
  * (see Psr\Log\LogLevel) is valid, including combinations no linear severity ordering could
  * express together (`debug` and `critical`, say, with everything between them excluded).
  */
-final class LevelAllowlistLogger extends AbstractLogger {
+final class LogLevelFilterLogger extends AbstractLogger {
 
 	/**
 	 * @param list<string> $allowedLevels One or more of Psr\Log\LogLevel's constants.
