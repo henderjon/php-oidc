@@ -383,6 +383,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
             <li><a href="#OpenIDConnectClientFactory">OpenIDConnectClientFactory</a></li>
             <li><a href="#OpenIDConnectClientConfig">OpenIDConnectClientConfig</a></li>
             <li><a href="#Logging">Logging</a></li>
+            <li><a href="#LogLevelFilterLogger">LogLevelFilterLogger</a></li>
             <li><a href="#PkceMode">PkceMode</a></li>
             <li><a href="#ClientAuthMethod">ClientAuthMethod</a></li>
           </ul>
@@ -626,6 +627,38 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>type</code>, <code>keys</code></td><td><code>string</code>, <code>?list&lt;string&gt;</code></td><td>The actual PHP type (<code>get_debug_type()</code>) and, if it was an array, the keys of a cached authorization flow entry that didn't have the expected shape.</td></tr>
         </tbody>
       </table>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- LEVEL ALLOWLIST LOGGER -->
+    <div class="type-section" id="LogLevelFilterLogger">
+      <h2>type LogLevelFilterLogger<a class="section-anchor" href="#LogLevelFilterLogger" aria-label="Link to this section">&para;</a></h2>
+      <p>
+        A PSR-3 decorator that forwards a log call to the wrapped logger only when its level is
+        in an explicit allow-list, dropping every other level outright. A conventional "minimum
+        severity" filter cannot express this on its own: set at <code>debug</code>, it lets
+        everything through, since <code>debug</code> is already PSR-3's lowest severity - there
+        is no threshold that means "debug only." Wrap your own logger in one of these to route,
+        say, only this library's debug-level tracing somewhere separate (a different file, a
+        different verbosity, temporarily on during troubleshooting) without also receiving, or
+        reconfiguring, everything else your logger already handles.
+      </p>
+      <div class="method-sig">final class LogLevelFilterLogger extends Psr\Log\AbstractLogger {
+    public function __construct(
+        Psr\Log\LoggerInterface $logger,
+        array $allowedLevels,
+    )
+}</div>
+      <p>
+        <code>$allowedLevels</code> is a discrete set, not a range - any combination of PSR-3's
+        eight levels (<code>Psr\Log\LogLevel</code>) is valid, including combinations no linear
+        severity ordering could express together (<code>debug</code> and <code>critical</code>,
+        say, with everything between them excluded). Pass it wherever this library expects a
+        <code>Psr\Log\LoggerInterface</code>, e.g. <code>OpenIDConnectClientFactory</code>:
+      </p>
+      <pre>$logger = new LogLevelFilterLogger($yourAppLogger, [ LogLevel::DEBUG ]);
+
+$factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 
