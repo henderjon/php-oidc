@@ -623,6 +623,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>malformed</code></td><td><code>list&lt;mixed&gt;</code></td><td>The non-string entries filtered out of a malformed <code>aud</code> claim.</td></tr>
           <tr><td><code>untrusted</code></td><td><code>list&lt;string&gt;</code></td><td><code>aud</code> values present on the token but outside the configured trusted set.</td></tr>
           <tr><td><code>invalid_fields</code></td><td><code>list&lt;string&gt;</code></td><td>Names of token-response fields that were missing or the wrong type.</td></tr>
+          <tr><td><code>invalid_field_values</code></td><td><code>array&lt;string,mixed&gt;</code></td><td>Each name in <code>invalid_fields</code> mapped to what it actually contained (<code>null</code> when entirely missing). Safe to log verbatim - a field only lands here for having the wrong shape, never for holding a validly-typed value, so nothing here can be a real access/refresh/id token.</td></tr>
           <tr><td><code>type</code>, <code>keys</code></td><td><code>string</code>, <code>?list&lt;string&gt;</code></td><td>The actual PHP type (<code>get_debug_type()</code>) and, if it was an array, the keys of a cached authorization flow entry that didn't have the expected shape.</td></tr>
         </tbody>
       </table>

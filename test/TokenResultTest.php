@@ -58,7 +58,7 @@ class TokenResultTest extends TestCase {
 		}
 	}
 
-	public function testLogsInvalidResponseFieldNamesWithoutValues(): void {
+	public function testLogsInvalidResponseFieldNamesAndTheirActualValues(): void {
 		$logger = new ArrayLogger;
 
 		try {
@@ -73,9 +73,35 @@ class TokenResultTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame([ 'access_token', 'expires_in' ], $records[0]['context']['invalid_fields']);
-		$this->assertArrayNotHasKey('access_token', $records[0]['context']);
-		$this->assertArrayNotHasKey('expires_in', $records[0]['context']);
+		$this->assertSame(
+			[ 'access_token' => '', 'expires_in' => '3600' ],
+			$records[0]['context']['invalid_field_values'],
+		);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testLogsNullAsTheValueForAnEntirelyMissingAccessToken(): void {
+		$logger = new ArrayLogger;
+
+		try {
+			new TokenResult([ 'token_type' => 'Bearer' ], $logger);
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$this->assertNull($logger->recordsAt(LogLevel::ERROR)[0]['context']['invalid_field_values']['access_token']);
+	}
+
+	public function testLogsTheActualMalformedValueForANonStringField(): void {
+		$logger = new ArrayLogger;
+
+		new TokenResult([
+			'access_token' => 'the-access-token',
+			'scope'        => [ 'read', 'write' ],
+		], $logger);
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame([ 'read', 'write' ], $records[0]['context']['invalid_field_values']['scope']);
 	}
 
 }
