@@ -268,9 +268,9 @@ class RefreshTokenClientTest extends TestCase {
 		// the well-formed entries are dropped from the normalized list, not the whole thing.
 		$this->makeClient($fetcher, $logger)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $originalClaims);
 
-		$normalized = $this->findRecord($logger, 'OIDC: originalClaims aud contained non-string entries, dropped');
+		$normalized = $this->findRecord($logger, 'OIDC: originalClaims aud was normalized before audience validation');
 		$this->assertSame([ self::CLIENT_ID, 42, 'another-trusted-audience' ], $normalized['context']['aud']);
-		$this->assertSame([ 42 ], $normalized['context']['malformed']);
+		$this->assertSame([ self::CLIENT_ID, 'another-trusted-audience' ], $normalized['context']['normalized']);
 	}
 
 	public function testRefreshLogsWhenOriginalClaimsAudIsNotAStringOrArray(): void {
@@ -292,9 +292,32 @@ class RefreshTokenClientTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$normalized = $this->findRecord($logger, 'OIDC: originalClaims aud was not a string or array, treated as empty');
+		$normalized = $this->findRecord($logger, 'OIDC: originalClaims aud was normalized before audience validation');
 		$this->assertSame(12345, $normalized['context']['aud']);
-		$this->assertSame('int', $normalized['context']['type']);
+		$this->assertSame('', $normalized['context']['normalized']);
+	}
+
+	public function testRefreshDoesNotLogAnythingWhenOriginalClaimsAudIsAlreadyWellFormed(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+
+		$newIdToken = $fixture->sign([ 'iss' => self::ISSUER, 'sub' => 'user-1', 'aud' => self::CLIENT_ID ]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-new-access-token',
+			'id_token'     => $newIdToken,
+		], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->refresh($this->config(), 'the-refresh-token', 'the-original-id-token', $this->originalClaims());
+
+		$this->assertSame(
+			[],
+			array_values(array_filter(
+				$logger->recordsAt(LogLevel::DEBUG),
+				static fn ( array $record ): bool => $record['message'] === 'OIDC: originalClaims aud was normalized before audience validation',
+			)),
+		);
 	}
 
 	public function testRefreshRejectsANewIdTokenWithAMismatchedAuthTime(): void {

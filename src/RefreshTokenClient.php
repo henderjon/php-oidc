@@ -119,36 +119,31 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 	 * `aud` here is silently normalized away rather than rejected outright the way
 	 * ClaimsValidator::toActualAudienceList() treats the same shape on the incoming token
 	 * (untrusted, and rejected loudly by default). "Silently" only means no exception; logged
-	 * at debug level either way, since $originalClaims should already be trustworthy by the
-	 * time a caller has one to pass in - a malformed `aud` here is a caller-side surprise worth
-	 * a trace, not a routine, expected shape.
+	 * at debug level whenever normalization actually changes anything, since $originalClaims
+	 * should already be trustworthy by the time a caller has one to pass in - a malformed `aud`
+	 * here is a caller-side surprise worth a trace, not a routine, expected shape.
+	 *
+	 * `aud` is not secret, so the log just shows the original value next to the normalized one
+	 * and leaves the comparison to whoever is reading it, rather than this method computing
+	 * (and needing its own message for) every particular way the two might differ.
 	 *
 	 * @return list<string>|string
 	 */
 	private function normalizedAudience( mixed $value ): array|string {
-		if( is_array($value) ) {
-			$normalized = array_values(array_filter($value, 'is_string'));
+		$normalized = match( true ) {
+			is_array($value)  => array_values(array_filter($value, 'is_string')),
+			is_string($value) => $value,
+			default           => '',
+		};
 
-			if( count($normalized) !== count($value) ) {
-				$this->logger->debug('OIDC: originalClaims aud contained non-string entries, dropped', [
-					'aud'       => $value,
-					'malformed' => array_values(array_filter($value, static fn ( mixed $item ): bool => !is_string($item))),
-				]);
-			}
-
-			return $normalized;
+		if( $normalized !== $value ) {
+			$this->logger->debug('OIDC: originalClaims aud was normalized before audience validation', [
+				'aud'        => $value,
+				'normalized' => $normalized,
+			]);
 		}
 
-		if( is_string($value) ) {
-			return $value;
-		}
-
-		$this->logger->debug('OIDC: originalClaims aud was not a string or array, treated as empty', [
-			'aud'  => $value,
-			'type' => get_debug_type($value),
-		]);
-
-		return '';
+		return $normalized;
 	}
 
 }
