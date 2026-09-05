@@ -569,6 +569,66 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
     <div class="type-section" id="Logging">
       <h2>Logging<a class="section-anchor" href="#Logging" aria-label="Link to this section">&para;</a></h2>
       <p>
+        This library's logging is deliberately, sometimes irritatingly, noisy at the
+        <code>debug</code> level - most collaborators trace their own happy path in addition to
+        every failure, by design, so a request can be followed step by step without anything
+        having failed at all. That is a lot of log volume to hand a caller's own logger
+        unfiltered. <a href="#LogLevelFilterLogger"><code>LogLevelFilterLogger</code></a> exists
+        specifically to mediate it - wrap your own logger in one to receive only the levels you
+        actually want, rather than reconfiguring or replacing your logger just to cope with the
+        noise.
+      </p>
+      <p>
+        The levels this library actually emits, for choosing what to pass into
+        <code>LogLevelFilterLogger</code>'s <code>$levels</code>:
+      </p>
+      <table>
+        <thead><tr><th>Level</th><th>Calls</th><th>Fires when...</th></tr></thead>
+        <tbody>
+          <tr><td><code>debug</code></td><td>28</td><td>The happy path of nearly every collaborator - what was sent, what came back, what was decided. The bulk of this library's log volume.</td></tr>
+          <tr><td><code>warning</code></td><td>2</td><td>A fail-open decision that still proceeds anyway - an Optional PKCE flow completing with no <code>code_verifier</code> - or a runtime event worth a human's attention that is not itself a configuration choice - a callback whose <code>state</code> matched no pending authorization attempt at all (<code>AuthorizationStateStore</code>; see that method's own docblock for the several distinct things a miss there could mean).</td></tr>
+          <tr><td><code>info</code></td><td>1</td><td>An outcome PSR-16's own cache interface cannot distinguish from a real failure - <code>AuthorizationStateStore::consume()</code>, when the cache backend reports a delete as possibly not having cleared the entry.</td></tr>
+          <tr><td><code>error</code></td><td>66</td><td>Every validation, fetch, or parse failure across every collaborator - by far the largest share of non-<code>debug</code> volume. Always paired with the exception this library is about to throw. Every call at this level also carries a <code>security_relevant</code> boolean - see below.</td></tr>
+          <tr><td><code>alert</code></td><td>3</td><td>Reserved for a configuration choice worth a developer's own review, not a runtime event: TLS verification actively disabled for a request (<code>CurlHttpFetcher</code>), an untrusted <code>aud</code> value let through by explicit config opt-out (<code>ClaimsValidator</code>), or a public client building an authorization redirect with PKCE disabled (<code>OpenIDConnectClient</code>).</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <code>notice</code>, <code>critical</code>, and <code>emergency</code> are never used -
+        there is nothing to opt into at those levels. Counts are call sites in <code>src/</code>,
+        not runtime volume - one <code>debug</code> call on a hot path can still outnumber every
+        <code>error</code> call combined in an actual log stream, which is exactly why
+        <a href="#LogLevelFilterLogger"><code>LogLevelFilterLogger</code></a> exists.
+      </p>
+      <p>
+        <code>error</code> is by far the largest category, so it is worth breaking down further.
+        The table below groups its 66 call sites by the collaborator that raises them, alongside
+        how many of each are <code>security_relevant: true</code> - see below for what that means:
+      </p>
+      <table>
+        <thead><tr><th>Class</th><th><code>error</code> calls</th><th><code>security_relevant: true</code></th></tr></thead>
+        <tbody>
+          <tr><td><code>IdTokenVerifier</code></td><td>20</td><td>4 - the <code>"none"</code> algorithm, a failed signature, an <code>at_hash</code> mismatch, a JWKS key type mismatch</td></tr>
+          <tr><td><code>ClaimsValidator</code></td><td>18</td><td>1 - a <code>nonce</code> mismatch</td></tr>
+          <tr><td><code>OpenIDConnectClient</code></td><td>10</td><td>0</td></tr>
+          <tr><td><code>ProviderMetadataResolver</code></td><td>8</td><td>0</td></tr>
+          <tr><td><code>TokenEndpointClient</code></td><td>4</td><td>0</td></tr>
+          <tr><td><code>CurlHttpFetcher</code></td><td>3</td><td>0</td></tr>
+          <tr><td><code>AuthorizationStateStore</code></td><td>2</td><td>0</td></tr>
+          <tr><td><code>TokenResult</code></td><td>1</td><td>0</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The concentration is not an accident: <code>IdTokenVerifier</code> and
+        <code>ClaimsValidator</code> are the two collaborators that sit closest to the token
+        itself - decoding it, checking its signature, checking its claims - so nearly every shape
+        an attacker could actually manipulate lands in one of those two classes. Every other
+        collaborator's failures are further from the token's own content: transport, discovery,
+        endpoint shape - which is why none of their <code>error</code> calls are currently marked
+        <code>security_relevant: true</code>. That is a statement about where a curated,
+        high-confidence indicator was found so far, not a claim that those classes can never see
+        one - see "How this could evolve" below.
+      </p>
+      <p>
         Every log call passes a <code>context</code> array alongside the message. Which keys show
         up varies by call site - each one logs whatever is actually diagnostic for its own failure,
         not a single fixed envelope - but related call sites agree on the same names and shapes for
@@ -581,6 +641,57 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         library throws carries the same <code>state</code> value too, via
         <code>getState()</code> - see <a href="#Exceptions">Exceptions</a> - so a caller catching
         one directly gets the same correlation id without having to opt into a logger at all.
+      </p>
+      <p>
+        Every <code>error</code>-level call also carries a <code>security_relevant</code> boolean,
+        orthogonal to the level itself - it does not change what <code>error</code>, <code>warning</code>,
+        or <code>alert</code> mean, only whether this particular failure is one this library can call a
+        likely attack indicator with real confidence. It is <code>true</code> on a small, deliberately
+        narrow set of call sites where the failure is essentially unexplainable except as tampering or
+        forgery: an ID token declaring the <code>"none"</code> algorithm, a signature that fails
+        verification, an <code>at_hash</code> that does not match the access token, a JWKS key type that
+        does not match the token's algorithm, and a <code>nonce</code> that does not match the one this
+        client generated. Every other <code>error</code> call - the other 61, as of this writing - carries
+        <code>security_relevant: false</code>. That does <em>not</em> mean "confirmed benign" - a
+        misconfigured provider, a network blip, and a genuine attack that happens not to fit one of the
+        five curated shapes above all log <code>false</code> identically. It means only "not in this small
+        curated set," not "safe to ignore." A caller wanting a lightweight tamper/attack signal can filter
+        on this key without having to enumerate message strings or guess at severity; a caller wanting
+        every failure still gets every failure, since the key never suppresses anything, it only adds a
+        flag alongside.
+      </p>
+      <p>
+        <strong>Why a flat boolean, not a graded scale.</strong> An earlier draft of this feature
+        considered a confidence gradient - a string enum, or an integer scale from "not an issue"
+        through "ambiguous" to "security issue" - to capture the calls that sit between the five
+        curated <code>true</code> sites and the rest (an audience mismatch, say, is not nothing,
+        but is far more often a client misconfiguration than an attack). That was deliberately
+        rejected: grading every one of the 61 <code>false</code> calls onto a scale would mean
+        assigning each one a confidence level with no real usage data to justify a specific cut
+        point, which just relocates the same judgment call into more categories without resolving
+        it. A flat boolean, applied only where the evidence is genuinely unambiguous, says exactly
+        as much as this library can currently stand behind, and no more.
+      </p>
+      <p id="security-relevant-evolution">
+        <strong>How this could evolve.</strong> The <code>true</code> set is deliberately small
+        today because it is curated by inspection, not by data - five call sites a maintainer
+        could argue for individually, not five call sites production log volume had already
+        picked out. The shape most likely to justify a real change here is usage data itself:
+        if a caller aggregating this key across many deployments found that a specific
+        <code>false</code> call site (the audience-mismatch or issuer-mismatch shapes in
+        <code>ClaimsValidator</code> are the most plausible candidates, given how directly they
+        touch token content) correlated with confirmed attacks far more often than the rest of
+        the <code>false</code> population, that would be a concrete argument for moving it to
+        <code>true</code> - or, symmetrically, for moving one of today's five back to
+        <code>false</code> if it turned out to fire routinely for a benign reason nobody had
+        anticipated (clock skew producing spurious signature failures at a provider that rotates
+        keys unusually fast, say). A category dimension - not a confidence grade, but a label like
+        <code>"replay"</code>, <code>"forgery"</code>, or <code>"algorithm-confusion"</code> on the
+        five (and any future) <code>true</code> sites - is a more likely next step than a graded
+        scale, since it adds information without asking this library to rank attacks it has no
+        real basis for ranking. Any such change belongs on top of the flat boolean, which callers
+        already filter on, rather than replacing it - a caller that only ever checked
+        <code>security_relevant === true</code> should keep working exactly as before.
       </p>
       <p>
         The three classes that fetch and validate an HTTP response - <code>TokenEndpointClient</code>,
@@ -624,7 +735,9 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>malformed</code></td><td><code>list&lt;mixed&gt;</code></td><td>The non-string entries filtered out of a malformed <code>aud</code> claim.</td></tr>
           <tr><td><code>untrusted</code></td><td><code>list&lt;string&gt;</code></td><td><code>aud</code> values present on the token but outside the configured trusted set.</td></tr>
           <tr><td><code>invalid_fields</code></td><td><code>list&lt;string&gt;</code></td><td>Names of token-response fields that were missing or the wrong type.</td></tr>
+          <tr><td><code>invalid_field_values</code></td><td><code>array&lt;string,mixed&gt;</code></td><td>Each name in <code>invalid_fields</code> mapped to what it actually contained (<code>null</code> when entirely missing). Safe to log verbatim - a field only lands here for having the wrong shape, never for holding a validly-typed value, so nothing here can be a real access/refresh/id token.</td></tr>
           <tr><td><code>type</code>, <code>keys</code></td><td><code>string</code>, <code>?list&lt;string&gt;</code></td><td>The actual PHP type (<code>get_debug_type()</code>) and, if it was an array, the keys of a cached authorization flow entry that didn't have the expected shape.</td></tr>
+          <tr><td><code>security_relevant</code></td><td><code>bool</code></td><td>Present on every <code>error</code>-level call. <code>true</code> only on the small curated set of likely attack indicators described above; <code>false</code> everywhere else, which means "not in that set," not "confirmed benign."</td></tr>
         </tbody>
       </table>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
@@ -646,19 +759,67 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       <div class="method-sig">final class LogLevelFilterLogger extends Psr\Log\AbstractLogger {
     public function __construct(
         Psr\Log\LoggerInterface $logger,
-        array $allowedLevels,
+        array $levels,
+        bool $include = true,
     )
+
+    public static function all( Psr\Log\LoggerInterface $logger ): self
 }</div>
       <p>
-        <code>$allowedLevels</code> is a discrete set, not a range - any combination of PSR-3's
-        eight levels (<code>Psr\Log\LogLevel</code>) is valid, including combinations no linear
-        severity ordering could express together (<code>debug</code> and <code>critical</code>,
-        say, with everything between them excluded). Pass it wherever this library expects a
+        <code>$levels</code> and <code>$include</code> together express four distinct patterns,
+        not just one allow-list:
+      </p>
+      <table>
+        <thead><tr><th>Pattern</th><th>Usage</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>none</td><td><code>new LogLevelFilterLogger($logger, [])</code></td><td>Nothing passes. <code>$levels</code> is empty and <code>$include</code> defaults <code>true</code>, so no level can ever satisfy the membership test.</td></tr>
+          <tr><td>none, except</td><td><code>new LogLevelFilterLogger($logger, [ LogLevel::DEBUG ])</code></td><td>The ordinary allow-list case: nothing passes except the levels named.</td></tr>
+          <tr><td>all</td><td><code>new LogLevelFilterLogger($logger, [], include: false)</code><br>Sugar: <code>LogLevelFilterLogger::all($logger)</code></td><td>Everything passes, including a level neither PSR-3 nor the caller has defined yet.</td></tr>
+          <tr><td>all, except</td><td><code>new LogLevelFilterLogger($logger, [ LogLevel::DEBUG ], include: false)</code></td><td>The deny-list case: everything passes except the levels named, including one that does not exist yet. The mirror image of "none, except."</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The default, opt-in posture - "none, except" - is the same reason this class exists at
+        all (see <a href="#Logging">Logging</a>): the default stance toward this library's noise
+        is to filter all of it, not to let everything through until told otherwise. Pass an
+        empty array with the default <code>$include</code> and every log call is dropped,
+        including a level a caller might assume always gets through, such as <code>error</code>
+        - nothing passes unless its exact level is named.
+      </p>
+      <p>
+        <code>$levels</code> is a discrete set, not a range, in either the allow-list or the
+        deny-list case - any combination is valid, including combinations no linear severity
+        ordering could express together (<code>debug</code> and <code>critical</code> alone,
+        with everything between them excluded). This class never validates a level against
+        PSR-3's own eight constants (<code>Psr\Log\LogLevel</code>) - it is a plain string
+        comparison, so <code>$levels</code> can equally well hold PSR-3's own levels, a caller's
+        own custom level, or a mix of both. Pass it wherever this library expects a
         <code>Psr\Log\LoggerInterface</code>, e.g. <code>OpenIDConnectClientFactory</code>:
       </p>
       <pre>$logger = new LogLevelFilterLogger($yourAppLogger, [ LogLevel::DEBUG ]);
 
 $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
+      <p>
+        "Every level, without having to name any of them" - the one case not reachable just by
+        listing levels, custom or not, since it does not require knowing in advance which levels
+        might ever be logged - is technically reachable directly as an empty deny-list
+        (<code>new LogLevelFilterLogger($logger, [], include: false)</code>), but that is not
+        obviously what it means at a glance. Use the <code>all()</code> named constructor
+        instead:
+      </p>
+      <pre>$logger = LogLevelFilterLogger::all($yourAppLogger);</pre>
+      <p>
+        The default, <code>$include: true</code>, fails <em>closed</em> - a level nobody named
+        gets dropped, including one this library or a wrapped logger adds later.
+        <code>$include: false</code> fails <em>open</em> - a level nobody named gets forwarded
+        instead. That is a deliberate trade for the specific case it exists for (skip this
+        library's <code>debug</code> tracing, forward every other level unconditionally), not a
+        reason to prefer it generally over naming an allow-list directly. It is also why
+        <code>$levels</code> is not called <code>$allowedLevels</code> or
+        <code>$excludedLevels</code>: it holds an allow-list when <code>$include</code> is true
+        and a deny-list when it is false, and a name tied to one mode would be wrong in the
+        other.
+      </p>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 

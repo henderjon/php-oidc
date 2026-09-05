@@ -37,6 +37,36 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
 
+	public function testVerifyLogsTheDecodedHeaderAtDebugLevel(): void {
+		$fixture  = new RsaKeyFixture;
+		$idToken  = $fixture->sign([ 'iss' => 'https://issuer.example.com', 'sub' => 'user-1' ]);
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier($this->fetcherWithJwks($fixture), logger: $logger);
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused-client-secret');
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertSame('OIDC: decoded ID token header', $records[0]['message']);
+		$this->assertSame('RS256', $records[0]['context']['header']['alg']);
+		$this->assertSame(RsaKeyFixture::KEY_ID, $records[0]['context']['header']['kid']);
+	}
+
+	public function testVerifyLogsTheSelectedJwksKeyAtDebugLevel(): void {
+		$fixture  = new RsaKeyFixture;
+		$idToken  = $fixture->sign([ 'iss' => 'https://issuer.example.com', 'sub' => 'user-1' ]);
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier($this->fetcherWithJwks($fixture), logger: $logger);
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused-client-secret');
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$keySelection = $records[array_key_last($records)];
+		$this->assertSame('OIDC: selected a JWKS key for ID token verification', $keySelection['message']);
+		$this->assertSame(self::JWKS_URI, $keySelection['context']['jwks_uri']);
+		$this->assertSame(RsaKeyFixture::KEY_ID, $keySelection['context']['kid']);
+		$this->assertSame([ RsaKeyFixture::KEY_ID ], $keySelection['context']['available_kids']);
+	}
+
 	public function testVerifyRs256TokenWithNoKidFallsBackToTheSoleKey(): void {
 		$fixture  = new RsaKeyFixture;
 		$idToken  = $fixture->sign([ 'sub' => 'user-1' ], keyId: null);
@@ -219,6 +249,9 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('OIDC: ID token header is not valid JSON', $records[0]['message']);
 		$this->assertInstanceOf(\JsonException::class, $records[0]['context']['exception']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// A malformed header is an ordinary client-error shape, not one of the curated
+		// high-confidence attack indicators - security_relevant stays false.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testVerifyRejectsAlgorithmNotInTheAllowlist(): void {
@@ -249,12 +282,21 @@ class IdTokenVerifierTest extends TestCase {
 	public function testVerifyRejectsNoneAlgorithmEvenWhenExplicitlyAllowlisted(): void {
 		$header   = JWT::urlsafeB64Encode(json_encode([ 'alg' => 'none', 'typ' => 'JWT' ], JSON_THROW_ON_ERROR));
 		$payload  = JWT::urlsafeB64Encode(json_encode([ 'sub' => 'user-1' ], JSON_THROW_ON_ERROR));
-		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+		$logger   = new ArrayLogger;
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher, logger: $logger);
 
-		$this->expectException(AuthenticationFailedException::class);
-		$this->expectExceptionMessage('"none" is not allowed');
+		try {
+			$verifier->verify("{$header}.{$payload}.", self::JWKS_URI, 'unused', allowedAlgorithms: [ 'none', 'RS256' ]);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertStringContainsString('"none" is not allowed', $e->getMessage());
+		}
 
-		$verifier->verify("{$header}.{$payload}.", self::JWKS_URI, 'unused', allowedAlgorithms: [ 'none', 'RS256' ]);
+		// The "none" algorithm is the JWT forgery attack this check exists for - never
+		// explainable as anything but a crafted token, so it is one of the small set of
+		// error() calls marked security_relevant: true.
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertTrue($records[0]['context']['security_relevant']);
 	}
 
 	public function testVerifyRejectsHmacAlgorithmForAPublicClient(): void {
@@ -345,6 +387,9 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('RSA', $records[0]['context']['expected_kty']);
 		$this->assertSame('EC', $records[0]['context']['actual_kty']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// A JWKS key type that does not match the token's declared algorithm is the
+		// algorithm-confusion attack shape - one of the security_relevant: true call sites.
+		$this->assertTrue($records[0]['context']['security_relevant']);
 	}
 
 	public function testVerifyEncryptedTokenIsRejected(): void {
@@ -648,6 +693,10 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame($expectedHash, $records[0]['context']['expected_at_hash']);
 		$this->assertSame('not-the-right-hash', $records[0]['context']['actual_at_hash']);
+		// at_hash binds the ID token to the specific access token it was issued alongside - a
+		// mismatch is not explainable as an ordinary runtime failure, so this is one of the
+		// security_relevant: true call sites.
+		$this->assertTrue($records[0]['context']['security_relevant']);
 	}
 
 	public function testVerifyWithAtHashButNoAccessTokenSkipsTheCheck(): void {
@@ -803,6 +852,9 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertInstanceOf(\Exception::class, $records[0]['context']['exception']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// A signature that fails to verify is essentially unexplainable except as tampering
+		// or forgery - one of the high-confidence security_relevant: true call sites.
+		$this->assertTrue($records[0]['context']['security_relevant']);
 	}
 
 	public function testVerifyWithMismatchedAccessTokenHashLogsTheAlg(): void {
@@ -822,7 +874,7 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
-	public function testSuccessfulVerifyDoesNotLogAnything(): void {
+	public function testSuccessfulVerifyDoesNotLogAboveDebug(): void {
 		$fixture  = new RsaKeyFixture;
 		$idToken  = $fixture->sign([ 'iss' => 'https://issuer.example.com', 'sub' => 'user-1' ]);
 		$logger   = new ArrayLogger;
@@ -830,7 +882,7 @@ class IdTokenVerifierTest extends TestCase {
 
 		$verifier->verify($idToken, self::JWKS_URI, 'unused-client-secret');
 
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
 	public function testWithStateDoesNotAffectTheOriginalInstance(): void {

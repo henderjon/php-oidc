@@ -128,6 +128,9 @@ class AuthorizationStateStoreTest extends TestCase {
 		$this->assertSame('OIDC: cached authorization flow entry is not the expected shape', $records[0]['message']);
 		$this->assertSame('some-state', $records[0]['context']['state']);
 		$this->assertSame('string', $records[0]['context']['type']);
+		// A corrupted cache entry is an infrastructure problem, not an attack indicator - it
+		// stays outside the small curated set of error() calls marked security_relevant: true.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testConsumeLogsWhenNoFlowMatchesTheGivenState(): void {
@@ -135,7 +138,7 @@ class AuthorizationStateStoreTest extends TestCase {
 
 		$this->assertNull($this->makeStore($logger)->consume('never-started'));
 
-		$records = $logger->recordsAt(LogLevel::ALERT);
+		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
 		$this->assertSame('never-started', $records[0]['context']['state']);
@@ -148,7 +151,40 @@ class AuthorizationStateStoreTest extends TestCase {
 
 		$store->consume($started->state);
 
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
+	}
+
+	public function testStartLogsThePersistedAttemptAtDebugLevel(): void {
+		$logger = new ArrayLogger;
+		$flow   = $this->makeStore($logger)->start();
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: persisted a new authorization attempt', $records[0]['message']);
+		$this->assertSame($flow->state, $records[0]['context']['state']);
+		$this->assertSame(600, $records[0]['context']['ttl_seconds']);
+		$this->assertFalse($records[0]['context']['has_code_verifier']);
+	}
+
+	public function testStartLogsHasCodeVerifierTrueWhenOneIsGiven(): void {
+		$logger = new ArrayLogger;
+		$this->makeStore($logger)->start(codeVerifier: 'the-code-verifier');
+
+		$this->assertTrue($logger->recordsAt(LogLevel::DEBUG)[0]['context']['has_code_verifier']);
+	}
+
+	public function testConsumeLogsTheConsumedAttemptAtDebugLevel(): void {
+		$logger  = new ArrayLogger;
+		$store   = $this->makeStore($logger);
+		$started = $store->start(codeVerifier: 'the-code-verifier');
+
+		$store->consume($started->state);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$consumed = $records[array_key_last($records)];
+		$this->assertSame('OIDC: consumed an authorization attempt', $consumed['message']);
+		$this->assertSame($started->state, $consumed['context']['state']);
+		$this->assertTrue($consumed['context']['has_code_verifier']);
 	}
 
 	public function testConsumeTruncatesAnOverlongStateBeforeLogging(): void {
@@ -157,7 +193,7 @@ class AuthorizationStateStoreTest extends TestCase {
 
 		$this->assertNull($this->makeStore($logger)->consume($oversizedState));
 
-		$records = $logger->recordsAt(LogLevel::ALERT);
+		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertLessThan(100, strlen($records[0]['context']['state']));
 		$this->assertStringStartsWith(str_repeat('a', 64), $records[0]['context']['state']);
@@ -172,11 +208,11 @@ class AuthorizationStateStoreTest extends TestCase {
 		$consumed = $store->consume($started->state);
 
 		// The lookup and shape were both fine - only delete()'s own confirmation failed - so
-		// the caller still gets a usable flow back. This must not fail closed on top of the
-		// notice; that would make an unconfirmed delete look like a missing flow instead.
+		// the caller still gets a usable flow back. This must not fail closed on top of this
+		// log; that would make an unconfirmed delete look like a missing flow instead.
 		$this->assertNotNull($consumed);
 
-		$records = $logger->recordsAt(LogLevel::NOTICE);
+		$records = $logger->recordsAt(LogLevel::INFO);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: consumed authorization flow entry may not have been cleared from the cache', $records[0]['message']);
 		$this->assertSame($started->state, $records[0]['context']['state']);
@@ -189,7 +225,7 @@ class AuthorizationStateStoreTest extends TestCase {
 		$store->consume('never-started');
 
 		// Nothing was found to begin with, so delete() failing here is meaningless - only
-		// the "no pending flow found" alert should fire, not a second one about deletion.
+		// the "no pending flow found" warning should fire, not a second one about deletion.
 		$records = $logger->records;
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);

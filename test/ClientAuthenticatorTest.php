@@ -2,7 +2,9 @@
 
 namespace Oidc;
 
+use Oidc\Fakes\ArrayLogger;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 class ClientAuthenticatorTest extends TestCase {
 
@@ -72,6 +74,69 @@ class ClientAuthenticatorTest extends TestCase {
 		$config = new OpenIDConnectClientConfig('the-client-id', 'the-client-secret', 'https://example.com/callback');
 
 		$this->assertSame(ClientAuthMethod::Basic, $config->clientAuthMethod);
+	}
+
+	public function testDoesNotLogAtAllWhenNoLoggerIsGiven(): void {
+		// The default NullLogger must not throw or otherwise misbehave for a caller that does
+		// not care about this class's debug logging - only exercised implicitly by every test
+		// above that omits the third argument, but worth asserting directly once.
+		$config = new OpenIDConnectClientConfig('the-client-id', 'the-client-secret', 'https://example.com/callback');
+
+		[ $params, $headers ] = ClientAuthenticator::apply($config, [ 'grant_type' => 'client_credentials' ]);
+
+		$this->assertArrayHasKey('grant_type', $params);
+		$this->assertArrayHasKey('Authorization', $headers);
+	}
+
+	public function testBasicMethodLogsWhichMethodWasChosenWithoutTheSecret(): void {
+		$config = new OpenIDConnectClientConfig('the-client-id', 'the-client-secret', 'https://example.com/callback');
+		$logger = new ArrayLogger;
+
+		ClientAuthenticator::apply($config, [ 'grant_type' => 'client_credentials' ], $logger);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: authenticating with client_secret_basic', $records[0]['message']);
+		$this->assertSame('the-client-id', $records[0]['context']['client_id']);
+		$this->assertArrayNotHasKey('client_secret', $records[0]['context']);
+		$this->assertNull($records[0]['context']['state'], 'no state was passed in - not a missing value, there is nothing to correlate with');
+	}
+
+	public function testLogsTheGivenStateForCorrelationWithTheRestOfTheFlow(): void {
+		$config = new OpenIDConnectClientConfig('the-client-id', 'the-client-secret', 'https://example.com/callback');
+		$logger = new ArrayLogger;
+
+		ClientAuthenticator::apply($config, [ 'grant_type' => 'authorization_code' ], $logger, 'the-flow-state');
+
+		$this->assertSame('the-flow-state', $logger->recordsAt(LogLevel::DEBUG)[0]['context']['state']);
+	}
+
+	public function testPostMethodLogsWhichMethodWasChosenWithoutTheSecret(): void {
+		$config = (new OpenIDConnectClientConfig('the-client-id', 'the-client-secret', 'https://example.com/callback'))
+			->withClientAuthMethod(ClientAuthMethod::Post);
+		$logger = new ArrayLogger;
+
+		ClientAuthenticator::apply($config, [ 'grant_type' => 'client_credentials' ], $logger);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: authenticating with client_secret_post', $records[0]['message']);
+		$this->assertSame('the-client-id', $records[0]['context']['client_id']);
+		$this->assertArrayNotHasKey('client_secret', $records[0]['context']);
+		$this->assertNull($records[0]['context']['state']);
+	}
+
+	public function testPublicClientLogsAuthenticatingWithNoSecret(): void {
+		$config = new OpenIDConnectClientConfig('the-client-id', '', 'https://example.com/callback');
+		$logger = new ArrayLogger;
+
+		ClientAuthenticator::apply($config, [ 'grant_type' => 'authorization_code' ], $logger);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: authenticating as a public client with no client secret', $records[0]['message']);
+		$this->assertSame('the-client-id', $records[0]['context']['client_id']);
+		$this->assertNull($records[0]['context']['state']);
 	}
 
 }

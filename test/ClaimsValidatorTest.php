@@ -259,6 +259,9 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame('https://other.example.com', $records[0]['context']['expected']);
 		$this->assertSame('https://issuer.example.com', $records[0]['context']['actual']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// An issuer mismatch is usually a misconfigured client, not an attack - it stays
+		// outside the small curated set of error() calls marked security_relevant: true.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testMismatchedAudienceLogsExpectedAndActual(): void {
@@ -318,6 +321,10 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame('the-nonce', $records[0]['context']['expected']);
 		$this->assertSame('a-different-nonce', $records[0]['context']['actual']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// A returned nonce that does not match the one this client generated is essentially
+		// unexplainable except as a replay or injection attempt - one of the small set of
+		// error() calls marked security_relevant: true.
+		$this->assertTrue($records[0]['context']['security_relevant']);
 	}
 
 	public function testValidateRequiredClaimsPassesWithAllPresent(): void {

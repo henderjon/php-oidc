@@ -75,6 +75,12 @@ final class ProviderMetadataResolver {
 			$value = $config->endpointOverrides[$endpointKey];
 			$this->assertUrlAllowed($value, $config, $endpointKey);
 
+			$this->logger->debug('OIDC: resolved endpoint from a config override', [
+				'endpoint_key' => $endpointKey,
+				'value'        => $value,
+				'state'        => $this->state,
+			]);
+
 			return $value;
 		}
 
@@ -90,12 +96,19 @@ final class ProviderMetadataResolver {
 				'endpoint_key' => $endpointKey,
 				'provider_url' => $providerUrl,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration from {$providerUrl} is missing '{$endpointKey}'", state: $this->state);
 		}
 
 		$this->assertUrlAllowed($value, $config, $endpointKey);
+
+		$this->logger->debug('OIDC: resolved endpoint from provider discovery', [
+			'endpoint_key' => $endpointKey,
+			'value'        => $value,
+			'state'        => $this->state,
+		]);
 
 		return $value;
 	}
@@ -108,16 +121,33 @@ final class ProviderMetadataResolver {
 		$providerUrl = $config->resolveIssuer();
 
 		if( $providerUrl === null ) {
-			$this->logger->error('OIDC: cannot discover provider configuration without a providerUrl or issuer', [ 'state' => $this->state ]);
+			$this->logger->error('OIDC: cannot discover provider configuration without a providerUrl or issuer', [ 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new ProviderDiscoveryException('Cannot discover provider configuration without a providerUrl or issuer', state: $this->state);
 		}
 
 		if( isset($this->discovered[$providerUrl]) ) {
+			$this->logger->debug('OIDC: reusing an already-fetched provider configuration', [
+				'provider_url' => $providerUrl,
+				'state'        => $this->state,
+			]);
+
 			return $this->discovered[$providerUrl];
 		}
 
+		// OpenID Connect Discovery 1.0 §4: the provider's configuration document always lives
+		// at this well-known suffix appended to the issuer/providerUrl - never a URL configured
+		// separately, and never anything a caller chooses. Logged explicitly, by name, rather
+		// than leaving the convention only implicit in $url's own value - the "issuer plus
+		// /.well-known/openid-configuration" rule is exactly the detail worth restating every
+		// time discovery actually happens.
 		$url = rtrim($providerUrl, '/') . '/.well-known/openid-configuration';
+
+		$this->logger->debug('OIDC: discovering provider configuration via /.well-known/openid-configuration', [
+			'provider_url'  => $providerUrl,
+			'discovery_url' => $url,
+			'state'         => $this->state,
+		]);
 
 		$this->assertUrlAllowed($url, $config, 'discovery');
 
@@ -130,6 +160,7 @@ final class ProviderMetadataResolver {
 				'content_type' => null,
 				'exception'    => $e,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Unable to fetch provider configuration from {$url}", state: $this->state, previous: $e);
@@ -141,6 +172,7 @@ final class ProviderMetadataResolver {
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned HTTP {$response->status}", state: $this->state);
@@ -152,6 +184,7 @@ final class ProviderMetadataResolver {
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned an unexpected content type", state: $this->state);
@@ -173,12 +206,20 @@ final class ProviderMetadataResolver {
 				'content_type' => $response->contentType,
 				'exception'    => $decodeError,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned invalid JSON", state: $this->state, previous: $decodeError);
 		}
 
 		$this->assertIssuerMatches($decoded, $providerUrl);
+
+		$this->logger->debug('OIDC: fetched a fresh provider configuration', [
+			'provider_url'         => $providerUrl,
+			'discovery_url'        => $url,
+			'advertised_endpoints' => array_keys($decoded),
+			'state'                => $this->state,
+		]);
 
 		return $this->discovered[$providerUrl] = $decoded;
 	}
@@ -195,6 +236,7 @@ final class ProviderMetadataResolver {
 			'endpoint_key' => $endpointKey,
 			'url'          => $url,
 			'state'        => $this->state,
+			'security_relevant' => false,
 		]);
 
 		throw new ProviderDiscoveryException("Endpoint '{$endpointKey}' resolved to {$url}, which does not satisfy the configured URL policy", state: $this->state);
@@ -216,6 +258,11 @@ final class ProviderMetadataResolver {
 		$issuer = $document['issuer'] ?? null;
 
 		if( is_string($issuer) && rtrim($issuer, '/') === rtrim($providerUrl, '/') ) {
+			$this->logger->debug('OIDC: provider configuration issuer matches the URL used to fetch it', [
+				'issuer' => $issuer,
+				'state'  => $this->state,
+			]);
+
 			return;
 		}
 
@@ -223,6 +270,7 @@ final class ProviderMetadataResolver {
 			'expected' => $providerUrl,
 			'actual'   => $issuer,
 			'state'    => $this->state,
+			'security_relevant' => false,
 		]);
 
 		throw new ProviderDiscoveryException("Provider configuration issuer does not match {$providerUrl}, the URL used to fetch it", state: $this->state);

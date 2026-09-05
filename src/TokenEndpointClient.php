@@ -17,6 +17,19 @@ use Psr\Log\NullLogger;
  */
 final class TokenEndpointClient {
 
+	/**
+	 * Param keys, among the ones this class's own callers put in $params, whose values are
+	 * single-use or short-lived - an authorization code, a refresh token, a PKCE verifier -
+	 * safe to partially reveal at debug level via Redact so one log line can be correlated with
+	 * another. `client_secret` is never one of these: request() logs $params before handing
+	 * them to ClientAuthenticator::apply(), the only place that ever adds client_secret to the
+	 * body, and that class's own debug logging never reveals it at all - see its docblock for
+	 * why a long-lived static credential gets different treatment than these do.
+	 *
+	 * @var list<string>
+	 */
+	private const SENSITIVE_PARAM_KEYS = [ 'code', 'refresh_token', 'code_verifier' ];
+
 	public function __construct(
 		private readonly HttpFetcherInterface $httpFetcher,
 		private readonly ProviderMetadataResolver $providerMetadataResolver,
@@ -84,6 +97,8 @@ final class TokenEndpointClient {
 	 * @throws TokenRequestException
 	 */
 	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [], array $extraParams = [] ): TokenResult {
+		$this->logOverriddenReservedParams($extraParams, [ 'grant_type', 'scope' ]);
+
 		$params = array_merge($extraParams, [ 'grant_type' => 'client_credentials' ]);
 
 		// scope is reserved even when $scopes is empty - "no scopes requested" must not leave
@@ -116,8 +131,15 @@ final class TokenEndpointClient {
 	 * @throws TokenRequestException
 	 */
 	private function request( OpenIDConnectClientConfig $config, array $params ): TokenResult {
-		$endpoint             = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
-		[ $params, $headers ] = ClientAuthenticator::apply($config, $params);
+		$endpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
+
+		$this->logger->debug('OIDC: requesting a token', [
+			'endpoint' => $endpoint,
+			'params'   => self::redactedParams($params),
+			'state'    => $this->state,
+		]);
+
+		[ $params, $headers ] = ClientAuthenticator::apply($config, $params, $this->logger, $this->state);
 
 		try {
 			$response = $this->httpFetcher->fetch($endpoint, $this->buildRequestBody($params), $headers);
@@ -127,6 +149,7 @@ final class TokenEndpointClient {
 				'http_status' => null,
 				'exception'   => $e,
 				'state'       => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new TokenRequestException("Unable to reach token endpoint {$endpoint}", state: $this->state, previous: $e);
@@ -150,6 +173,7 @@ final class TokenEndpointClient {
 				'provider_error' => is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null,
 				'content_type'   => $response->contentType,
 				'state'          => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new TokenRequestException("Token request to {$endpoint} failed: {$error}", $response->status, $response->body, state: $this->state);
@@ -161,6 +185,7 @@ final class TokenEndpointClient {
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new TokenRequestException("Token endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body, state: $this->state);
@@ -173,12 +198,83 @@ final class TokenEndpointClient {
 				'content_type' => $response->contentType,
 				'exception'    => $decodeError,
 				'state'        => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new TokenRequestException("Token endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, state: $this->state, previous: $decodeError);
 		}
 
+		$this->logger->debug('OIDC: token endpoint returned a token', [
+			'endpoint'      => $endpoint,
+			'access_token'  => self::redactedField($decoded, 'access_token'),
+			'id_token'      => self::redactedField($decoded, 'id_token'),
+			'refresh_token' => self::redactedField($decoded, 'refresh_token'),
+			'expires_in'    => $decoded['expires_in'] ?? null,
+			// Neither is secret - unlike the three fields above, both are logged in full. scope
+			// in particular is worth seeing next to the request's own 'params.scope' (see the
+			// debug log at the top of this method): a provider narrowing what was requested is
+			// a common integration surprise, easy to miss without the two side by side.
+			'scope'         => self::plainField($decoded, 'scope'),
+			'token_type'    => self::plainField($decoded, 'token_type'),
+			'state'         => $this->state,
+		]);
+
 		return new TokenResult($decoded, $this->logger, $this->state);
+	}
+
+	/**
+	 * `array_merge($extraParams, [...])` always lets the second array win on a key collision -
+	 * silently, with nothing distinguishing "the caller never set this" from "the caller set it
+	 * and it got overridden anyway." A caller passing `scope` or `grant_type` in `$extraParams`
+	 * instead of through `$scopes` (or at all) is exactly the kind of mistake this exists to
+	 * surface - the request debug log a few lines down shows the final params either way, but
+	 * only this line says a collision actually happened.
+	 *
+	 * @param array<string,mixed> $extraParams
+	 * @param list<string> $reservedKeys
+	 */
+	private function logOverriddenReservedParams( array $extraParams, array $reservedKeys ): void {
+		$overriddenKeys = array_values(array_intersect(array_keys($extraParams), $reservedKeys));
+
+		if( $overriddenKeys === [] ) {
+			return;
+		}
+
+		$this->logger->debug('OIDC: extraParams collided with a reserved param and was overridden', [
+			'overridden_keys' => $overriddenKeys,
+			'state'           => $this->state,
+		]);
+	}
+
+	/**
+	 * @param array<string,string|list<string>> $params
+	 * @return array<string,string|list<string>>
+	 */
+	private static function redactedParams( array $params ): array {
+		foreach( self::SENSITIVE_PARAM_KEYS as $key ) {
+			if( isset($params[$key]) && is_string($params[$key]) ) {
+				$params[$key] = Redact::partial($params[$key]);
+			}
+		}
+
+		return $params;
+	}
+
+	/**
+	 * @param array<string,mixed> $decoded
+	 */
+	private static function redactedField( array $decoded, string $key ): ?string {
+		return is_string($decoded[$key] ?? null) ? Redact::partial($decoded[$key]) : null;
+	}
+
+	/**
+	 * Like redactedField(), but for a field that is not sensitive at all - returned as-is
+	 * rather than through Redact::partial().
+	 *
+	 * @param array<string,mixed> $decoded
+	 */
+	private static function plainField( array $decoded, string $key ): ?string {
+		return is_string($decoded[$key] ?? null) ? $decoded[$key] : null;
 	}
 
 	/**

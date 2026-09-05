@@ -160,14 +160,14 @@ class CurlHttpFetcherTest extends TestCase {
 		$this->assertSame('second', $fetcher->fetch($this->url('second'), null)->body);
 	}
 
-	public function testDefaultDoesNotLogAnything(): void {
+	public function testDefaultDoesNotLogAboveDebugOnSuccess(): void {
 		self::$server->setResponseOfPath('/discovery', new Response('{}'));
 
 		$logger  = new ArrayLogger;
 		$fetcher = new CurlHttpFetcher(logger: $logger);
 		$fetcher->fetch($this->url('discovery'), null);
 
-		$this->assertSame([], $logger->records);
+		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
 	public function testDisablingTlsVerificationLogsAnAlertOnEveryRequest(): void {
@@ -236,6 +236,9 @@ class CurlHttpFetcherTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame($this->url('discovery'), $records[0]['context']['url']);
 		$this->assertSame(10, $records[0]['context']['max_response_bytes']);
+		// A transport-level failure is not one of the curated high-confidence attack
+		// indicators - security_relevant stays false.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testTimeoutLogsAnError(): void {
@@ -253,6 +256,47 @@ class CurlHttpFetcherTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame($this->url('slow'), $records[0]['context']['url']);
+	}
+
+	public function testSuccessfulRequestLogsTheOutgoingRequestAtDebugLevel(): void {
+		self::$server->setResponseOfPath('/token', new Response('{}'));
+
+		$logger  = new ArrayLogger;
+		$fetcher = new CurlHttpFetcher(logger: $logger);
+		$fetcher->fetch($this->url('token'), 'grant_type=client_credentials', [ 'Authorization' => 'Basic secret-value' ]);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$request = $records[0];
+
+		$this->assertSame('OIDC: sending HTTP request', $request['message']);
+		$this->assertSame($this->url('token'), $request['context']['url']);
+		$this->assertTrue($request['context']['has_body']);
+		$this->assertSame([ 'Authorization' ], $request['context']['header_names']);
+
+		// Only the header NAME is ever logged - the actual credential must never appear
+		// anywhere in this class's own debug records.
+		foreach( $records as $record ) {
+			$this->assertStringNotContainsString('secret-value', json_encode($record));
+		}
+	}
+
+	public function testSuccessfulRequestLogsTheResponseAtDebugLevel(): void {
+		self::$server->setResponseOfPath('/discovery', new Response('{"issuer":"https://example.com"}', [ 'Content-Type' => 'application/json' ], 200));
+
+		$logger  = new ArrayLogger;
+		$fetcher = new CurlHttpFetcher(logger: $logger);
+		$fetcher->fetch($this->url('discovery'), null);
+
+		$records  = $logger->recordsAt(LogLevel::DEBUG);
+		$response = $records[1];
+
+		$this->assertSame('OIDC: received HTTP response', $response['message']);
+		$this->assertSame($this->url('discovery'), $response['context']['url']);
+		$this->assertSame(200, $response['context']['http_status']);
+		$this->assertSame('application/json', $response['context']['content_type']);
+		$this->assertSame(strlen('{"issuer":"https://example.com"}'), $response['context']['body_bytes']);
+		$this->assertIsFloat($response['context']['elapsed_ms']);
+		$this->assertGreaterThanOrEqual(0.0, $response['context']['elapsed_ms']);
 	}
 
 	public function testGenericFetchFailureLogsAnError(): void {

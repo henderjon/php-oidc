@@ -87,10 +87,16 @@ final class AuthorizationStateStore {
 		], $this->ttlSeconds);
 
 		if( !$stored ) {
-			$this->logger->error('OIDC: failed to persist a new authorization attempt', [ 'state' => $this->loggableState($state) ]);
+			$this->logger->error('OIDC: failed to persist a new authorization attempt', [ 'state' => $this->loggableState($state), 'security_relevant' => false ]);
 
 			throw new AuthorizationStateException('Unable to persist authorization state', state: $this->loggableState($state));
 		}
+
+		$this->logger->debug('OIDC: persisted a new authorization attempt', [
+			'state'             => $this->loggableState($state),
+			'ttl_seconds'       => $this->ttlSeconds,
+			'has_code_verifier' => $codeVerifier !== null,
+		]);
 
 		return new FlowState($state, $nonce, $codeVerifier);
 	}
@@ -111,7 +117,13 @@ final class AuthorizationStateStore {
 		$deleted = $this->cache->delete($key);
 
 		if( $flow === null ) {
-			$this->logger->alert('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
+			// warning, not alert: alert is reserved for a configuration choice worth a
+			// developer's own review (CurlHttpFetcher's TLS-disabled flag,
+			// ClaimsValidator's allowUntrustedAudiences opt-out) - a state that matches
+			// nothing is a runtime event, not something anyone configured, even though it
+			// is still worth a human's attention. See this method's own docblock for the
+			// several distinct things a miss here could mean.
+			$this->logger->warning('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
 
 			return null;
 		}
@@ -121,6 +133,7 @@ final class AuthorizationStateStore {
 				'state' => $this->loggableState($state),
 				'type'  => get_debug_type($flow),
 				'keys'  => is_array($flow) ? array_keys($flow) : null,
+				'security_relevant' => false,
 			]);
 
 			return null;
@@ -130,14 +143,20 @@ final class AuthorizationStateStore {
 			// PSR-16 delete() is as ambiguous as get() about why it failed - "may not have
 			// been cleared" rather than a firm claim, since some backends report false for
 			// a key that was already gone, not only for a real error.
-			$this->logger->notice('OIDC: consumed authorization flow entry may not have been cleared from the cache', [
+			$this->logger->info('OIDC: consumed authorization flow entry may not have been cleared from the cache', [
 				'state' => $this->loggableState($state),
 			]);
 		}
 
 		$codeVerifier = $flow['code_verifier'] ?? null;
+		$codeVerifier = is_string($codeVerifier) ? $codeVerifier : null;
 
-		return new FlowState($state, $flow['nonce'], is_string($codeVerifier) ? $codeVerifier : null);
+		$this->logger->debug('OIDC: consumed an authorization attempt', [
+			'state'             => $this->loggableState($state),
+			'has_code_verifier' => $codeVerifier !== null,
+		]);
+
+		return new FlowState($state, $flow['nonce'], $codeVerifier);
 	}
 
 	/**

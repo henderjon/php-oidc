@@ -64,7 +64,7 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $config->pkce === PkceMode::Required && $flow->codeVerifier === null ) {
-			$this->logger->error('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state ]);
+			$this->logger->error('OIDC: PKCE code verifier missing for a Required flow', [ 'state' => $flow->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('Unable to verify PKCE code verifier', state: $flow->state);
 		}
@@ -73,6 +73,22 @@ final class OpenIDConnectClient implements
 			// Optional fails open by design (see PkceMode), but that is a silent downgrade of
 			// exactly the protection PKCE exists to provide - log it rather than let it pass
 			// with no signal at all.
+			//
+			// Not eviction, not an attack, and nothing crashed. code_verifier is stored
+			// alongside nonce in the single cache entry AuthorizationStateStore::start() writes
+			// for this flow - get() returns that whole entry or nothing, so a found flow with a
+			// null code_verifier means null is exactly what was written there, not something
+			// lost afterward. The only way to write null is for buildRedirect() to have run
+			// with pkce === Disabled for this same config. A warning here is therefore a
+			// configuration inconsistency between two points in time for the same exchange: the
+			// redirect was built with PKCE off, but completion is running with pkce: Optional.
+			// Either a bug in the calling application (two code paths constructing the config
+			// differently, or a config change that landed mid-flight between redirect and
+			// callback) or a deliberate rollout strategy - turning PKCE on gradually,
+			// tolerating in-flight redirects issued before the flag flipped, which is arguably
+			// what Optional exists for. Worth calling "misconfigured" in the loose sense that
+			// the two config-construction points disagree with each other - not broken
+			// infrastructure, not nefarious.
 			$this->logger->warning('OIDC: PKCE code verifier missing for an Optional flow - proceeding without one', [ 'state' => $flow->state ]);
 		}
 
@@ -91,7 +107,7 @@ final class OpenIDConnectClient implements
 			// not a second fetch.
 			$endpoint = $providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
 
-			$this->logger->error('OIDC: token endpoint response is missing id_token', [ 'endpoint' => $endpoint, 'state' => $flow->state ]);
+			$this->logger->error('OIDC: token endpoint response is missing id_token', [ 'endpoint' => $endpoint, 'state' => $flow->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException("Token response from {$endpoint} is missing id_token", state: $flow->state);
 		}
@@ -101,6 +117,8 @@ final class OpenIDConnectClient implements
 		// accompanies it here too. §3.2.2.10's REQUIRED at_hash is specific to the
 		// authorization-endpoint-issued case below.
 		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $flow->nonce, $tokenResult->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: false);
+
+		$this->logger->debug('OIDC: authorization code flow completed', [ 'state' => $flow->state ]);
 
 		return new AuthenticationResult($tokenResult->idToken, $claims, $tokenResult->accessToken, $tokenResult->refreshToken, $tokenResult->expiresIn);
 	}
@@ -141,7 +159,7 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->idToken === null ) {
-			$this->logger->error('OIDC: callback is missing the id_token', [ 'state' => $flow->state ]);
+			$this->logger->error('OIDC: callback is missing the id_token', [ 'state' => $flow->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('Callback is missing the id_token', state: $flow->state);
 		}
@@ -152,6 +170,8 @@ final class OpenIDConnectClient implements
 		// $response->accessToken is null (a bare `id_token` response, not `id_token token`).
 		$providerMetadataResolver = $this->providerMetadataResolver->withState($flow->state);
 		$claims                   = $this->verifyAndValidateIdToken($config, $response->idToken, $flow->nonce, $response->accessToken, $config->audience, $providerMetadataResolver, $flow->state, requireAtHash: true);
+
+		$this->logger->debug('OIDC: implicit flow completed', [ 'state' => $flow->state ]);
 
 		return new AuthenticationResult($response->idToken, $claims, $response->accessToken);
 	}
@@ -177,6 +197,7 @@ final class OpenIDConnectClient implements
 				'endpoint'    => $endpoint,
 				'http_status' => null,
 				'exception'   => $e,
+				'security_relevant' => false,
 			]);
 
 			throw new UserInfoRequestException("Unable to reach userinfo endpoint {$endpoint}", previous: $e);
@@ -187,6 +208,7 @@ final class OpenIDConnectClient implements
 				'endpoint'     => $endpoint,
 				'http_status'  => $response->status,
 				'content_type' => $response->contentType,
+				'security_relevant' => false,
 			]);
 
 			throw new UserInfoRequestException("Userinfo request to {$endpoint} failed with HTTP {$response->status}", $response->status, $response->body);
@@ -205,6 +227,7 @@ final class OpenIDConnectClient implements
 					'endpoint'     => $endpoint,
 					'http_status'  => $response->status,
 					'content_type' => $response->contentType,
+					'security_relevant' => false,
 				]);
 
 				throw new UserInfoRequestException("No issuer configured to validate the signed userinfo response against {$endpoint}", $response->status, $response->body);
@@ -225,6 +248,7 @@ final class OpenIDConnectClient implements
 					'endpoint'     => $endpoint,
 					'http_status'  => $response->status,
 					'content_type' => $response->contentType,
+					'security_relevant' => false,
 				]);
 
 				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned an unexpected content type", $response->status, $response->body);
@@ -245,6 +269,7 @@ final class OpenIDConnectClient implements
 					'http_status'  => $response->status,
 					'content_type' => $response->contentType,
 					'exception'    => $decodeError,
+					'security_relevant' => false,
 				]);
 
 				throw new UserInfoRequestException("Userinfo endpoint {$endpoint} returned invalid JSON", $response->status, $response->body, previous: $decodeError);
@@ -263,6 +288,12 @@ final class OpenIDConnectClient implements
 			throw new UserInfoRequestException("Userinfo response from {$endpoint} failed subject validation", $response->status, $response->body, previous: $e);
 		}
 
+		$this->logger->debug('OIDC: userinfo fetched and validated', [
+			'endpoint'     => $endpoint,
+			'http_status'  => $response->status,
+			'content_type' => $response->contentType,
+		]);
+
 		return $claims;
 	}
 
@@ -277,13 +308,33 @@ final class OpenIDConnectClient implements
 		// A public client (no client secret) has nothing else proving it is who it claims to
 		// be - RFC 9700 treats PKCE as effectively mandatory for exactly this client class.
 		// This does not force it on: deciding that is this config's job, not this library's.
+		// alert, not warning: this is a configuration choice worth a developer's own review
+		// (see AuthorizationStateStore::consume() for the warning/alert distinction), the same
+		// category as CurlHttpFetcher's TLS-disabled flag and ClaimsValidator's
+		// allowUntrustedAudiences opt-out - not a runtime event.
 		if( $responseType === 'code' && $config->pkce === PkceMode::Disabled && $config->clientSecret === '' ) {
-			$this->logger->warning('OIDC: public client is building an authorization redirect with PKCE disabled', [
+			$this->logger->alert('OIDC: public client is building an authorization redirect with PKCE disabled', [
 				'client_id' => $config->clientId,
 			]);
 		}
 
 		$flow = $this->stateStore->start(codeVerifier: $codeVerifier);
+
+		// array_merge($config->extraAuthParams, [...]) below always lets the second array win
+		// on a key collision - silently, with nothing distinguishing "extraAuthParams never set
+		// this" from "extraAuthParams set it and it got overridden anyway." The final params are
+		// logged either way a few lines down, but only this line says a collision happened at all.
+		$overriddenExtraAuthParamKeys = array_values(array_intersect(
+			array_keys($config->extraAuthParams),
+			[ 'response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce' ],
+		));
+
+		if( $overriddenExtraAuthParamKeys !== [] ) {
+			$this->logger->debug('OIDC: extraAuthParams collided with a reserved param and was overridden', [
+				'overridden_keys' => $overriddenExtraAuthParamKeys,
+				'state'           => $flow->state,
+			]);
+		}
 
 		$params = array_merge($config->extraAuthParams, [
 			'response_type' => $responseType,
@@ -298,6 +349,23 @@ final class OpenIDConnectClient implements
 			$params['code_challenge']        = Pkce::challengeFor($codeVerifier);
 			$params['code_challenge_method'] = 'S256';
 		}
+
+		// Safe to log every one of these in full - none is a secret. code_verifier itself
+		// never appears here, only the S256 challenge derived from it, which is not reversible
+		// back into the verifier. 'state' is also already inside 'params' (needed there to
+		// reconstruct the actual redirect URL) - repeated here as its own top-level key so this
+		// log line can be found the same way every other collaborator's debug logging is found,
+		// by 'state' alone, without knowing to look inside 'params' first. 'pkce' makes the
+		// mode explicit rather than something a reader has to infer from whether 'params'
+		// happens to contain code_challenge/code_challenge_method - the only place a
+		// confidential client's own PKCE-disabled choice is visible at all (see buildRedirect()'s
+		// own alert above, which is scoped to a public client specifically).
+		$this->logger->debug('OIDC: building an authorization redirect', [
+			'authorization_endpoint' => $authorizationEndpoint,
+			'params'                 => $params,
+			'state'                  => $flow->state,
+			'pkce'                   => $config->pkce->name,
+		]);
 
 		return new AuthorizationRedirect($this->appendQuery($authorizationEndpoint, $params));
 	}
@@ -327,6 +395,7 @@ final class OpenIDConnectClient implements
 				'error'             => $response->error,
 				'error_description' => $response->errorDescription,
 				'state'             => $response->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException("Provider returned an error: {$summary}", state: $response->state);
@@ -344,7 +413,7 @@ final class OpenIDConnectClient implements
 	 */
 	private function consumeFlow( IncomingAuthorizationResponse $response ): ?FlowState {
 		if( $response->state === null ) {
-			$this->logger->error('OIDC: callback is missing the state parameter', [ 'state' => null ]);
+			$this->logger->error('OIDC: callback is missing the state parameter', [ 'state' => null, 'security_relevant' => false ]);
 
 			return null;
 		}
@@ -393,6 +462,17 @@ final class OpenIDConnectClient implements
 			$claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $config->allowUntrustedAudiences);
 
 			$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
+
+			// sub/iss/aud/exp are standard, non-secret JWT claims - safe to log in full, unlike
+			// the token they came from (see verifySignedUserInfo() and TokenEndpointClient for
+			// where the actual token strings get partial-reveal treatment instead).
+			$this->logger->debug('OIDC: ID token claims validated', [
+				'state'  => $state,
+				'issuer' => $issuer,
+				'sub'    => $claims->get('sub'),
+				'aud'    => $claims->get('aud'),
+				'exp'    => $claims->get('exp'),
+			]);
 
 			return $claims;
 		} catch( AuthenticationFailedException $e ) {

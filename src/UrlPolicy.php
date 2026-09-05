@@ -2,6 +2,9 @@
 
 namespace Oidc;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+
 /**
  * A pure predicate, not a side-effecting guard: answers whether a URL this
  * library is about to fetch, or send credentials to, satisfies the policy
@@ -34,8 +37,19 @@ namespace Oidc;
  * consulted for anything - the scheme of the actual request is checked once, above, against
  * `allowInsecureSchemes`, entirely independently of `allowedHosts` - so stripping it here
  * changes nothing about which schemes are actually permitted.
+ *
+ * `$logger` does not make this a side-effecting guard after all - isAllowed()'s return value
+ * is still all callers ever act on. It exists solely so normalizedAllowedHost() can surface,
+ * at debug level, the one case worth a caller knowing about even though nothing failed: an
+ * `allowedHosts` entry that was itself wrong (a full URL, not a bare hostname) and got quietly
+ * corrected rather than rejected.
  */
 final class UrlPolicy {
+
+	public function __construct(
+		private readonly LoggerInterface $logger = new NullLogger,
+	) {
+	}
 
 	public function isAllowed( string $url, OpenIDConnectClientConfig $config ): bool {
 		$parts  = parse_url($url);
@@ -53,7 +67,7 @@ final class UrlPolicy {
 		}
 
 		if( $config->allowedHosts !== null ) {
-			$allowedHosts = array_map(self::normalizedAllowedHost(...), $config->allowedHosts);
+			$allowedHosts = array_map($this->normalizedAllowedHost(...), $config->allowedHosts);
 
 			return in_array($host, $allowedHosts, true);
 		}
@@ -72,14 +86,23 @@ final class UrlPolicy {
 	 * `allowedHosts` entry that turned out to be a full URL instead of a bare hostname. Returns
 	 * the entry unchanged when it has no scheme to strip - the ordinary, documented case.
 	 */
-	private static function normalizedAllowedHost( string $value ): string {
+	private function normalizedAllowedHost( string $value ): string {
 		if( !str_contains($value, '://') ) {
 			return $value;
 		}
 
 		$host = parse_url($value, PHP_URL_HOST);
 
-		return is_string($host) ? $host : $value;
+		if( !is_string($host) ) {
+			return $value;
+		}
+
+		$this->logger->debug('OIDC: an allowedHosts entry looks like a full URL rather than a bare hostname - using the host recovered from it', [
+			'configured_entry' => $value,
+			'recovered_host'   => $host,
+		]);
+
+		return $host;
 	}
 
 	/**
