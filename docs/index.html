@@ -384,7 +384,6 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
             <li><a href="#OpenIDConnectClientConfig">OpenIDConnectClientConfig</a></li>
             <li><a href="#Logging">Logging</a></li>
             <li><a href="#LogLevelFilterLogger">LogLevelFilterLogger</a></li>
-            <li><a href="#LogLevels">LogLevels</a></li>
             <li><a href="#PkceMode">PkceMode</a></li>
             <li><a href="#ClientAuthMethod">ClientAuthMethod</a></li>
           </ul>
@@ -762,6 +761,8 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         Psr\Log\LoggerInterface $logger,
         array $allowedLevels,
     )
+
+    public static function all( Psr\Log\LoggerInterface $logger ): self
 }</div>
       <p>
         <code>$allowedLevels</code> is opt-in, not opt-out, for the same reason this class exists
@@ -769,8 +770,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         noise is to filter all of it, not to let everything through until told otherwise. Pass
         an empty array and every log call is dropped, including a level a caller might assume
         always gets through, such as <code>error</code> - nothing passes unless its exact level
-        is named in the array (or <a href="#LogLevels"><code>LogLevels::ALL</code></a> is
-        included).
+        is named in the array.
       </p>
       <p>
         <code>$allowedLevels</code> is a discrete set, not a range - any combination is valid,
@@ -786,36 +786,20 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
 
 $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       <p>
-        <a href="#LogLevels"><code>LogLevels::ALL</code></a> is a different, narrower thing from
-        "this array can hold a custom level": it means every level, without having to name any
-        of them - the one case not reachable just by listing levels, custom or not, since it
-        does not require knowing in advance which levels might ever be logged. Include it in
-        <code>$allowedLevels</code> to opt into every level unconditionally:
+        "Every level, without having to name any of them" - the one case not reachable just by
+        listing levels, custom or not, since it does not require knowing in advance which levels
+        might ever be logged - is not something <code>$allowedLevels</code> can express. Use the
+        <code>all()</code> named constructor instead:
       </p>
-      <pre>$logger = new LogLevelFilterLogger($yourAppLogger, [ LogLevels::ALL ]);</pre>
-      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
-    </div>
-
-    <!-- LOG LEVELS -->
-    <div class="type-section" id="LogLevels">
-      <h2>type LogLevels<a class="section-anchor" href="#LogLevels" aria-label="Link to this section">&para;</a></h2>
+      <pre>$logger = LogLevelFilterLogger::all($yourAppLogger);</pre>
       <p>
-        A level value <a href="#LogLevelFilterLogger"><code>LogLevelFilterLogger</code></a>
-        recognizes as "every level, unconditionally" - including a level outside PSR-3's own
-        eight defined constants (<code>Psr\Log\LogLevel</code>). PSR-3 never restricts a log
-        call's level to those eight; any string is a legal level for a caller that defines its
-        own. Enumerating <code>LogLevel</code>'s constants by hand cannot express "let everything
-        through" for that reason - a custom level would still be silently dropped, since it would
-        never appear in that list. <code>ALL</code> is an explicit escape hatch from that.
-      </p>
-      <div class="method-sig">final class LogLevels {
-    const ALL = '*';
-}</div>
-      <p>
-        Not itself a real level - never pass it to a logger's own <code>log()</code>/
-        <code>debug()</code>/etc. methods, only into
-        <a href="#LogLevelFilterLogger"><code>LogLevelFilterLogger</code></a>'s
-        <code>$allowedLevels</code>.
+        There is deliberately no sentinel value a caller could pass into <code>$allowedLevels</code>
+        to mean "everything" - PSR-3 never restricts a log call's level to its own eight
+        constants, so any string chosen as a stand-in for "everything" is, at least in principle,
+        also a legal level some logger somewhere actually uses. Keeping that concept out of
+        <code>$allowedLevels</code>'s own type entirely, behind a separate named constructor,
+        means there is no string a caller could type into the array by mistake and get
+        "everything" instead of "one specific, oddly-named level."
       </p>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>

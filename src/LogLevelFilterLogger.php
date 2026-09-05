@@ -24,18 +24,25 @@ use Psr\Log\LoggerInterface;
  * ("audit", say), or a mix of both. Nothing here is PSR-3-specific except the interface being
  * decorated.
  *
- * `LogLevels::ALL` is a different, narrower thing from "this array can hold a custom level":
- * it means "every level, without having to name any of them" - the one case a caller cannot
- * reach just by listing levels, custom or not, since it does not require knowing in advance
- * which levels might ever be logged.
+ * "Every level, without having to name any of them" - the one case not reachable just by
+ * listing levels, custom or not, since it does not require knowing in advance which levels
+ * might ever be logged - is not expressible through the constructor at all. Use the `all()`
+ * factory for that instead of trying to name a sentinel level in `$allowedLevels`: PSR-3 never
+ * restricts a log call's level to its own eight constants, so any string a caller might pick as
+ * a stand-in for "everything" is, at least in principle, also a legal level some logger
+ * somewhere actually uses - keeping that value out of the constructor's own type entirely, and
+ * out of this class's public API, means there is no string a caller could type into
+ * `$allowedLevels` by mistake and get "everything" instead of "one specific, oddly-named level."
  */
 final class LogLevelFilterLogger extends AbstractLogger {
 
+	private const ALL = '*';
+
 	/**
 	 * @param list<string> $allowedLevels Any level string this logger might see - one of
-	 *                                    Psr\Log\LogLevel's eight constants, a caller's own
-	 *                                    custom level, or LogLevels::ALL to match every level
-	 *                                    unconditionally without naming any of them.
+	 *                                    Psr\Log\LogLevel's eight constants or a caller's own
+	 *                                    custom level. Use the `all()` factory, not this
+	 *                                    constructor, to match every level unconditionally.
 	 */
 	public function __construct(
 		private readonly LoggerInterface $logger,
@@ -43,8 +50,17 @@ final class LogLevelFilterLogger extends AbstractLogger {
 	) {
 	}
 
+	/**
+	 * Forwards every level unconditionally, including one outside PSR-3's own eight defined
+	 * constants - the one case `$allowedLevels` cannot reach by naming levels, since a caller
+	 * defining its own custom level has nothing to name in advance.
+	 */
+	public static function all( LoggerInterface $logger ): self {
+		return new self($logger, [ self::ALL ]);
+	}
+
 	public function log( $level, string|\Stringable $message, array $context = [] ): void {
-		if( !in_array(LogLevels::ALL, $this->allowedLevels, true) && !in_array($level, $this->allowedLevels, true) ) {
+		if( !in_array(self::ALL, $this->allowedLevels, true) && !in_array($level, $this->allowedLevels, true) ) {
 			return;
 		}
 

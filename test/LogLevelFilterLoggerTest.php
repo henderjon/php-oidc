@@ -87,9 +87,9 @@ class LogLevelFilterLoggerTest extends TestCase {
 		$this->assertSame([], $inner->records[0]['context']);
 	}
 
-	public function testLogLevelsAllForwardsEveryStandardLevel(): void {
+	public function testAllForwardsEveryStandardLevel(): void {
 		$inner  = new ArrayLogger;
-		$logger = new LogLevelFilterLogger($inner, [ LogLevels::ALL ]);
+		$logger = LogLevelFilterLogger::all($inner);
 
 		$logger->emergency('m');
 		$logger->debug('m');
@@ -97,26 +97,17 @@ class LogLevelFilterLoggerTest extends TestCase {
 		$this->assertCount(2, $inner->records);
 	}
 
-	public function testLogLevelsAllForwardsALevelPsr3DoesNotDefine(): void {
+	public function testAllForwardsALevelPsr3DoesNotDefine(): void {
 		// PSR-3 never restricts $level to its own eight constants - a caller with its own
 		// custom level would be silently dropped by any allowlist that only enumerates
-		// Psr\Log\LogLevel's constants by hand. LogLevels::ALL exists for exactly this case.
+		// Psr\Log\LogLevel's constants by hand. all() exists for exactly this case.
 		$inner  = new ArrayLogger;
-		$logger = new LogLevelFilterLogger($inner, [ LogLevels::ALL ]);
+		$logger = LogLevelFilterLogger::all($inner);
 
 		$logger->log('a-custom-non-psr3-level', 'm');
 
 		$this->assertCount(1, $inner->records);
 		$this->assertSame('a-custom-non-psr3-level', $inner->records[0]['level']);
-	}
-
-	public function testLogLevelsAllCanBeCombinedWithOrdinaryLevelsWithoutChangingBehavior(): void {
-		$inner  = new ArrayLogger;
-		$logger = new LogLevelFilterLogger($inner, [ LogLevels::ALL, LogLevel::DEBUG ]);
-
-		$logger->error('m');
-
-		$this->assertCount(1, $inner->records);
 	}
 
 }
