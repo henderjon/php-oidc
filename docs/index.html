@@ -580,7 +580,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       </p>
       <p>
         The levels this library actually emits, for choosing what to pass into
-        <code>LogLevelFilterLogger</code>'s <code>$allowedLevels</code>:
+        <code>LogLevelFilterLogger</code>'s <code>$levels</code>:
       </p>
       <table>
         <thead><tr><th>Level</th><th>Calls</th><th>Fires when...</th></tr></thead>
@@ -759,13 +759,15 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       <div class="method-sig">final class LogLevelFilterLogger extends Psr\Log\AbstractLogger {
     public function __construct(
         Psr\Log\LoggerInterface $logger,
-        array $allowedLevels,
+        array $levels,
     )
 
     public static function all( Psr\Log\LoggerInterface $logger ): self
+
+    public static function allExcept( Psr\Log\LoggerInterface $logger, array $excludedLevels ): self
 }</div>
       <p>
-        <code>$allowedLevels</code> is opt-in, not opt-out, for the same reason this class exists
+        <code>$levels</code> is opt-in, not opt-out, for the same reason this class exists
         at all (see <a href="#Logging">Logging</a>): the default posture toward this library's
         noise is to filter all of it, not to let everything through until told otherwise. Pass
         an empty array and every log call is dropped, including a level a caller might assume
@@ -773,12 +775,12 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         is named in the array.
       </p>
       <p>
-        <code>$allowedLevels</code> is a discrete set, not a range - any combination is valid,
+        <code>$levels</code> is a discrete set, not a range - any combination is valid,
         including combinations no linear severity ordering could express together
         (<code>debug</code> and <code>critical</code>, say, with everything between them
         excluded). This class never validates a level against PSR-3's own eight constants
         (<code>Psr\Log\LogLevel</code>) - it is a plain string comparison, so
-        <code>$allowedLevels</code> can equally well hold PSR-3's own levels, a caller's own
+        <code>$levels</code> can equally well hold PSR-3's own levels, a caller's own
         custom level, or a mix of both. Pass it wherever this library expects a
         <code>Psr\Log\LoggerInterface</code>, e.g. <code>OpenIDConnectClientFactory</code>:
       </p>
@@ -788,18 +790,38 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       <p>
         "Every level, without having to name any of them" - the one case not reachable just by
         listing levels, custom or not, since it does not require knowing in advance which levels
-        might ever be logged - is not something <code>$allowedLevels</code> can express. Use the
+        might ever be logged - is not something <code>$levels</code> can express. Use the
         <code>all()</code> named constructor instead:
       </p>
       <pre>$logger = LogLevelFilterLogger::all($yourAppLogger);</pre>
       <p>
-        There is deliberately no sentinel value a caller could pass into <code>$allowedLevels</code>
+        There is deliberately no sentinel value a caller could pass into <code>$levels</code>
         to mean "everything" - PSR-3 never restricts a log call's level to its own eight
         constants, so any string chosen as a stand-in for "everything" is, at least in principle,
         also a legal level some logger somewhere actually uses. Keeping that concept out of
-        <code>$allowedLevels</code>'s own type entirely, behind a separate named constructor,
+        <code>$levels</code>'s own type entirely, behind a separate named constructor,
         means there is no string a caller could type into the array by mistake and get
         "everything" instead of "one specific, oddly-named level."
+      </p>
+      <p>
+        <code>allExcept()</code> is the deny-list dual of <code>all()</code> - forward every
+        level except the ones named, rather than only the ones named. Reach for it to skip this
+        library's noisy <code>debug</code> tracing while still receiving everything else,
+        including a level neither this library nor the caller has defined yet:
+      </p>
+      <pre>$logger = LogLevelFilterLogger::allExcept($yourAppLogger, [ LogLevel::DEBUG ]);</pre>
+      <p>
+        Unlike the plain constructor's allow-list, <code>allExcept()</code> needs no sentinel to
+        express "everything" - excluding a level is just a plain membership check in the other
+        direction, and it works the same way for a custom level as for one of PSR-3's own eight.
+        That also means it fails <em>open</em>, the opposite of the rest of this class: the
+        constructor's allow-list drops a level nobody named, including one added later, while
+        <code>allExcept()</code> forwards one. That is a deliberate trade for the specific case
+        it exists for, not a reason to prefer it generally over naming an allow-list directly.
+        This is also why the constructor's own array parameter is named <code>$levels</code>,
+        not <code>$allowedLevels</code>: internally it holds an allow-list under the plain
+        constructor and a deny-list under <code>allExcept()</code>, and a name tied to one mode
+        would be wrong in the other.
       </p>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>

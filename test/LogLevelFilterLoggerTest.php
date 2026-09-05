@@ -110,4 +110,53 @@ class LogLevelFilterLoggerTest extends TestCase {
 		$this->assertSame('a-custom-non-psr3-level', $inner->records[0]['level']);
 	}
 
+	public function testAllExceptDropsTheNamedLevels(): void {
+		$inner  = new ArrayLogger;
+		$logger = LogLevelFilterLogger::allExcept($inner, [ LogLevel::DEBUG ]);
+
+		$logger->debug('a debug message');
+
+		$this->assertSame([], $inner->records);
+	}
+
+	public function testAllExceptForwardsEveryOtherStandardLevel(): void {
+		$inner  = new ArrayLogger;
+		$logger = LogLevelFilterLogger::allExcept($inner, [ LogLevel::DEBUG ]);
+
+		$logger->emergency('m');
+		$logger->alert('m');
+		$logger->critical('m');
+		$logger->error('m');
+		$logger->warning('m');
+		$logger->notice('m');
+		$logger->info('m');
+
+		$this->assertCount(7, $inner->records);
+	}
+
+	public function testAllExceptForwardsALevelPsr3DoesNotDefine(): void {
+		// A level nobody named - including a custom one neither PSR-3 nor the excluded list
+		// knows about - is exactly what allExcept() forwards by design, unlike the plain
+		// allow-list constructor, which would drop it.
+		$inner  = new ArrayLogger;
+		$logger = LogLevelFilterLogger::allExcept($inner, [ LogLevel::DEBUG ]);
+
+		$logger->log('a-custom-non-psr3-level', 'm');
+
+		$this->assertCount(1, $inner->records);
+		$this->assertSame('a-custom-non-psr3-level', $inner->records[0]['level']);
+	}
+
+	public function testAllExceptCanExcludeMultipleLevelsAtOnce(): void {
+		$inner  = new ArrayLogger;
+		$logger = LogLevelFilterLogger::allExcept($inner, [ LogLevel::DEBUG, LogLevel::INFO ]);
+
+		$logger->debug('m');
+		$logger->info('m');
+		$logger->warning('m');
+
+		$this->assertCount(1, $inner->records);
+		$this->assertSame(LogLevel::WARNING, $inner->records[0]['level']);
+	}
+
 }
