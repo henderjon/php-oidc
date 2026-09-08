@@ -183,6 +183,32 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
+	public function testAllowUntrustedAudiencesLogsBothWarningAndAlertWhenBothApply(): void {
+		// A single token can carry a malformed entry AND a separate well-formed-but-untrusted
+		// one at the same time - these are two independent decisions, not one, and each must
+		// log its own record at its own level without either clobbering or suppressing the
+		// other.
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-untrusted-audience', 42 ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$warnings = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $warnings);
+		$this->assertSame('OIDC: ID token audience contained a malformed value, dropped under allowUntrustedAudiences', $warnings[0]['message']);
+		$this->assertSame([ 'the-client-id', 'an-untrusted-audience', 42 ], $warnings[0]['context']['aud']);
+		$this->assertSame([ 42 ], $warnings[0]['context']['malformed']);
+
+		$alerts = $logger->recordsAt(LogLevel::ALERT);
+		$this->assertCount(1, $alerts);
+		$this->assertSame('OIDC: ID token audience contains untrusted values, allowed through by configuration', $alerts[0]['message']);
+		// The malformed entry is already gone by the time the alert is built - it reflects the
+		// cleaned actual list, not the raw claim the warning above logged.
+		$this->assertSame([ 'the-client-id', 'an-untrusted-audience' ], $alerts[0]['context']['actual']);
+		$this->assertSame([ 'an-untrusted-audience' ], $alerts[0]['context']['untrusted']);
+	}
+
 	public function testAllowUntrustedAudiencesDoesNotLogAboutMalformedWhenThereIsNone(): void {
 		$logger    = new ArrayLogger;
 		$validator = new ClaimsValidator($logger);

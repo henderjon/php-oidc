@@ -445,6 +445,11 @@ final class OpenIDConnectClient implements
 			$issuer = $config->resolveIssuer();
 
 			if( $issuer === null ) {
+				$this->logger->error('OIDC: no issuer configured against which to validate the ID token', [
+					'state' => $state,
+					'security_relevant' => false,
+				]);
+
 				throw new AuthenticationFailedException('No issuer configured against which to validate the ID token', state: $state);
 			}
 

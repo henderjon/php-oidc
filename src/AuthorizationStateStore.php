@@ -144,10 +144,12 @@ final class AuthorizationStateStore {
 		if( $flow === null ) {
 			// warning, not alert: alert is reserved for a configuration choice worth a
 			// developer's own review (CurlHttpFetcher's TLS-disabled flag,
-			// ClaimsValidator's allowUntrustedAudiences opt-out) - a state that matches
-			// nothing is a runtime event, not something anyone configured, even though it
-			// is still worth a human's attention. See this method's own docblock for the
-			// several distinct things a miss here could mean.
+			// ClaimsValidator's allowUntrustedAudiences opt-out actually letting an untrusted
+			// audience through - that same opt-out logs at warning instead when what it lets
+			// through is merely a malformed entry, not a meaningfully untrusted one) - a state
+			// that matches nothing is a runtime event, not something anyone configured, even
+			// though it is still worth a human's attention. See this method's own docblock for
+			// the several distinct things a miss here could mean.
 			$this->logger->warning('OIDC: no pending authorization flow found for the given state', [ 'state' => $this->loggableState($state) ]);
 
 			return null;

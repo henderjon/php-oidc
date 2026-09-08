@@ -199,6 +199,54 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame($params['state'], $completed['context']['state']);
 	}
 
+	public function testCompleteAuthorizationCodeFlowLogsWhenNoIssuerIsConfigured(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$logger = new ArrayLogger;
+		$client = $this->makeClient($fetcher, logger: $logger);
+
+		// Neither issuer nor providerUrl set - resolveIssuer() returns null even though every
+		// endpoint needed to get this far is available via override.
+		$config = new OpenIDConnectClientConfig(
+			clientId: self::CLIENT_ID,
+			clientSecret: self::CLIENT_SECRET,
+			redirectUrl: self::REDIRECT_URL,
+			endpointOverrides: [
+				ProviderMetadataResolver::AUTHORIZATION_ENDPOINT => self::AUTHORIZATION_ENDPOINT,
+				ProviderMetadataResolver::TOKEN_ENDPOINT         => self::TOKEN_ENDPOINT,
+				ProviderMetadataResolver::JWKS_URI               => self::JWKS_URI,
+			],
+		);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$idToken = $fixture->sign([
+			'sub'   => 'user-1',
+			'nonce' => $params['nonce'],
+		]);
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $idToken,
+		], JSON_THROW_ON_ERROR), 200));
+
+		$response = new IncomingAuthorizationResponse([ 'code' => 'the-code', 'state' => $params['state'] ]);
+
+		try {
+			$client->completeAuthorizationCodeFlow($config, $response);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('No issuer configured against which to validate the ID token', $e->getMessage());
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: no issuer configured against which to validate the ID token', $records[0]['message']);
+		$this->assertSame($params['state'], $records[0]['context']['state']);
+		$this->assertFalse($records[0]['context']['security_relevant']);
+	}
+
 	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenMissingSub(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;
