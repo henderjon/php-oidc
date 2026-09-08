@@ -165,6 +165,60 @@ class ClaimsValidatorTest extends TestCase {
 		$this->addToAssertionCount(1);
 	}
 
+	public function testAllowUntrustedAudiencesWarnsWhenItSilentlyDropsAMalformedEntry(): void {
+		// Relaxing the check does not make the entry vanish unremarked. warning, not debug -
+		// a loose config choice producing a happy path at runtime, same as PkceMode::Optional
+		// completing with no code_verifier.
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 42, null ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token audience contained a malformed value, dropped under allowUntrustedAudiences', $records[0]['message']);
+		$this->assertSame([ 'the-client-id', 42, null ], $records[0]['context']['aud']);
+		$this->assertSame([ 42, null ], $records[0]['context']['malformed']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testAllowUntrustedAudiencesLogsBothWarningAndAlertWhenBothApply(): void {
+		// A single token can carry a malformed entry AND a separate well-formed-but-untrusted
+		// one at the same time - these are two independent decisions, not one, and each must
+		// log its own record at its own level without either clobbering or suppressing the
+		// other.
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-untrusted-audience', 42 ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$warnings = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $warnings);
+		$this->assertSame('OIDC: ID token audience contained a malformed value, dropped under allowUntrustedAudiences', $warnings[0]['message']);
+		$this->assertSame([ 'the-client-id', 'an-untrusted-audience', 42 ], $warnings[0]['context']['aud']);
+		$this->assertSame([ 42 ], $warnings[0]['context']['malformed']);
+
+		$alerts = $logger->recordsAt(LogLevel::ALERT);
+		$this->assertCount(1, $alerts);
+		$this->assertSame('OIDC: ID token audience contains untrusted values, allowed through by configuration', $alerts[0]['message']);
+		// The malformed entry is already gone by the time the alert is built - it reflects the
+		// cleaned actual list, not the raw claim the warning above logged.
+		$this->assertSame([ 'the-client-id', 'an-untrusted-audience' ], $alerts[0]['context']['actual']);
+		$this->assertSame([ 'an-untrusted-audience' ], $alerts[0]['context']['untrusted']);
+	}
+
+	public function testAllowUntrustedAudiencesDoesNotLogAboutMalformedWhenThereIsNone(): void {
+		$logger    = new ArrayLogger;
+		$validator = new ClaimsValidator($logger);
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id' ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$this->assertSame([], $logger->records);
+	}
+
 	public function testANonArrayNonStringAudienceIsNotTreatedAsMalformed(): void {
 		// Already handled correctly without this check: a bare wrong-typed aud normalizes to
 		// an empty actual list and fails the ordinary "does not match" check on its own - a
@@ -259,6 +313,9 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame('https://other.example.com', $records[0]['context']['expected']);
 		$this->assertSame('https://issuer.example.com', $records[0]['context']['actual']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// An issuer mismatch is usually a misconfigured client, not an attack - it stays
+		// outside the small curated set of error() calls marked security_relevant: true.
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testMismatchedAudienceLogsExpectedAndActual(): void {
@@ -318,6 +375,10 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame('the-nonce', $records[0]['context']['expected']);
 		$this->assertSame('a-different-nonce', $records[0]['context']['actual']);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// A returned nonce that does not match the one this client generated is essentially
+		// unexplainable except as a replay or injection attempt - one of the small set of
+		// error() calls marked security_relevant: true.
+		$this->assertTrue($records[0]['context']['security_relevant']);
 	}
 
 	public function testValidateRequiredClaimsPassesWithAllPresent(): void {

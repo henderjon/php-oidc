@@ -2,7 +2,9 @@
 
 namespace Oidc;
 
+use Oidc\Fakes\ArrayLogger;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 
 class UrlPolicyTest extends TestCase {
 
@@ -138,6 +140,39 @@ class UrlPolicyTest extends TestCase {
 		$config = $this->config(allowedHosts: [ 'http://issuer.example.com' ]);
 
 		$this->assertFalse($this->urlPolicy->isAllowed('http://issuer.example.com/token', $config));
+	}
+
+	public function testASchemePrefixedAllowlistEntryLogsTheCorrectionAtDebugLevel(): void {
+		$logger    = new ArrayLogger;
+		$urlPolicy = new UrlPolicy($logger);
+		$config    = $this->config(allowedHosts: [ 'https://issuer.example.com' ]);
+
+		$urlPolicy->isAllowed('https://issuer.example.com/token', $config);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: an allowedHosts entry looks like a full URL rather than a bare hostname - using the host recovered from it', $records[0]['message']);
+		$this->assertSame('https://issuer.example.com', $records[0]['context']['configured_entry']);
+		$this->assertSame('issuer.example.com', $records[0]['context']['recovered_host']);
+	}
+
+	public function testABareHostnameAllowlistEntryDoesNotLogAnything(): void {
+		$logger    = new ArrayLogger;
+		$urlPolicy = new UrlPolicy($logger);
+		$config    = $this->config(allowedHosts: [ 'issuer.example.com' ]);
+
+		$urlPolicy->isAllowed('https://issuer.example.com/token', $config);
+
+		$this->assertSame([], $logger->records);
+	}
+
+	public function testNoAllowlistAtAllDoesNotLogAnything(): void {
+		$logger    = new ArrayLogger;
+		$urlPolicy = new UrlPolicy($logger);
+
+		$urlPolicy->isAllowed('https://issuer.example.com/token', $this->config());
+
+		$this->assertSame([], $logger->records);
 	}
 
 }

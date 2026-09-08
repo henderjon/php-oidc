@@ -58,7 +58,7 @@ class TokenResultTest extends TestCase {
 		}
 	}
 
-	public function testLogsInvalidResponseFieldNamesWithoutValues(): void {
+	public function testLogsInvalidResponseFieldNamesAndTheirActualValues(): void {
 		$logger = new ArrayLogger;
 
 		try {
@@ -73,9 +73,95 @@ class TokenResultTest extends TestCase {
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame([ 'access_token', 'expires_in' ], $records[0]['context']['invalid_fields']);
-		$this->assertArrayNotHasKey('access_token', $records[0]['context']);
-		$this->assertArrayNotHasKey('expires_in', $records[0]['context']);
+		$this->assertSame(
+			[ 'access_token' => '', 'expires_in' => '3600' ],
+			$records[0]['context']['invalid_field_values'],
+		);
 		$this->assertSame('the-state', $records[0]['context']['state']);
+		// A malformed token response is an ordinary shape failure, not one of the curated
+		// high-confidence attack indicators - security_relevant stays false.
+		$this->assertFalse($records[0]['context']['security_relevant']);
+	}
+
+	public function testLogsNullAsTheValueForAnEntirelyMissingAccessToken(): void {
+		$logger = new ArrayLogger;
+
+		try {
+			new TokenResult([ 'token_type' => 'Bearer' ], $logger);
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$this->assertNull($logger->recordsAt(LogLevel::ERROR)[0]['context']['invalid_field_values']['access_token']);
+	}
+
+	public function testLogsTheActualMalformedValueForANonStringField(): void {
+		$logger = new ArrayLogger;
+
+		new TokenResult([
+			'access_token' => 'the-access-token',
+			'scope'        => [ 'read', 'write' ],
+		], $logger);
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame([ 'read', 'write' ], $records[0]['context']['invalid_field_values']['scope']);
+	}
+
+	public function testLogsOnlyTheTypeForANonScalarRefreshToken(): void {
+		// refresh_token is sensitive - unlike scope above, an array here could still be a
+		// provider wrapping a real token inside it, so only its shape is logged, never its
+		// content.
+		$logger = new ArrayLogger;
+
+		new TokenResult([
+			'access_token'  => 'the-access-token',
+			'refresh_token' => [ 'value' => 'a-real-token-could-live-here' ],
+		], $logger);
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame('array', $records[0]['context']['invalid_field_values']['refresh_token']);
+	}
+
+	public function testLogsOnlyTheTypeForANonScalarIdToken(): void {
+		$logger = new ArrayLogger;
+
+		new TokenResult([
+			'access_token' => 'the-access-token',
+			'id_token'     => [ 'value' => 'a-real-token-could-live-here' ],
+		], $logger);
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame('array', $records[0]['context']['invalid_field_values']['id_token']);
+	}
+
+	public function testLogsOnlyTheTypeForANonScalarAccessToken(): void {
+		$logger = new ArrayLogger;
+
+		try {
+			new TokenResult([
+				'access_token' => [ 'value' => 'a-real-token-could-live-here' ],
+			], $logger);
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame('array', $records[0]['context']['invalid_field_values']['access_token']);
+	}
+
+	public function testStillLogsAScalarMismatchForASensitiveFieldVerbatim(): void {
+		// A scalar mismatch (an int here, instead of a string) can never itself be or contain a
+		// real token, so refresh_token gets the same raw-value treatment as any other field in
+		// that case - only a container gets the type-only treatment.
+		$logger = new ArrayLogger;
+
+		new TokenResult([
+			'access_token'  => 'the-access-token',
+			'refresh_token' => 12345,
+		], $logger);
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame(12345, $records[0]['context']['invalid_field_values']['refresh_token']);
 	}
 
 }

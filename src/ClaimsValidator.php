@@ -76,7 +76,7 @@ final class ClaimsValidator {
 		$sub = $claims->get('sub');
 
 		if( !is_string($sub) || $sub === '' ) {
-			$this->logger->error('OIDC: ID token is missing the required sub claim', [ 'state' => $this->state ]);
+			$this->logger->error('OIDC: ID token is missing the required sub claim', [ 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new AuthenticationFailedException('ID token is missing the required sub claim', state: $this->state);
 		}
@@ -86,6 +86,7 @@ final class ClaimsValidator {
 				'length' => strlen($sub),
 				'max'    => self::MAX_SUBJECT_LENGTH,
 				'state'  => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token sub claim exceeds the maximum allowed length', state: $this->state);
@@ -97,6 +98,7 @@ final class ClaimsValidator {
 			$this->logger->error('OIDC: ID token is missing the required exp claim, or it is not numeric', [
 				'exp'   => $exp,
 				'state' => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token is missing the required exp claim, or it is not numeric', state: $this->state);
@@ -108,6 +110,7 @@ final class ClaimsValidator {
 			$this->logger->error('OIDC: ID token is missing the required iat claim, or it is not numeric', [
 				'iat'   => $iat,
 				'state' => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token is missing the required iat claim, or it is not numeric', state: $this->state);
@@ -118,6 +121,7 @@ final class ClaimsValidator {
 				'exp'   => $exp,
 				'iat'   => $iat,
 				'state' => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token exp is not after its own iat', state: $this->state);
@@ -147,6 +151,7 @@ final class ClaimsValidator {
 				'lifetime_seconds'     => $lifetime,
 				'max_lifetime_seconds' => $maxLifetimeSeconds,
 				'state'                => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token lifetime exceeds the configured maximum', state: $this->state);
@@ -164,6 +169,7 @@ final class ClaimsValidator {
 				'expected' => $expectedIssuer,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token issuer does not match the expected issuer', state: $this->state);
@@ -212,6 +218,7 @@ final class ClaimsValidator {
 				'expected' => $expected,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token audience does not match any of the expected values', state: $this->state);
@@ -243,6 +250,7 @@ final class ClaimsValidator {
 			'actual'    => $actual,
 			'untrusted' => $untrusted,
 			'state'     => $this->state,
+			'security_relevant' => false,
 		]);
 
 		throw new AuthenticationFailedException('ID token audience contains additional values not trusted by this client', state: $this->state);
@@ -267,6 +275,14 @@ final class ClaimsValidator {
 	 * contain the expected value" check on its own) is unaffected; this only changes behavior
 	 * for an array containing a mix of valid strings and something else.
 	 *
+	 * `allowUntrustedAudiences` changes which decision that is, not whether one is made: without
+	 * it, a malformed entry throws; with it, the entry is dropped instead. Logged at `warning`,
+	 * not `debug`: this is a loose config choice producing a happy path at runtime, the same
+	 * shape as `PkceMode::Optional` completing with no `code_verifier` - not itself an attack,
+	 * nothing crashed, but a fail-open degradation actually manifesting for this specific token,
+	 * not merely configured as possible. A caller opting into tolerating untrusted audiences
+	 * still did not ask for a malformed entry to vanish unremarked.
+	 *
 	 * @throws AuthenticationFailedException
 	 * @return list<string>
 	 */
@@ -282,9 +298,18 @@ final class ClaimsValidator {
 				'aud'       => $value,
 				'malformed' => $malformed,
 				'state'     => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('ID token audience contains a malformed value', state: $this->state);
+		}
+
+		if( $malformed !== [] ) {
+			$this->logger->warning('OIDC: ID token audience contained a malformed value, dropped under allowUntrustedAudiences', [
+				'aud'       => $value,
+				'malformed' => $malformed,
+				'state'     => $this->state,
+			]);
 		}
 
 		return array_values(array_filter($value, 'is_string'));
@@ -309,6 +334,7 @@ final class ClaimsValidator {
 				'expected' => $expectedNonce,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => true,
 			]);
 
 			throw new AuthenticationFailedException('ID token nonce does not match the expected value', state: $this->state);
@@ -334,6 +360,7 @@ final class ClaimsValidator {
 		if( !is_string($actual) || $actual === '' ) {
 			$this->logger->error('OIDC: UserInfo response is missing the required sub claim', [
 				'state' => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('UserInfo response is missing the required sub claim', state: $this->state);
@@ -344,6 +371,7 @@ final class ClaimsValidator {
 				'expected' => $expectedSubject,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('UserInfo response subject does not match the authenticated ID token subject', state: $this->state);
@@ -370,6 +398,7 @@ final class ClaimsValidator {
 				'expected' => $expectedIssuer,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('UserInfo response issuer does not match the expected issuer', state: $this->state);
@@ -393,6 +422,7 @@ final class ClaimsValidator {
 				'expected' => $expectedClientId,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('UserInfo response audience does not include the expected client id', state: $this->state);
@@ -416,6 +446,7 @@ final class ClaimsValidator {
 				'expected' => $originalSubject,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('Refreshed ID token subject does not match the original ID token', state: $this->state);
@@ -444,6 +475,7 @@ final class ClaimsValidator {
 				'expected' => $originalAuthTime,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('Refreshed ID token auth_time does not match the original authentication time', state: $this->state);
@@ -471,6 +503,7 @@ final class ClaimsValidator {
 				'expected' => $originalNonce,
 				'actual'   => $actual,
 				'state'    => $this->state,
+				'security_relevant' => false,
 			]);
 
 			throw new AuthenticationFailedException('Refreshed ID token nonce does not match the original ID token', state: $this->state);

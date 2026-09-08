@@ -87,4 +87,88 @@ class LogLevelFilterLoggerTest extends TestCase {
 		$this->assertSame([], $inner->records[0]['context']);
 	}
 
+	public function testAllForwardsEveryStandardLevel(): void {
+		$inner  = new ArrayLogger;
+		$logger = LogLevelFilterLogger::all($inner);
+
+		$logger->emergency('m');
+		$logger->debug('m');
+
+		$this->assertCount(2, $inner->records);
+	}
+
+	public function testAllForwardsALevelPsr3DoesNotDefine(): void {
+		// PSR-3 never restricts $level to its own eight constants - a caller with its own
+		// custom level would be silently dropped by any allowlist that only enumerates
+		// Psr\Log\LogLevel's constants by hand. all() exists for exactly this case.
+		$inner  = new ArrayLogger;
+		$logger = LogLevelFilterLogger::all($inner);
+
+		$logger->log('a-custom-non-psr3-level', 'm');
+
+		$this->assertCount(1, $inner->records);
+		$this->assertSame('a-custom-non-psr3-level', $inner->records[0]['level']);
+	}
+
+	public function testAllowFalseTreatsLevelsAsADenylistDroppingTheNamedLevel(): void {
+		$inner  = new ArrayLogger;
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], allow: false);
+
+		$logger->debug('a debug message');
+
+		$this->assertSame([], $inner->records);
+	}
+
+	public function testAllowFalseForwardsEveryOtherStandardLevel(): void {
+		$inner  = new ArrayLogger;
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], allow: false);
+
+		$logger->emergency('m');
+		$logger->alert('m');
+		$logger->critical('m');
+		$logger->error('m');
+		$logger->warning('m');
+		$logger->notice('m');
+		$logger->info('m');
+
+		$this->assertCount(7, $inner->records);
+	}
+
+	public function testAllowFalseForwardsALevelPsr3DoesNotDefine(): void {
+		// A level nobody named - including a custom one neither PSR-3 nor $levels knows about
+		// - is exactly what a deny-list forwards by design, unlike the default allow-list,
+		// which would drop it.
+		$inner  = new ArrayLogger;
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], allow: false);
+
+		$logger->log('a-custom-non-psr3-level', 'm');
+
+		$this->assertCount(1, $inner->records);
+		$this->assertSame('a-custom-non-psr3-level', $inner->records[0]['level']);
+	}
+
+	public function testAllowFalseCanExcludeMultipleLevelsAtOnce(): void {
+		$inner  = new ArrayLogger;
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG, LogLevel::INFO ], allow: false);
+
+		$logger->debug('m');
+		$logger->info('m');
+		$logger->warning('m');
+
+		$this->assertCount(1, $inner->records);
+		$this->assertSame(LogLevel::WARNING, $inner->records[0]['level']);
+	}
+
+	public function testAllIsEquivalentToAnEmptyDenylist(): void {
+		// all()'s own docblock calls it sugar for an empty deny-list - proves that directly.
+		$inner  = new ArrayLogger;
+		$logger = new LogLevelFilterLogger($inner, [], allow: false);
+
+		$logger->emergency('m');
+		$logger->debug('m');
+		$logger->log('a-custom-non-psr3-level', 'm');
+
+		$this->assertCount(3, $inner->records);
+	}
+
 }
