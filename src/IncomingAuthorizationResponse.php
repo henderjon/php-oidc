@@ -63,9 +63,7 @@ final class IncomingAuthorizationResponse {
 	}
 
 	private static function truncated( ?string $value ): ?string {
-		return $value !== null && strlen($value) > self::MAX_ERROR_FIELD_LENGTH
-			? substr($value, 0, self::MAX_ERROR_FIELD_LENGTH) . '...(truncated)'
-			: $value;
+		return $value === null ? null : Truncate::to($value, self::MAX_ERROR_FIELD_LENGTH);
 	}
 
 }

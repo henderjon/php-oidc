@@ -171,9 +171,7 @@ final class AuthorizationStateStore {
 	}
 
 	private function loggableState(string $state): string {
-		return strlen($state) > self::MAX_LOGGED_STATE_LENGTH
-			? substr($state, 0, self::MAX_LOGGED_STATE_LENGTH) . '...(truncated)'
-			: $state;
+		return Truncate::to($state, self::MAX_LOGGED_STATE_LENGTH);
 	}
 
 }
