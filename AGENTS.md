@@ -80,6 +80,14 @@ subclass hooks. This library replaces that with plain constructor injection - ca
 - **Fail closed on anything security-relevant.** State, nonce, audience, and PKCE checks must throw
   `AuthenticationFailedException` when the expected value is missing or ambiguous, never silently skip the check.
   A missing value because "it should always be there" is exactly the case that must still be verified.
+- **Log levels.** `debug` traces the happy path. `warning` is a fail-open decision or an ambiguous runtime event,
+  never a configuration choice. `alert` is reserved for a configuration choice worth a developer's own review (TLS
+  disabled, an untrusted audience allowed through, PKCE disabled for a public client) - never a runtime event.
+  `error` is every validation, fetch, or parse failure, always paired with the exception about to be thrown. Every
+  `error()` call also carries a `security_relevant` boolean in its context, `true` only on the small curated set of
+  call sites that are essentially unexplainable except as tampering or forgery, `false` everywhere else - `false`
+  means "not in that curated set," never "confirmed benign." See `docs/index.html`'s Logging section for the full
+  level table, the curated `true` list, and the reasoning behind it.
 - **Typing.** Type every parameter and return, using native PHP types first and PHPDoc (`@param`, `@return`,
   array-shape syntax) only where types fall short or where an argument's shape needs documenting. Prefer `iterable`
   over `array` for arguments when either works.
