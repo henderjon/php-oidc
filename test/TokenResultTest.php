@@ -107,4 +107,61 @@ class TokenResultTest extends TestCase {
 		$this->assertSame([ 'read', 'write' ], $records[0]['context']['invalid_field_values']['scope']);
 	}
 
+	public function testLogsOnlyTheTypeForANonScalarRefreshToken(): void {
+		// refresh_token is sensitive - unlike scope above, an array here could still be a
+		// provider wrapping a real token inside it, so only its shape is logged, never its
+		// content.
+		$logger = new ArrayLogger;
+
+		new TokenResult([
+			'access_token'  => 'the-access-token',
+			'refresh_token' => [ 'value' => 'a-real-token-could-live-here' ],
+		], $logger);
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame('array', $records[0]['context']['invalid_field_values']['refresh_token']);
+	}
+
+	public function testLogsOnlyTheTypeForANonScalarIdToken(): void {
+		$logger = new ArrayLogger;
+
+		new TokenResult([
+			'access_token' => 'the-access-token',
+			'id_token'     => [ 'value' => 'a-real-token-could-live-here' ],
+		], $logger);
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame('array', $records[0]['context']['invalid_field_values']['id_token']);
+	}
+
+	public function testLogsOnlyTheTypeForANonScalarAccessToken(): void {
+		$logger = new ArrayLogger;
+
+		try {
+			new TokenResult([
+				'access_token' => [ 'value' => 'a-real-token-could-live-here' ],
+			], $logger);
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame('array', $records[0]['context']['invalid_field_values']['access_token']);
+	}
+
+	public function testStillLogsAScalarMismatchForASensitiveFieldVerbatim(): void {
+		// A scalar mismatch (an int here, instead of a string) can never itself be or contain a
+		// real token, so refresh_token gets the same raw-value treatment as any other field in
+		// that case - only a container gets the type-only treatment.
+		$logger = new ArrayLogger;
+
+		new TokenResult([
+			'access_token'  => 'the-access-token',
+			'refresh_token' => 12345,
+		], $logger);
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertSame(12345, $records[0]['context']['invalid_field_values']['refresh_token']);
+	}
+
 }
