@@ -311,16 +311,21 @@ final class IdTokenVerifier {
 			throw new AuthenticationFailedException("Unable to parse the JWKS document from {$jwksUri}", state: $this->state, previous: $e);
 		}
 
-		$selectedKid = match( true ) {
-			$kid !== null && isset($keySet[$kid]) => $kid,
-			default                                => $this->findSoleSigningCandidate($jwks, $keySet, $alg),
-		};
+		$candidates = $kid !== null && isset($keySet[$kid]) ? [ $kid ] : $this->findSigningCandidates($jwks, $keySet, $alg);
+		$selectedKid = count($candidates) === 1 ? $candidates[0] : null;
 
 		if( $selectedKid === null ) {
 			$this->logger->error('OIDC: unable to find a matching JWKS key for this ID token', [
 				'jwks_uri'       => $jwksUri,
 				'kid'            => $kid,
 				'available_kids' => array_keys($keySet),
+				// The narrowed set findSigningCandidates() actually considered, not every key
+				// in the JWKS - an empty list here means everything was correctly excluded
+				// (wrong "use", wrong algorithm family) and nothing was ever a candidate; two
+				// or more means the JWKS is genuinely ambiguous for this algorithm. Both looked
+				// identical before this field existed, since available_kids is the same either
+				// way.
+				'candidate_kids' => $candidates,
 				'state'          => $this->state,
 				'security_relevant' => false,
 			]);
@@ -380,8 +385,12 @@ final class IdTokenVerifier {
 	 *
 	 * @param array<string,mixed> $jwks
 	 * @param array<string,Key> $keySet
+	 * @return list<string> Every kid that survived narrowing - the caller decides what a count
+	 *                       other than exactly one means (none survived vs. genuinely
+	 *                       ambiguous), since only the caller knows whether that distinction
+	 *                       matters for what it does next (an error log, here).
 	 */
-	private function findSoleSigningCandidate( array $jwks, array $keySet, string $alg ): ?string {
+	private function findSigningCandidates( array $jwks, array $keySet, string $alg ): array {
 		$expectedKty = self::expectedKtyFor($alg);
 		$keys        = is_array($jwks['keys'] ?? null) ? $jwks['keys'] : [];
 		$candidates  = [];
@@ -406,12 +415,12 @@ final class IdTokenVerifier {
 			$candidates[] = $entryKid;
 		}
 
-		return count($candidates) === 1 ? $candidates[0] : null;
+		return $candidates;
 	}
 
 	/**
 	 * The algorithm family a JWK's own "kty" must declare to be usable for $alg - shared by
-	 * findSoleSigningCandidate() (narrowing candidates before selection) and
+	 * findSigningCandidates() (narrowing candidates before selection) and
 	 * assertKeyTypeMatchesAlgorithm() (verifying the final selection independently of
 	 * firebase/php-jwt's own, otherwise tautological, internal check - see that method's own
 	 * docblock).

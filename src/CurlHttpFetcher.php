@@ -148,10 +148,18 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 		$contentType = curl_getinfo($handle, CURLINFO_CONTENT_TYPE);
 		$status      = (int)curl_getinfo($handle, CURLINFO_HTTP_CODE);
 
+		// curl reports the Location header's target here whenever the response was a redirect,
+		// regardless of CURLOPT_FOLLOWLOCATION - this class never follows one (see class
+		// docblock), but a caller logging "unsuccessful response" on a 3xx it never expected
+		// still needs to see where the provider actually pointed, not just the bare status.
+		$redirectUrl = curl_getinfo($handle, CURLINFO_REDIRECT_URL);
+		$redirectUrl = is_string($redirectUrl) && $redirectUrl !== '' ? $redirectUrl : null;
+
 		$this->logger->debug('OIDC: received HTTP response', [
 			'url'          => $url,
 			'http_status'  => $status,
 			'content_type' => $contentType,
+			'redirect_url' => $redirectUrl,
 			'body_bytes'   => strlen($buffer),
 			'elapsed_ms'   => round(curl_getinfo($handle, CURLINFO_TOTAL_TIME) * 1000, 1),
 		]);

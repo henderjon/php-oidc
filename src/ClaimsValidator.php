@@ -275,6 +275,14 @@ final class ClaimsValidator {
 	 * contain the expected value" check on its own) is unaffected; this only changes behavior
 	 * for an array containing a mix of valid strings and something else.
 	 *
+	 * `allowUntrustedAudiences` changes which decision that is, not whether one is made: without
+	 * it, a malformed entry throws; with it, the entry is dropped instead. Logged at `warning`,
+	 * not `debug`: this is a loose config choice producing a happy path at runtime, the same
+	 * shape as `PkceMode::Optional` completing with no `code_verifier` - not itself an attack,
+	 * nothing crashed, but a fail-open degradation actually manifesting for this specific token,
+	 * not merely configured as possible. A caller opting into tolerating untrusted audiences
+	 * still did not ask for a malformed entry to vanish unremarked.
+	 *
 	 * @throws AuthenticationFailedException
 	 * @return list<string>
 	 */
@@ -294,6 +302,14 @@ final class ClaimsValidator {
 			]);
 
 			throw new AuthenticationFailedException('ID token audience contains a malformed value', state: $this->state);
+		}
+
+		if( $malformed !== [] ) {
+			$this->logger->warning('OIDC: ID token audience contained a malformed value, dropped under allowUntrustedAudiences', [
+				'aud'       => $value,
+				'malformed' => $malformed,
+				'state'     => $this->state,
+			]);
 		}
 
 		return array_values(array_filter($value, 'is_string'));

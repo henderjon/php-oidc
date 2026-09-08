@@ -60,6 +60,8 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->code === null ) {
+			$this->logger->error('OIDC: callback is missing the authorization code', [ 'state' => $flow->state, 'security_relevant' => false ]);
+
 			throw new AuthenticationFailedException('Callback is missing the authorization code', state: $flow->state);
 		}
 

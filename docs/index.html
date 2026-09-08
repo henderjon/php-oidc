@@ -598,9 +598,9 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         <thead><tr><th>Level</th><th>Calls</th><th>Fires when...</th></tr></thead>
         <tbody>
           <tr><td><code>debug</code></td><td>28</td><td>The happy path of nearly every collaborator - what was sent, what came back, what was decided. The bulk of this library's log volume.</td></tr>
-          <tr><td><code>warning</code></td><td>2</td><td>A fail-open decision that still proceeds anyway - an Optional PKCE flow completing with no <code>code_verifier</code> - or a runtime event worth a human's attention that is not itself a configuration choice - a callback whose <code>state</code> matched no pending authorization attempt at all (<code>AuthorizationStateStore</code>; see that method's own docblock for the several distinct things a miss there could mean).</td></tr>
+          <tr><td><code>warning</code></td><td>3</td><td>A loose config choice actually producing a happy path at runtime, not merely configured as possible - an Optional PKCE flow completing with no <code>code_verifier</code>, or <code>allowUntrustedAudiences</code> silently dropping a malformed <code>aud</code> entry (<code>ClaimsValidator</code>) - or a runtime event worth a human's attention that is not itself a configuration choice - a callback whose <code>state</code> matched no pending authorization attempt at all (<code>AuthorizationStateStore</code>; see that method's own docblock for the several distinct things a miss there could mean).</td></tr>
           <tr><td><code>info</code></td><td>1</td><td>An outcome PSR-16's own cache interface cannot distinguish from a real failure - <code>AuthorizationStateStore::consume()</code>, when the cache backend reports a delete as possibly not having cleared the entry.</td></tr>
-          <tr><td><code>error</code></td><td>66</td><td>Every validation, fetch, or parse failure across every collaborator - by far the largest share of non-<code>debug</code> volume. Always paired with the exception this library is about to throw. Every call at this level also carries a <code>security_relevant</code> boolean - see below.</td></tr>
+          <tr><td><code>error</code></td><td>67</td><td>Every validation, fetch, or parse failure across every collaborator - by far the largest share of non-<code>debug</code> volume. Always paired with the exception this library is about to throw. Every call at this level also carries a <code>security_relevant</code> boolean - see below.</td></tr>
           <tr><td><code>alert</code></td><td>3</td><td>Reserved for a configuration choice worth a developer's own review, not a runtime event: TLS verification actively disabled for a request (<code>CurlHttpFetcher</code>), an untrusted <code>aud</code> value let through by explicit config opt-out (<code>ClaimsValidator</code>), or a public client building an authorization redirect with PKCE disabled (<code>OpenIDConnectClient</code>).</td></tr>
         </tbody>
       </table>
@@ -613,7 +613,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       </p>
       <p>
         <code>error</code> is by far the largest category, so it is worth breaking down further.
-        The table below groups its 66 call sites by the collaborator that raises them, alongside
+        The table below groups its 67 call sites by the collaborator that raises them, alongside
         how many of each are <code>security_relevant: true</code> - see below for what that means:
       </p>
       <table>
@@ -621,7 +621,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         <tbody>
           <tr><td><code>IdTokenVerifier</code></td><td>20</td><td>4 - the <code>"none"</code> algorithm, a failed signature, an <code>at_hash</code> mismatch, a JWKS key type mismatch</td></tr>
           <tr><td><code>ClaimsValidator</code></td><td>18</td><td>1 - a <code>nonce</code> mismatch</td></tr>
-          <tr><td><code>OpenIDConnectClient</code></td><td>10</td><td>0</td></tr>
+          <tr><td><code>OpenIDConnectClient</code></td><td>11</td><td>0</td></tr>
           <tr><td><code>ProviderMetadataResolver</code></td><td>8</td><td>0</td></tr>
           <tr><td><code>TokenEndpointClient</code></td><td>4</td><td>0</td></tr>
           <tr><td><code>CurlHttpFetcher</code></td><td>3</td><td>0</td></tr>
@@ -663,7 +663,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         forgery: an ID token declaring the <code>"none"</code> algorithm, a signature that fails
         verification, an <code>at_hash</code> that does not match the access token, a JWKS key type that
         does not match the token's algorithm, and a <code>nonce</code> that does not match the one this
-        client generated. Every other <code>error</code> call - the other 61, as of this writing - carries
+        client generated. Every other <code>error</code> call - the other 62, as of this writing - carries
         <code>security_relevant: false</code>. That does <em>not</em> mean "confirmed benign" - a
         misconfigured provider, a network blip, and a genuine attack that happens not to fit one of the
         five curated shapes above all log <code>false</code> identically. It means only "not in this small
@@ -678,7 +678,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         through "ambiguous" to "security issue" - to capture the calls that sit between the five
         curated <code>true</code> sites and the rest (an audience mismatch, say, is not nothing,
         but is far more often a client misconfiguration than an attack). That was deliberately
-        rejected: grading every one of the 61 <code>false</code> calls onto a scale would mean
+        rejected: grading every one of the 62 <code>false</code> calls onto a scale would mean
         assigning each one a confidence level with no real usage data to justify a specific cut
         point, which just relocates the same judgment call into more categories without resolving
         it. A flat boolean, applied only where the evidence is genuinely unambiguous, says exactly

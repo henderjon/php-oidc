@@ -174,6 +174,75 @@ class IdTokenVerifierTest extends TestCase {
 		$verifier->verify($idToken, self::JWKS_URI, 'unused');
 	}
 
+	public function testVerifyThrowsWhenNoKidAndCandidatesAreAmbiguousLogsOnlyTheNarrowedCandidates(): void {
+		// Three keys in the JWKS, but only two are genuinely ambiguous signing candidates - the
+		// third is correctly excluded as an encryption key. available_kids must still list all
+		// three (what the JWKS actually contained); candidate_kids must list only the two this
+		// class actually considered, proving the log can tell "nothing survived filtering"
+		// apart from "more than one did," which it could not before this field existed.
+		$signingFixtureA   = new RsaKeyFixture;
+		$signingFixtureB   = new RsaKeyFixture;
+		$encryptionFixture = new RsaKeyFixture;
+
+		$encryptionKey           = $encryptionFixture->jwks()['keys'];
+		$encryptionKey[0]['kid'] = 'encryption-key';
+		$encryptionKey[0]['use'] = 'enc';
+
+		$mergedJwks = [
+			'keys' => [
+				...$this->withoutKid($signingFixtureA->jwks()),
+				...$this->reKeyed($signingFixtureB),
+				...$encryptionKey,
+			],
+		];
+
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode($mergedJwks, JSON_THROW_ON_ERROR), 200));
+
+		$idToken  = $signingFixtureA->sign([ 'sub' => 'user-1' ], keyId: null);
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertCount(3, $records[0]['context']['available_kids']);
+		$this->assertCount(2, $records[0]['context']['candidate_kids']);
+		$this->assertNotContains('encryption-key', $records[0]['context']['candidate_kids']);
+		$this->assertContains('encryption-key', $records[0]['context']['available_kids']);
+	}
+
+	public function testVerifyThrowsWhenNoKidAndNoCandidatesSurviveFilteringLogsAnEmptyCandidateList(): void {
+		// The only key in the JWKS is the wrong algorithm family for this RS256 token - zero
+		// candidates survive filtering, distinct from the ambiguous (2+) case above even though
+		// both used to log identically via available_kids alone.
+		$ecFixture = new EcKeyFixture;
+
+		$mergedJwks = [ 'keys' => $this->withoutKid($ecFixture->jwks()) ];
+		$fetcher    = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse(json_encode($mergedJwks, JSON_THROW_ON_ERROR), 200));
+
+		$idToken  = (new RsaKeyFixture)->sign([ 'sub' => 'user-1' ], keyId: null);
+		$logger   = new ArrayLogger;
+		$verifier = (new IdTokenVerifier($fetcher, logger: $logger))->withState('the-state');
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertCount(1, $records[0]['context']['available_kids']);
+		$this->assertSame([], $records[0]['context']['candidate_kids']);
+	}
+
 	public function testVerifyHs256TokenAgainstClientSecret(): void {
 		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
 		$verifier = new IdTokenVerifier(new FakeHttpFetcher);

@@ -294,9 +294,29 @@ class CurlHttpFetcherTest extends TestCase {
 		$this->assertSame($this->url('discovery'), $response['context']['url']);
 		$this->assertSame(200, $response['context']['http_status']);
 		$this->assertSame('application/json', $response['context']['content_type']);
+		$this->assertNull($response['context']['redirect_url']);
 		$this->assertSame(strlen('{"issuer":"https://example.com"}'), $response['context']['body_bytes']);
 		$this->assertIsFloat($response['context']['elapsed_ms']);
 		$this->assertGreaterThanOrEqual(0.0, $response['context']['elapsed_ms']);
+	}
+
+	public function testARedirectResponseLogsWhereItPointed(): void {
+		// This class never follows a redirect (see class docblock), but a caller logging an
+		// "unsuccessful response" on a 3xx it never expected still needs to see where the
+		// provider actually pointed, not just the bare status.
+		self::$server->setResponseOfPath('/moved', new Response('', [ 'Location' => 'https://moved.example.com/discovery' ], 302));
+
+		$logger  = new ArrayLogger;
+		$fetcher = new CurlHttpFetcher(logger: $logger);
+		$response = $fetcher->fetch($this->url('moved'), null);
+
+		$this->assertSame(302, $response->status);
+
+		$records  = $logger->recordsAt(LogLevel::DEBUG);
+		$received = $records[1];
+
+		$this->assertSame(302, $received['context']['http_status']);
+		$this->assertSame('https://moved.example.com/discovery', $received['context']['redirect_url']);
 	}
 
 	public function testGenericFetchFailureLogsAnError(): void {

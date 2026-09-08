@@ -165,6 +165,34 @@ class ClaimsValidatorTest extends TestCase {
 		$this->addToAssertionCount(1);
 	}
 
+	public function testAllowUntrustedAudiencesWarnsWhenItSilentlyDropsAMalformedEntry(): void {
+		// Relaxing the check does not make the entry vanish unremarked. warning, not debug -
+		// a loose config choice producing a happy path at runtime, same as PkceMode::Optional
+		// completing with no code_verifier.
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 42, null ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token audience contained a malformed value, dropped under allowUntrustedAudiences', $records[0]['message']);
+		$this->assertSame([ 'the-client-id', 42, null ], $records[0]['context']['aud']);
+		$this->assertSame([ 42, null ], $records[0]['context']['malformed']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testAllowUntrustedAudiencesDoesNotLogAboutMalformedWhenThereIsNone(): void {
+		$logger    = new ArrayLogger;
+		$validator = new ClaimsValidator($logger);
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id' ] ]);
+
+		$validator->validateAudience($claims, 'the-client-id', allowUntrustedAudiences: true);
+
+		$this->assertSame([], $logger->records);
+	}
+
 	public function testANonArrayNonStringAudienceIsNotTreatedAsMalformed(): void {
 		// Already handled correctly without this check: a bare wrong-typed aud normalizes to
 		// an empty actual list and fails the ordinary "does not match" check on its own - a

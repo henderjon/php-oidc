@@ -508,6 +508,30 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertSame([], $logger->recordsAboveDebug());
 	}
 
+	public function testCompleteAuthorizationCodeFlowLogsWhenTheCallbackIsMissingTheCode(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$client  = $this->makeClient($fetcher, logger: $logger);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+		$params   = $this->queryParams($redirect->url);
+
+		try {
+			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
+				'state' => $params['state'],
+			]));
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException $e ) {
+			$this->assertSame('Callback is missing the authorization code', $e->getMessage());
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: callback is missing the authorization code', $records[0]['message']);
+		$this->assertSame($params['state'], $records[0]['context']['state']);
+		$this->assertFalse($records[0]['context']['security_relevant']);
+	}
+
 	public function testRequiredPkceFailsClosedWhenTheVerifierIsMissingAtCompletion(): void {
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;
