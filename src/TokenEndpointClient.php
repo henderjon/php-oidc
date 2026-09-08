@@ -26,6 +26,14 @@ final class TokenEndpointClient {
 	 * body, and that class's own debug logging never reveals it at all - see its docblock for
 	 * why a long-lived static credential gets different treatment than these do.
 	 *
+	 * This is a closed, fixed list because every key in it is one this library itself puts in
+	 * $params. It cannot cover a provider-specific extension key a caller passes through
+	 * requestClientCredentialsToken()'s $extraParams - this library has no way to know in
+	 * advance whether a given provider's extension is secret (a signed `client_assertion`) or
+	 * not (`audience`, `resource`). See that method's $sensitiveExtraParamKeys for how a caller
+	 * extends this list for their own provider-specific keys; nothing outside this constant is
+	 * redacted unless the caller says so.
+	 *
 	 * @var list<string>
 	 */
 	private const SENSITIVE_PARAM_KEYS = [ 'code', 'refresh_token', 'code_verifier' ];
@@ -94,9 +102,28 @@ final class TokenEndpointClient {
 	 *                                                         overridden this way, same as
 	 *                                                         `OpenIDConnectClientConfig::$extraAuthParams`
 	 *                                                         on the authorization request.
+	 * @param list<string> $sensitiveExtraParamKeys Which keys of $extraParams, if any, hold a
+	 *                                              value this library should treat the same way
+	 *                                              it treats `code`/`refresh_token`/
+	 *                                              `code_verifier` - partially revealed via
+	 *                                              `Redact` in the request debug log below,
+	 *                                              instead of logged in full. This library has
+	 *                                              no way to know what a provider-specific
+	 *                                              extension key means or how sensitive its
+	 *                                              value is - `audience`/`resource` are
+	 *                                              typically not secret at all, but a provider
+	 *                                              requiring `private_key_jwt` client
+	 *                                              authentication (RFC 7523), say, would need a
+	 *                                              signed `client_assertion` sent this way, and
+	 *                                              that value is exactly as replayable within
+	 *                                              its lifetime as `client_secret` is. Naming it
+	 *                                              here is the caller's call to make, not this
+	 *                                              library's to guess at - nothing outside the
+	 *                                              three keys above is redacted unless the
+	 *                                              caller says so.
 	 * @throws TokenRequestException
 	 */
-	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [], array $extraParams = [] ): TokenResult {
+	public function requestClientCredentialsToken( OpenIDConnectClientConfig $config, array $scopes = [], array $extraParams = [], array $sensitiveExtraParamKeys = [] ): TokenResult {
 		$this->logOverriddenReservedParams($extraParams, [ 'grant_type', 'scope' ]);
 
 		$params = array_merge($extraParams, [ 'grant_type' => 'client_credentials' ]);
@@ -109,7 +136,7 @@ final class TokenEndpointClient {
 			$params['scope'] = implode(' ', $scopes);
 		}
 
-		return $this->request($config, $params);
+		return $this->request($config, $params, $sensitiveExtraParamKeys);
 	}
 
 	/**
@@ -128,14 +155,17 @@ final class TokenEndpointClient {
 
 	/**
 	 * @param array<string,string|list<string>> $params
+	 * @param list<string> $additionalSensitiveKeys See requestClientCredentialsToken()'s own
+	 *                                              docblock for $sensitiveExtraParamKeys - the
+	 *                                              only caller that ever passes this.
 	 * @throws TokenRequestException
 	 */
-	private function request( OpenIDConnectClientConfig $config, array $params ): TokenResult {
+	private function request( OpenIDConnectClientConfig $config, array $params, array $additionalSensitiveKeys = [] ): TokenResult {
 		$endpoint = $this->providerMetadataResolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
 
 		$this->logger->debug('OIDC: requesting a token', [
 			'endpoint' => $endpoint,
-			'params'   => self::redactedParams($params),
+			'params'   => self::redactedParams($params, $additionalSensitiveKeys),
 			'state'    => $this->state,
 		]);
 
@@ -248,10 +278,15 @@ final class TokenEndpointClient {
 
 	/**
 	 * @param array<string,string|list<string>> $params
+	 * @param list<string> $additionalSensitiveKeys Extends SENSITIVE_PARAM_KEYS for this one
+	 *                                               call - see requestClientCredentialsToken()'s
+	 *                                               $sensitiveExtraParamKeys for why this
+	 *                                               library cannot fill this list in on its own
+	 *                                               for a provider-specific extension param.
 	 * @return array<string,string|list<string>>
 	 */
-	private static function redactedParams( array $params ): array {
-		foreach( self::SENSITIVE_PARAM_KEYS as $key ) {
+	private static function redactedParams( array $params, array $additionalSensitiveKeys = [] ): array {
+		foreach( [ ...self::SENSITIVE_PARAM_KEYS, ...$additionalSensitiveKeys ] as $key ) {
 			if( isset($params[$key]) && is_string($params[$key]) ) {
 				$params[$key] = Redact::partial($params[$key]);
 			}

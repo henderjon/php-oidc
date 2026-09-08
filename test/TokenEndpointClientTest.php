@@ -411,6 +411,55 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertStringNotContainsString('the-authorization-code', json_encode($records));
 	}
 
+	public function testClientCredentialsLogsAnUnflaggedExtraParamInFull(): void {
+		// audience is the common, genuinely benign case - not secret, and worth seeing in full
+		// for debugging a provider that narrowed or rejected it.
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config(), extraParams: [ 'audience' => 'https://api.example.com' ]);
+
+		$request = $logger->recordsAt(LogLevel::DEBUG)[0];
+		$this->assertSame('https://api.example.com', $request['context']['params']['audience']);
+	}
+
+	public function testClientCredentialsRedactsAnExtraParamFlaggedSensitive(): void {
+		// This library has no way to know a provider-specific extension key like
+		// client_assertion (RFC 7523) is just as replayable as client_secret - the caller has
+		// to say so.
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken(
+			$this->config(),
+			extraParams: [ 'client_assertion' => 'the-signed-jwt-assertion' ],
+			sensitiveExtraParamKeys: [ 'client_assertion' ],
+		);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$request = $records[0];
+
+		$this->assertSame(Redact::partial('the-signed-jwt-assertion'), $request['context']['params']['client_assertion']);
+		$this->assertStringNotContainsString('the-signed-jwt-assertion', json_encode($records));
+	}
+
+	public function testSensitiveExtraParamKeysDoesNotRedactAnUnrelatedParam(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken(
+			$this->config(),
+			extraParams: [ 'audience' => 'https://api.example.com', 'client_assertion' => 'the-signed-jwt-assertion' ],
+			sensitiveExtraParamKeys: [ 'client_assertion' ],
+		);
+
+		$request = $logger->recordsAt(LogLevel::DEBUG)[0];
+		$this->assertSame('https://api.example.com', $request['context']['params']['audience']);
+	}
+
 	public function testWhenScopedTheStateReachesBothItsOwnLogsAndClientAuthenticatorsThroughTheSameLogger(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
