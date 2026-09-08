@@ -49,6 +49,20 @@ use Psr\SimpleCache\CacheInterface;
  * server enforces that a code is redeemable only once (RFC 6749 §4.1.2).
  * The race can cause a confusing double local attempt; it cannot itself
  * produce two valid sessions from one code.
+ *
+ * Every method here assumes the injected `LoggerInterface` does not throw. Nothing in this
+ * class, or anywhere else in this library, catches an exception a logger raises - it propagates
+ * exactly like any other exception, interrupting whichever method was logging at the time. That
+ * is worth knowing because `consume()` calls `delete()` before it logs anything: if the injected
+ * logger throws on that final debug call, the cache entry has already been cleared, so the
+ * interrupted attempt cannot be completed by retrying the same callback - the state now matches
+ * nothing, indistinguishable from an expired or forged one, and the caller has to restart the
+ * whole authorization flow. `start()` has a milder version of the same risk: a throwing logger
+ * on its own success-path debug call aborts `start()` after the cache write already succeeded,
+ * leaving an inert entry nobody was ever given the state to reach - harmless, but still a
+ * logging failure masquerading as this method's own failure. A logger that might throw (a
+ * remote log shipper timing out, a full disk) should be wrapped in one that catches its own
+ * exceptions before being passed in here, if that failure mode matters to the caller.
  */
 final class AuthorizationStateStore {
 
@@ -76,6 +90,10 @@ final class AuthorizationStateStore {
 	 *         rather than hand back a FlowState pointing at an attempt that was never
 	 *         actually persisted, which `consume()` could never find later no matter what
 	 *         the provider echoes back.
+	 * @throws \Throwable Whatever the injected logger itself throws, if it throws at all - see
+	 *         this class's own docblock. The cache write above has already succeeded by the
+	 *         time this method logs, so that failure mode is a logging problem, not this
+	 *         method's own, even though it surfaces the same way.
 	 */
 	public function start(int $length = 16, ?string $codeVerifier = null): FlowState {
 		$state = $this->randomToken($length);
@@ -110,6 +128,13 @@ final class AuthorizationStateStore {
 	 * entry, and one evicted early by the cache backend all log identically
 	 * as "not found". Only a hit that is not the shape this class wrote
 	 * (`corrupted`) is actually distinguishable from that.
+	 *
+	 * @throws \Throwable Whatever the injected logger itself throws, if it throws at all - see
+	 *         this class's own docblock. The cache entry has already been deleted above by the
+	 *         time any of this method's own logging happens, so a throwing logger here
+	 *         interrupts an otherwise-successful match: the caller gets neither a `FlowState`
+	 *         nor a clean rejection, and the same callback cannot be retried, since the entry
+	 *         backing it is already gone.
 	 */
 	public function consume(string $state): ?FlowState {
 		$key     = $this->flowKey($state);

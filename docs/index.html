@@ -579,6 +579,18 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         noise.
       </p>
       <p>
+        This library assumes the logger passed in never throws. Nothing here catches an
+        exception a logger raises - it propagates like any other exception and interrupts
+        whichever call was in progress, including one already past the point of no return. In
+        <code>AuthorizationStateStore::consume()</code> specifically, the cache entry backing an
+        attempt is deleted before that method logs anything, so a throwing logger there aborts an
+        otherwise-successful login and leaves the attempt unrecoverable - the same callback
+        cannot be retried, since the entry it depended on is already gone. A logger that might
+        throw (a remote log shipper timing out, a full disk) should be wrapped in one that
+        catches its own exceptions before being passed to this library, if that failure mode
+        matters to the caller.
+      </p>
+      <p>
         The levels this library actually emits, for choosing what to pass into
         <code>LogLevelFilterLogger</code>'s <code>$levels</code>:
       </p>
@@ -760,29 +772,29 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
     public function __construct(
         Psr\Log\LoggerInterface $logger,
         array $levels,
-        bool $include = true,
+        bool $allow = true,
     )
 
     public static function all( Psr\Log\LoggerInterface $logger ): self
 }</div>
       <p>
-        <code>$levels</code> and <code>$include</code> together express four distinct patterns,
+        <code>$levels</code> and <code>$allow</code> together express four distinct patterns,
         not just one allow-list:
       </p>
       <table>
         <thead><tr><th>Pattern</th><th>Usage</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td>none</td><td><code>new LogLevelFilterLogger($logger, [])</code></td><td>Nothing passes. <code>$levels</code> is empty and <code>$include</code> defaults <code>true</code>, so no level can ever satisfy the membership test.</td></tr>
+          <tr><td>none</td><td><code>new LogLevelFilterLogger($logger, [])</code></td><td>Nothing passes. <code>$levels</code> is empty and <code>$allow</code> defaults <code>true</code>, so no level can ever satisfy the membership test.</td></tr>
           <tr><td>none, except</td><td><code>new LogLevelFilterLogger($logger, [ LogLevel::DEBUG ])</code></td><td>The ordinary allow-list case: nothing passes except the levels named.</td></tr>
-          <tr><td>all</td><td><code>new LogLevelFilterLogger($logger, [], include: false)</code><br>Sugar: <code>LogLevelFilterLogger::all($logger)</code></td><td>Everything passes, including a level neither PSR-3 nor the caller has defined yet.</td></tr>
-          <tr><td>all, except</td><td><code>new LogLevelFilterLogger($logger, [ LogLevel::DEBUG ], include: false)</code></td><td>The deny-list case: everything passes except the levels named, including one that does not exist yet. The mirror image of "none, except."</td></tr>
+          <tr><td>all</td><td><code>new LogLevelFilterLogger($logger, [], allow: false)</code><br>Sugar: <code>LogLevelFilterLogger::all($logger)</code></td><td>Everything passes, including a level neither PSR-3 nor the caller has defined yet.</td></tr>
+          <tr><td>all, except</td><td><code>new LogLevelFilterLogger($logger, [ LogLevel::DEBUG ], allow: false)</code></td><td>The deny-list case: everything passes except the levels named, including one that does not exist yet. The mirror image of "none, except."</td></tr>
         </tbody>
       </table>
       <p>
         The default, opt-in posture - "none, except" - is the same reason this class exists at
         all (see <a href="#Logging">Logging</a>): the default stance toward this library's noise
         is to filter all of it, not to let everything through until told otherwise. Pass an
-        empty array with the default <code>$include</code> and every log call is dropped,
+        empty array with the default <code>$allow</code> and every log call is dropped,
         including a level a caller might assume always gets through, such as <code>error</code>
         - nothing passes unless its exact level is named.
       </p>
@@ -803,20 +815,20 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
         "Every level, without having to name any of them" - the one case not reachable just by
         listing levels, custom or not, since it does not require knowing in advance which levels
         might ever be logged - is technically reachable directly as an empty deny-list
-        (<code>new LogLevelFilterLogger($logger, [], include: false)</code>), but that is not
+        (<code>new LogLevelFilterLogger($logger, [], allow: false)</code>), but that is not
         obviously what it means at a glance. Use the <code>all()</code> named constructor
         instead:
       </p>
       <pre>$logger = LogLevelFilterLogger::all($yourAppLogger);</pre>
       <p>
-        The default, <code>$include: true</code>, fails <em>closed</em> - a level nobody named
+        The default, <code>$allow: true</code>, fails <em>closed</em> - a level nobody named
         gets dropped, including one this library or a wrapped logger adds later.
-        <code>$include: false</code> fails <em>open</em> - a level nobody named gets forwarded
+        <code>$allow: false</code> fails <em>open</em> - a level nobody named gets forwarded
         instead. That is a deliberate trade for the specific case it exists for (skip this
         library's <code>debug</code> tracing, forward every other level unconditionally), not a
         reason to prefer it generally over naming an allow-list directly. It is also why
         <code>$levels</code> is not called <code>$allowedLevels</code> or
-        <code>$excludedLevels</code>: it holds an allow-list when <code>$include</code> is true
+        <code>$excludedLevels</code>: it holds an allow-list when <code>$allow</code> is true
         and a deny-list when it is false, and a name tied to one mode would be wrong in the
         other.
       </p>
