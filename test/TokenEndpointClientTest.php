@@ -445,6 +445,30 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertStringNotContainsString('the-signed-jwt-assertion', json_encode($records));
 	}
 
+	public function testRedactsEveryItemOfAListValuedExtraParamFlaggedSensitive(): void {
+		// extraParams supports RFC 8707-style repeated keys (a list value) as well as plain
+		// strings - a sensitive one must not skip redaction just because it is a list.
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken(
+			$this->config(),
+			extraParams: [ 'secret_list' => [ 'the-first-secret', 'the-second-secret' ] ],
+			sensitiveExtraParamKeys: [ 'secret_list' ],
+		);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$request = $records[0];
+
+		$this->assertSame(
+			[ Redact::partial('the-first-secret'), Redact::partial('the-second-secret') ],
+			$request['context']['params']['secret_list'],
+		);
+		$this->assertStringNotContainsString('the-first-secret', json_encode($records));
+		$this->assertStringNotContainsString('the-second-secret', json_encode($records));
+	}
+
 	public function testSensitiveExtraParamKeysDoesNotRedactAnUnrelatedParam(): void {
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'x' ], JSON_THROW_ON_ERROR), 200));

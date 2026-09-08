@@ -16,7 +16,15 @@ namespace Oidc;
  */
 final class Truncate {
 
+	/**
+	 * @param int $maxLength A negative value is clamped to 0 rather than left to trigger
+	 *                        substr()'s own negative-length meaning ("all but the last N
+	 *                        characters") - not what a caller reaching for a max length wants,
+	 *                        and not distinguishable from a real bug in whatever computed it.
+	 */
 	public static function to( string $value, int $maxLength ): string {
+		$maxLength = max(0, $maxLength);
+
 		return strlen($value) > $maxLength
 			? substr($value, 0, $maxLength) . '...(truncated)'
 			: $value;

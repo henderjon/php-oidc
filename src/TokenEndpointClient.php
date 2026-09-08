@@ -277,6 +277,12 @@ final class TokenEndpointClient {
 	}
 
 	/**
+	 * A sensitive key's value can be a plain string or, per RFC 8707's repeated-key
+	 * convention (see requestClientCredentialsToken()'s own $extraParams docblock), a list of
+	 * them - a list-valued sensitive param needs every item redacted, not just the key skipped,
+	 * or a caller flagging a multi-valued provider extension via $sensitiveExtraParamKeys would
+	 * still see every value logged in full.
+	 *
 	 * @param array<string,string|list<string>> $params
 	 * @param list<string> $additionalSensitiveKeys Extends SENSITIVE_PARAM_KEYS for this one
 	 *                                               call - see requestClientCredentialsToken()'s
@@ -287,12 +293,25 @@ final class TokenEndpointClient {
 	 */
 	private static function redactedParams( array $params, array $additionalSensitiveKeys = [] ): array {
 		foreach( [ ...self::SENSITIVE_PARAM_KEYS, ...$additionalSensitiveKeys ] as $key ) {
-			if( isset($params[$key]) && is_string($params[$key]) ) {
-				$params[$key] = Redact::partial($params[$key]);
+			if( !isset($params[$key]) ) {
+				continue;
 			}
+
+			$params[$key] = is_array($params[$key])
+				? array_map(self::redactedScalar(...), $params[$key])
+				: self::redactedScalar($params[$key]);
 		}
 
 		return $params;
+	}
+
+	/**
+	 * Redact::partial() only accepts a string - a value flagged sensitive but not actually a
+	 * string (a caller passed something PHP's own type system doesn't stop, despite $params's
+	 * documented shape) is returned as-is rather than passed somewhere it would error.
+	 */
+	private static function redactedScalar( mixed $value ): mixed {
+		return is_string($value) ? Redact::partial($value) : $value;
 	}
 
 	/**
