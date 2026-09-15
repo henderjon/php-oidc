@@ -94,7 +94,7 @@ final class ProviderMetadataResolver {
 
 			$this->logger->error('OIDC: provider configuration is missing the requested endpoint', [
 				'endpoint_key' => $endpointKey,
-				'provider_url' => $issuer,
+				'issuer'       => $issuer,
 				'state'        => $this->state,
 				'security_relevant' => false,
 			]);
@@ -128,8 +128,8 @@ final class ProviderMetadataResolver {
 
 		if( isset($this->discovered[$issuer]) ) {
 			$this->logger->debug('OIDC: reusing an already-fetched provider configuration', [
-				'provider_url' => $issuer,
-				'state'        => $this->state,
+				'issuer' => $issuer,
+				'state'  => $this->state,
 			]);
 
 			return $this->discovered[$issuer];
@@ -144,7 +144,7 @@ final class ProviderMetadataResolver {
 		$url = rtrim($issuer, '/') . '/.well-known/openid-configuration';
 
 		$this->logger->debug('OIDC: discovering provider configuration via /.well-known/openid-configuration', [
-			'provider_url'  => $issuer,
+			'issuer'        => $issuer,
 			'discovery_url' => $url,
 			'state'         => $this->state,
 		]);
@@ -215,7 +215,7 @@ final class ProviderMetadataResolver {
 		$this->assertIssuerMatches($decoded, $issuer);
 
 		$this->logger->debug('OIDC: fetched a fresh provider configuration', [
-			'provider_url'         => $issuer,
+			'issuer'               => $issuer,
 			'discovery_url'        => $url,
 			'advertised_endpoints' => array_keys($decoded),
 			'state'                => $this->state,

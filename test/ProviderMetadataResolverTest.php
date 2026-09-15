@@ -406,7 +406,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 
 		$discovering = $logger->recordsAt(LogLevel::DEBUG)[0];
-		$this->assertSame('https://issuer.example.com', $discovering['context']['provider_url']);
+		$this->assertSame('https://issuer.example.com', $discovering['context']['issuer']);
 		$this->assertSame('https://issuer.example.com/.well-known/openid-configuration', $discovering['context']['discovery_url']);
 	}
 
@@ -432,7 +432,7 @@ class ProviderMetadataResolverTest extends TestCase {
 			static fn ( array $record ): bool => $record['message'] === 'OIDC: reusing an already-fetched provider configuration',
 		));
 		$this->assertCount(1, $reuseRecords);
-		$this->assertSame('https://issuer.example.com', $reuseRecords[0]['context']['provider_url']);
+		$this->assertSame('https://issuer.example.com', $reuseRecords[0]['context']['issuer']);
 	}
 
 	public function testWithStateCarriesOverAlreadyDiscoveredDocuments(): void {
