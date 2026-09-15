@@ -195,30 +195,35 @@ final class TokenEndpointClient {
 		}
 
 		if( $response->status !== 200 ) {
-			$error = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : "HTTP {$response->status}";
+			// RFC 6749 §5.2: error is REQUIRED whenever a provider reports one this way;
+			// error_description/error_uri are both OPTIONAL - a provider that includes
+			// error_description is handing over exactly the human-readable detail a developer
+			// needs to tell "expired code" apart from "wrong redirect_uri" apart from "client
+			// not authorized," all of which can legitimately produce the same error value.
+			// No ProviderError to attach at all when the response carried no `error` - an empty
+			// one (every field null) is not the same thing as "the provider reported nothing."
+			$providerErrorCode = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null;
+			$providerError      = $providerErrorCode !== null
+				? new ProviderError(
+					error: $providerErrorCode,
+					errorDescription: is_string($decoded['error_description'] ?? null) ? $decoded['error_description'] : null,
+					errorUri: is_string($decoded['error_uri'] ?? null) ? $decoded['error_uri'] : null,
+				)
+				: null;
+			$error = $providerErrorCode ?? "HTTP {$response->status}";
 
 			$this->logger->error('OIDC: token endpoint returned an unsuccessful response', [
 				'endpoint'                   => $endpoint,
 				'http_status'                => $response->status,
-				'provider_error'             => is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null,
-				// RFC 6749 §5.2 makes this OPTIONAL, but a provider that includes it is handing
-				// over exactly the human-readable detail a developer needs to tell "expired
-				// code" apart from "wrong redirect_uri" apart from "client not authorized" -
-				// all of which can legitimately produce the same provider_error value. The full
-				// response body is still on the exception via getRawBody() either way, but a
-				// caller debugging at this log line, not by catching and inspecting the
-				// exception, should not have to already know that to find it.
-				'provider_error_description' => is_array($decoded) && is_string($decoded['error_description'] ?? null) ? $decoded['error_description'] : null,
-				// Also OPTIONAL per RFC 6749 §5.2 - a URI to a human-readable page about the
-				// error, not prose itself, so it stays a separate field rather than appended to
-				// the description above.
-				'provider_error_uri'         => is_array($decoded) && is_string($decoded['error_uri'] ?? null) ? $decoded['error_uri'] : null,
+				'provider_error'             => $providerError?->error,
+				'provider_error_description' => $providerError?->errorDescription,
+				'provider_error_uri'         => $providerError?->errorUri,
 				'content_type'               => $response->contentType,
 				'state'                      => $this->state,
 				'security_relevant' => false,
 			]);
 
-			throw new TokenRequestException("Token request to {$endpoint} failed: {$error}", $response->status, $response->body, state: $this->state);
+			throw new TokenRequestException("Token request to {$endpoint} failed: {$error}", $response->status, $response->body, state: $this->state, providerError: $providerError);
 		}
 
 		if( !JsonContentTypePolicy::isAcceptable($response->contentType) ) {

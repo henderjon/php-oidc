@@ -238,6 +238,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
 			$this->assertSame('No issuer configured against which to validate the ID token', $e->getMessage());
+			$this->assertNull($e->getProviderError(), 'this failure has nothing to do with a provider-reported error');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -859,7 +860,11 @@ class OpenIDConnectClientTest extends TestCase {
 				'state'             => 'the-callback-state',
 			]));
 			$this->fail('Expected AuthenticationFailedException to be thrown');
-		} catch( AuthenticationFailedException ) {
+		} catch( AuthenticationFailedException $e ) {
+			$providerError = $e->getProviderError();
+			$this->assertSame('access_denied', $providerError?->error);
+			$this->assertSame('The user denied access', $providerError?->errorDescription);
+			$this->assertSame('https://example.com/errors/access_denied', $providerError?->errorUri);
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -1308,6 +1313,7 @@ class OpenIDConnectClientTest extends TestCase {
 		} catch( UserInfoRequestException $e ) {
 			$this->assertSame(401, $e->getHttpStatus());
 			$this->assertSame('unauthorized', $e->getRawBody());
+			$this->assertNull($e->getProviderError(), 'no WWW-Authenticate header on this response - nothing to parse');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -1333,7 +1339,11 @@ class OpenIDConnectClientTest extends TestCase {
 		try {
 			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 			$this->fail('Expected UserInfoRequestException to be thrown');
-		} catch( UserInfoRequestException ) {
+		} catch( UserInfoRequestException $e ) {
+			$providerError = $e->getProviderError();
+			$this->assertSame('invalid_token', $providerError?->error);
+			$this->assertSame('The access token expired', $providerError?->errorDescription);
+			$this->assertSame('https://example.com/errors/invalid_token', $providerError?->errorUri);
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
