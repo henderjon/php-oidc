@@ -26,7 +26,7 @@ class MockOpenIDConnectClientTest extends TestCase {
 
 	public function testBuildRedirectsReturnTheConfiguredUrl(): void {
 		$mock              = new MockOpenIDConnectClient;
-		$mock->redirectUrl = 'https://example.com/configured';
+		$mock->redirectUri = 'https://example.com/configured';
 
 		$this->assertSame('https://example.com/configured', $mock->buildAuthorizationCodeRedirect($this->config())->url);
 		$this->assertSame('https://example.com/configured', $mock->buildImplicitFlowRedirect($this->config())->url);

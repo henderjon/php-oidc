@@ -23,7 +23,7 @@ class UrlPolicyTest extends TestCase {
 		return new OpenIDConnectClientConfig(
 			clientId: 'the-client-id',
 			clientSecret: 'the-client-secret',
-			redirectUrl: 'https://example.com/callback',
+			redirectUri: 'https://example.com/callback',
 			issuer: $issuer,
 			allowInsecureSchemes: $allowInsecureSchemes,
 			allowedHosts: $allowedHosts,

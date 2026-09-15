@@ -39,7 +39,7 @@ $config = new OpenIDConnectClientConfig(
 	// HS256 needs at least 256 bits (32 bytes) of key material - firebase/php-jwt rejects
 	// anything shorter on both sign and verify.
 	clientSecret: 'example-secret-0123456789abcdef0123456789',
-	redirectUrl: 'https://application.example.test/oidc/callback',
+	redirectUri: 'https://application.example.test/oidc/callback',
 	issuer: $providerUrl,
 	allowedAlgorithms: [ 'HS256' ],
 );

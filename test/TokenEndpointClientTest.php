@@ -17,7 +17,7 @@ class TokenEndpointClientTest extends TestCase {
 		return new OpenIDConnectClientConfig(
 			clientId: 'the-client-id',
 			clientSecret: 'the-client-secret',
-			redirectUrl: 'https://example.com/callback',
+			redirectUri: 'https://example.com/callback',
 			endpointOverrides: [ ProviderMetadataResolver::TOKEN_ENDPOINT => self::TOKEN_ENDPOINT ],
 		);
 	}
@@ -416,7 +416,7 @@ class TokenEndpointClientTest extends TestCase {
 		$config = new OpenIDConnectClientConfig(
 			clientId: 'the-client-id',
 			clientSecret: '',
-			redirectUrl: 'https://example.com/callback',
+			redirectUri: 'https://example.com/callback',
 			endpointOverrides: [ ProviderMetadataResolver::TOKEN_ENDPOINT => self::TOKEN_ENDPOINT ],
 		);
 

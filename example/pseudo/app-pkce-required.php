@@ -12,7 +12,7 @@ use Oidc\PkceMode;
 $config = (new OpenIDConnectClientConfig(
 	clientId: 'my-client-id',
 	clientSecret: 'my-client-secret',
-	redirectUrl: 'https://app.example.com/oidc/callback',
+	redirectUri: 'https://app.example.com/oidc/callback',
 	issuer: 'https://idp.example.com',
 ))->withPkce(PkceMode::Required);
 

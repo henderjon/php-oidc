@@ -40,7 +40,7 @@ $config = new OpenIDConnectClientConfig(
 	// scenarios below to reach this library's own algorithm policy instead of failing
 	// earlier for an unrelated reason.
 	clientSecret: 'example-secret-0123456789abcdef0123456789',
-	redirectUrl: 'https://application.example.test/oidc/callback',
+	redirectUri: 'https://application.example.test/oidc/callback',
 	issuer: $providerUrl,
 );
 

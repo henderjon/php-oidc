@@ -30,7 +30,7 @@ class OpenIDConnectClientTest extends TestCase {
 		return new OpenIDConnectClientConfig(
 			clientId: self::CLIENT_ID,
 			clientSecret: self::CLIENT_SECRET,
-			redirectUrl: self::REDIRECT_URL,
+			redirectUri: self::REDIRECT_URL,
 			issuer: self::ISSUER,
 			endpointOverrides: [
 				ProviderMetadataResolver::AUTHORIZATION_ENDPOINT => self::AUTHORIZATION_ENDPOINT,
@@ -211,7 +211,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$config = new OpenIDConnectClientConfig(
 			clientId: self::CLIENT_ID,
 			clientSecret: self::CLIENT_SECRET,
-			redirectUrl: self::REDIRECT_URL,
+			redirectUri: self::REDIRECT_URL,
 			endpointOverrides: [
 				ProviderMetadataResolver::AUTHORIZATION_ENDPOINT => self::AUTHORIZATION_ENDPOINT,
 				ProviderMetadataResolver::TOKEN_ENDPOINT         => self::TOKEN_ENDPOINT,
@@ -419,7 +419,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$config = new OpenIDConnectClientConfig(
 			clientId: self::CLIENT_ID,
 			clientSecret: self::CLIENT_SECRET,
-			redirectUrl: self::REDIRECT_URL,
+			redirectUri: self::REDIRECT_URL,
 			issuer: self::ISSUER,
 		);
 
@@ -1410,7 +1410,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$config = new OpenIDConnectClientConfig(
 			clientId: self::CLIENT_ID,
 			clientSecret: self::CLIENT_SECRET,
-			redirectUrl: self::REDIRECT_URL,
+			redirectUri: self::REDIRECT_URL,
 			endpointOverrides: [
 				ProviderMetadataResolver::JWKS_URI          => self::JWKS_URI,
 				ProviderMetadataResolver::USERINFO_ENDPOINT => self::USERINFO_ENDPOINT,
