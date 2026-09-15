@@ -20,7 +20,6 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertSame('client-id', $config->clientId);
 		$this->assertSame('client-secret', $config->clientSecret);
 		$this->assertSame('https://example.com/callback', $config->redirectUri);
-		$this->assertNull($config->providerUrl);
 		$this->assertNull($config->issuer);
 		$this->assertSame([], $config->scopes);
 		$this->assertSame([], $config->endpointOverrides);
@@ -55,20 +54,6 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$new = $this->makeConfig()->withRedirectUri('https://example.com/other');
 
 		$this->assertSame('https://example.com/other', $new->redirectUri);
-	}
-
-	public function testWithProviderUrl(): void {
-		$config = $this->makeConfig();
-		$new    = $config->withProviderUrl('https://issuer.example.com');
-
-		$this->assertNull($config->providerUrl);
-		$this->assertSame('https://issuer.example.com', $new->providerUrl);
-	}
-
-	public function testWithProviderUrlCanClearToNull(): void {
-		$new = $this->makeConfig()->withProviderUrl('https://issuer.example.com')->withProviderUrl(null);
-
-		$this->assertNull($new->providerUrl);
 	}
 
 	public function testWithIssuer(): void {

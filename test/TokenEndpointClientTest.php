@@ -216,6 +216,8 @@ class TokenEndpointClientTest extends TestCase {
 			$this->fail('Expected a TokenRequestException to be thrown');
 		} catch( TokenRequestException $e ) {
 			$this->assertStringContainsString('invalid_grant', $e->getMessage());
+			$this->assertSame('invalid_grant', $e->getProviderError()?->error);
+			$this->assertNull($e->getProviderError()?->errorDescription);
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -244,7 +246,11 @@ class TokenEndpointClientTest extends TestCase {
 		try {
 			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
 			$this->fail('Expected a TokenRequestException to be thrown');
-		} catch( TokenRequestException ) {
+		} catch( TokenRequestException $e ) {
+			$providerError = $e->getProviderError();
+			$this->assertSame('invalid_request', $providerError?->error);
+			$this->assertSame('The authorization code has expired', $providerError?->errorDescription);
+			$this->assertSame('https://example.com/errors/invalid_request', $providerError?->errorUri);
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -280,7 +286,8 @@ class TokenEndpointClientTest extends TestCase {
 		try {
 			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
 			$this->fail('Expected a TokenRequestException to be thrown');
-		} catch( TokenRequestException ) {
+		} catch( TokenRequestException $e ) {
+			$this->assertNull($e->getProviderError(), 'a transport failure never reached the provider - there is nothing to attach');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);

@@ -6,6 +6,7 @@
 
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Exceptions\OpenIDConnectException;
+use Oidc\Exceptions\ProviderErrorAwareInterface;
 use Oidc\Exceptions\TokenRequestException;
 use Oidc\Exceptions\UserInfoRequestException;
 use Oidc\IncomingAuthorizationResponse;
@@ -16,7 +17,7 @@ $config = new OpenIDConnectClientConfig(
 	clientId: 'my-client-id',
 	clientSecret: 'my-client-secret',
 	redirectUri: 'https://app.example.com/oidc/callback',
-	providerUrl: 'https://idp.example.com',
+	issuer: 'https://idp.example.com',
 );
 
 $client = (new OpenIDConnectClientFactory())->make($psr16Cache, $session->id);
@@ -49,6 +50,12 @@ try {
 	if ($e instanceof TokenRequestException || $e instanceof UserInfoRequestException) {
 		$context['http_status'] = $e->getHttpStatus();
 		$context['raw_body']    = $e->getRawBody();
+	}
+
+	// ProviderErrorAwareInterface covers all three of the types above at once - the point of
+	// having it, rather than three separate instanceof checks for the identical getter.
+	if ($e instanceof ProviderErrorAwareInterface) {
+		$context['provider_error'] = $e->getProviderError();
 	}
 
 	log_error('oidc callback failed', $context);

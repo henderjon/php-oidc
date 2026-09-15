@@ -13,7 +13,7 @@ $config = (new OpenIDConnectClientConfig(
 	clientId: 'my-client-id',
 	clientSecret: 'my-client-secret',
 	redirectUri: 'https://app.example.com/oidc/callback',
-	providerUrl: 'https://idp.example.com',
+	issuer: 'https://idp.example.com',
 ))->withPkce(PkceMode::Required);
 
 // The cache suffix must come from the current user's session, not a static string -

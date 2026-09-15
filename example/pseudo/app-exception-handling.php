@@ -23,7 +23,7 @@ $config = new OpenIDConnectClientConfig(
 	clientId: 'my-client-id',
 	clientSecret: 'my-client-secret',
 	redirectUri: 'https://app.example.com/oidc/callback',
-	providerUrl: 'https://idp.example.com',
+	issuer: 'https://idp.example.com',
 );
 
 $client = (new OpenIDConnectClientFactory())->make($psr16Cache, $session->id);
@@ -57,8 +57,12 @@ try {
 	// fail-fast, so decoding the whole token is the only way to see every claim it carried,
 	// not just the one that happened to trip the first check.
 	log_error('oidc callback: authentication failed', [
-		'state'    => $e->getState(),
-		'id_token' => $e->getIdToken(),
+		'state'          => $e->getState(),
+		'id_token'       => $e->getIdToken(),
+		// Null except when this failure was itself a provider-returned error on the
+		// callback - a state/nonce mismatch or ID token validation failure has nothing to
+		// attach here.
+		'provider_error' => $e->getProviderError(),
 	]);
 	abort_login($e);
 } catch (ProviderDiscoveryException $e) {
@@ -69,9 +73,10 @@ try {
 	// getHttpStatus()/getRawBody() are the actual response - both null only for a transport
 	// failure that never reached the server at all.
 	log_error('oidc callback: token request failed', [
-		'state'       => $e->getState(),
-		'http_status' => $e->getHttpStatus(),
-		'raw_body'    => $e->getRawBody(),
+		'state'          => $e->getState(),
+		'http_status'    => $e->getHttpStatus(),
+		'raw_body'       => $e->getRawBody(),
+		'provider_error' => $e->getProviderError(),
 	]);
 	abort_login($e);
 }
@@ -83,8 +88,9 @@ try {
 	$token = $client->requestClientCredentialsToken($config, scopes: [ 'api.read' ]);
 } catch (TokenRequestException $e) {
 	log_error('client credentials: token request failed', [
-		'http_status' => $e->getHttpStatus(),
-		'raw_body'    => $e->getRawBody(),
+		'http_status'    => $e->getHttpStatus(),
+		'raw_body'       => $e->getRawBody(),
+		'provider_error' => $e->getProviderError(),
 	]);
 
 	return;
@@ -99,8 +105,9 @@ try {
 	$userInfo = $client->fetchUserInfo($config, (string)$result->accessToken, $result->claims->get('sub'));
 } catch (UserInfoRequestException $e) {
 	log_error('oidc callback: userinfo request failed', [
-		'http_status' => $e->getHttpStatus(),
-		'raw_body'    => $e->getRawBody(),
+		'http_status'    => $e->getHttpStatus(),
+		'raw_body'       => $e->getRawBody(),
+		'provider_error' => $e->getProviderError(),
 	]);
 	abort_login($e);
 }

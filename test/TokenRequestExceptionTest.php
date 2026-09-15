@@ -21,4 +21,17 @@ class TokenRequestExceptionTest extends TestCase {
 		$this->assertNull($exception->getState());
 	}
 
+	public function testGetProviderErrorDefaultsToNull(): void {
+		$exception = new TokenRequestException('token request failed');
+
+		$this->assertNull($exception->getProviderError());
+	}
+
+	public function testGetProviderErrorReturnsTheGivenValue(): void {
+		$providerError = new ProviderError('invalid_grant', 'The authorization code has expired');
+		$exception      = new TokenRequestException('token request failed', providerError: $providerError);
+
+		$this->assertSame($providerError, $exception->getProviderError());
+	}
+
 }

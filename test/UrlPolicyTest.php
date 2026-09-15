@@ -18,14 +18,12 @@ class UrlPolicyTest extends TestCase {
 		bool $allowInsecureSchemes = false,
 		?array $allowedHosts = null,
 		bool $allowAnyHost = false,
-		?string $providerUrl = null,
 		?string $issuer = null,
 	): OpenIDConnectClientConfig {
 		return new OpenIDConnectClientConfig(
 			clientId: 'the-client-id',
 			clientSecret: 'the-client-secret',
 			redirectUri: 'https://example.com/callback',
-			providerUrl: $providerUrl,
 			issuer: $issuer,
 			allowInsecureSchemes: $allowInsecureSchemes,
 			allowedHosts: $allowedHosts,
@@ -61,31 +59,23 @@ class UrlPolicyTest extends TestCase {
 		$this->assertFalse($this->urlPolicy->isAllowed('https:///no-host', $config));
 	}
 
-	public function testNoAllowlistAndNoProviderPermitsAnyHost(): void {
-		// Neither issuer nor providerUrl is set on this config - there is no discovery-driven
-		// trust boundary to protect (ProviderMetadataResolver never performs discovery at all
-		// without one of them), so this falls back to unrestricted rather than rejecting
-		// every host.
+	public function testNoAllowlistAndNoIssuerPermitsAnyHost(): void {
+		// issuer is not set on this config - there is no discovery-driven trust boundary to
+		// protect (ProviderMetadataResolver never performs discovery at all without one), so
+		// this falls back to unrestricted rather than rejecting every host.
 		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $this->config()));
 		$this->assertTrue($this->urlPolicy->isAllowed('https://anywhere.example.net/token', $this->config()));
 	}
 
-	public function testNoAllowlistFallsBackToTheProviderUrlHost(): void {
-		$config = $this->config(providerUrl: 'https://issuer.example.com');
+	public function testNoAllowlistFallsBackToTheIssuerHost(): void {
+		$config = $this->config(issuer: 'https://issuer.example.com');
 
 		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
 		$this->assertFalse($this->urlPolicy->isAllowed('https://attacker.example.net/token', $config));
 	}
 
-	public function testNoAllowlistPrefersTheIssuerHostOverProviderUrl(): void {
-		$config = $this->config(providerUrl: 'https://discovery.example.com', issuer: 'https://issuer.example.com');
-
-		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
-		$this->assertFalse($this->urlPolicy->isAllowed('https://discovery.example.com/token', $config));
-	}
-
-	public function testAllowAnyHostPermitsAnyHostEvenWithAProviderUrlSet(): void {
-		$config = $this->config(providerUrl: 'https://issuer.example.com', allowAnyHost: true);
+	public function testAllowAnyHostPermitsAnyHostEvenWithAnIssuerSet(): void {
+		$config = $this->config(issuer: 'https://issuer.example.com', allowAnyHost: true);
 
 		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
 		$this->assertTrue($this->urlPolicy->isAllowed('https://anywhere.example.net/token', $config));

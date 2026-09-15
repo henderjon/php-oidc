@@ -206,8 +206,8 @@ class OpenIDConnectClientTest extends TestCase {
 		$logger = new ArrayLogger;
 		$client = $this->makeClient($fetcher, logger: $logger);
 
-		// Neither issuer nor providerUrl set - resolveIssuer() returns null even though every
-		// endpoint needed to get this far is available via override.
+		// issuer is not set - even though every endpoint needed to get this far is available
+		// via override.
 		$config = new OpenIDConnectClientConfig(
 			clientId: self::CLIENT_ID,
 			clientSecret: self::CLIENT_SECRET,
@@ -238,6 +238,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
 			$this->assertSame('No issuer configured against which to validate the ID token', $e->getMessage());
+			$this->assertNull($e->getProviderError(), 'this failure has nothing to do with a provider-reported error');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -419,7 +420,6 @@ class OpenIDConnectClientTest extends TestCase {
 			clientId: self::CLIENT_ID,
 			clientSecret: self::CLIENT_SECRET,
 			redirectUri: self::REDIRECT_URL,
-			providerUrl: self::ISSUER,
 			issuer: self::ISSUER,
 		);
 
@@ -859,7 +859,11 @@ class OpenIDConnectClientTest extends TestCase {
 				'state'             => 'the-callback-state',
 			]));
 			$this->fail('Expected AuthenticationFailedException to be thrown');
-		} catch( AuthenticationFailedException ) {
+		} catch( AuthenticationFailedException $e ) {
+			$providerError = $e->getProviderError();
+			$this->assertSame('access_denied', $providerError?->error);
+			$this->assertSame('The user denied access', $providerError?->errorDescription);
+			$this->assertSame('https://example.com/errors/access_denied', $providerError?->errorUri);
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
@@ -1308,12 +1312,14 @@ class OpenIDConnectClientTest extends TestCase {
 		} catch( UserInfoRequestException $e ) {
 			$this->assertSame(401, $e->getHttpStatus());
 			$this->assertSame('unauthorized', $e->getRawBody());
+			$this->assertNull($e->getProviderError(), 'no WWW-Authenticate header on this response - nothing to parse');
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: userinfo endpoint returned an unsuccessful response', $records[0]['message']);
 		$this->assertSame(401, $records[0]['context']['http_status']);
+		$this->assertNull($records[0]['context']['www_authenticate'], 'no WWW-Authenticate header on this response');
 		$this->assertNull($records[0]['context']['provider_error'], 'no WWW-Authenticate header on this response - nothing to parse');
 		$this->assertNoPiiInContext($records[0]['context']);
 	}
@@ -1333,11 +1339,20 @@ class OpenIDConnectClientTest extends TestCase {
 		try {
 			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
 			$this->fail('Expected UserInfoRequestException to be thrown');
-		} catch( UserInfoRequestException ) {
+		} catch( UserInfoRequestException $e ) {
+			$providerError = $e->getProviderError();
+			$this->assertSame('invalid_token', $providerError?->error);
+			$this->assertSame('The access token expired', $providerError?->errorDescription);
+			$this->assertSame('https://example.com/errors/invalid_token', $providerError?->errorUri);
 		}
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
+		$this->assertSame(
+			'Bearer error="invalid_token", error_description="The access token expired", error_uri="https://example.com/errors/invalid_token"',
+			$records[0]['context']['www_authenticate'],
+			'the raw header must be logged verbatim alongside the parsed fields, so a parsing mismatch can be checked against it',
+		);
 		$this->assertSame('invalid_token', $records[0]['context']['provider_error']);
 		$this->assertSame('The access token expired', $records[0]['context']['provider_error_description']);
 		$this->assertSame('https://example.com/errors/invalid_token', $records[0]['context']['provider_error_uri']);

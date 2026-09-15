@@ -12,7 +12,7 @@ $config = new OpenIDConnectClientConfig(
 	clientId: 'my-client-id',
 	clientSecret: 'my-client-secret',
 	redirectUri: 'https://app.example.com/oidc/callback',
-	providerUrl: 'https://idp.example.com',
+	issuer: 'https://idp.example.com',
 	// allowedAlgorithms defaults to ['RS256'] - a provider signing with anything else must
 	// be allowlisted explicitly. The token's own alg header never gets to pick how it is
 	// verified.

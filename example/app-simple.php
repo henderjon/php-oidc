@@ -42,7 +42,6 @@ $config = new OpenIDConnectClientConfig(
 	clientId: 'example-client',
 	clientSecret: 'example-secret',
 	redirectUri: 'https://application.example.test/oidc/callback',
-	providerUrl: $providerUrl,
 	issuer: $providerUrl,
 	scopes: [ 'profile', 'email' ],
 );

@@ -211,18 +211,31 @@ final class OpenIDConnectClient implements
 			// header, not a JSON body - the one place this library reads a response header at
 			// all, see FetchResponse::$wwwAuthenticate.
 			$wwwAuthenticateParams = $response->wwwAuthenticate !== null ? self::wwwAuthenticateParams($response->wwwAuthenticate) : [];
+			// No ProviderError to attach at all when the header carried no `error` - an empty
+			// one (every field null) is not the same thing as "the provider reported nothing."
+			$providerError = isset($wwwAuthenticateParams['error'])
+				? new ProviderError(
+					error: $wwwAuthenticateParams['error'],
+					errorDescription: $wwwAuthenticateParams['error_description'] ?? null,
+					errorUri: $wwwAuthenticateParams['error_uri'] ?? null,
+				)
+				: null;
 
 			$this->logger->error('OIDC: userinfo endpoint returned an unsuccessful response', [
 				'endpoint'                    => $endpoint,
 				'http_status'                 => $response->status,
 				'content_type'                => $response->contentType,
-				'provider_error'              => $wwwAuthenticateParams['error'] ?? null,
-				'provider_error_description'  => $wwwAuthenticateParams['error_description'] ?? null,
-				'provider_error_uri'          => $wwwAuthenticateParams['error_uri'] ?? null,
+				// Alongside the fields already parsed from it below - unlike the token
+				// endpoint's JSON body, nothing else here would otherwise show the actual
+				// header a caller debugging a parsing mismatch would need to check against.
+				'www_authenticate'            => $response->wwwAuthenticate,
+				'provider_error'              => $providerError?->error,
+				'provider_error_description'  => $providerError?->errorDescription,
+				'provider_error_uri'          => $providerError?->errorUri,
 				'security_relevant' => false,
 			]);
 
-			throw new UserInfoRequestException("Userinfo request to {$endpoint} failed with HTTP {$response->status}", $response->status, $response->body);
+			throw new UserInfoRequestException("Userinfo request to {$endpoint} failed with HTTP {$response->status}", $response->status, $response->body, providerError: $providerError);
 		}
 
 		if( $response->contentType === 'application/jwt' ) {
@@ -231,7 +244,7 @@ final class OpenIDConnectClient implements
 			// OpenID Connect Core 1.0 §5.3.2: iss/aud are only REQUIRED "if signed" - a plain
 			// JSON UserInfo response carries no such requirement, so these two checks are
 			// scoped to this branch only.
-			$issuer = $config->resolveIssuer();
+			$issuer = $config->issuer;
 
 			if( $issuer === null ) {
 				$this->logger->error('OIDC: no issuer configured against which to validate the signed userinfo response', [
@@ -417,20 +430,22 @@ final class OpenIDConnectClient implements
 		$summary = $response->errorSummary();
 
 		if( $summary !== null ) {
+			$providerError = new ProviderError($response->error, $response->errorDescription, $response->errorUri);
+
 			// This runs on every callback before the state is even checked - a bogus,
 			// unauthenticated request reaches it just as easily as a real one. Log before
 			// throwing, matching every other rejection in this class, so a provider-reported
 			// error is never silent just because this particular caller does not log the
 			// exception itself.
 			$this->logger->error('OIDC: provider returned an error on the callback', [
-				'error'             => $response->error,
-				'error_description' => $response->errorDescription,
-				'error_uri'         => $response->errorUri,
+				'error'             => $providerError->error,
+				'error_description' => $providerError->errorDescription,
+				'error_uri'         => $providerError->errorUri,
 				'state'             => $response->state,
 				'security_relevant' => false,
 			]);
 
-			throw new AuthenticationFailedException("Provider returned an error: {$summary}", state: $response->state);
+			throw new AuthenticationFailedException("Provider returned an error: {$summary}", providerError: $providerError, state: $response->state);
 		}
 	}
 
@@ -472,7 +487,7 @@ final class OpenIDConnectClient implements
 			$idTokenVerifier = $this->idTokenVerifier->withState($state);
 			$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken, $requireAtHash);
 
-			$issuer = $config->resolveIssuer();
+			$issuer = $config->issuer;
 
 			if( $issuer === null ) {
 				$this->logger->error('OIDC: no issuer configured against which to validate the ID token', [
