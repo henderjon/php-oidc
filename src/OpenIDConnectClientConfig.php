@@ -7,9 +7,9 @@ namespace Oidc;
  *
  * Replaces jumbojett's nullable constructor args plus a chain of setter
  * calls with a single immutable value. The same shape covers both a
- * statically-known integration (provider URL/issuer/credentials fixed at
- * boot) and a multi-tenant one (issuer/credentials resolved per request
- * from a database row, `providerUrl`/`issuer` passed in fresh each call).
+ * statically-known integration (issuer/credentials fixed at boot) and a
+ * multi-tenant one (issuer/credentials resolved per request from a
+ * database row, `issuer` passed in fresh each call).
  *
  * There is deliberately no TLS-verification toggle here. Every network call this library
  * makes always verifies certificates and hostnames - the one narrow, loudly-logged exception
@@ -40,13 +40,12 @@ final class OpenIDConnectClientConfig {
 	 *                                                        scheme is enforced once, globally, via
 	 *                                                        `allowInsecureSchemes`, never per host. Null skips the
 	 *                                                        explicit-list check and falls back to a default: the
-	 *                                                        host of `issuer` (or `providerUrl`, when `issuer` is not
-	 *                                                        set), or every host when neither is configured or
-	 *                                                        `allowAnyHost` is set. A discovery document can name an
-	 *                                                        endpoint on any host it likes - this default means that,
-	 *                                                        without an explicit `allowedHosts`, a discovered
-	 *                                                        endpoint still has to stay on the provider's own host to
-	 *                                                        be followed.
+	 *                                                        host of `issuer`, or every host when `issuer` is not
+	 *                                                        configured or `allowAnyHost` is set. A discovery document
+	 *                                                        can name an endpoint on any host it likes - this default
+	 *                                                        means that, without an explicit `allowedHosts`, a
+	 *                                                        discovered endpoint still has to stay on the provider's
+	 *                                                        own host to be followed.
 	 * @param bool                     $allowAnyHost         Opts out of the default-to-provider-host fallback above
 	 *                                                        when `allowedHosts` is null, restoring "every host allowed"
 	 *                                                        for a provider that legitimately splits its endpoints
@@ -86,7 +85,6 @@ final class OpenIDConnectClientConfig {
 		public readonly string $clientSecret,
 		/** @todo v2 this will be renamed to redirectUri, matching the OIDC spec's `redirect_uri`. */
 		public readonly string $redirectUrl,
-		public readonly ?string $providerUrl = null,
 		public readonly ?string $issuer = null,
 		public readonly array $scopes = [],
 		public readonly array|string|null $audience = null,
@@ -105,7 +103,7 @@ final class OpenIDConnectClientConfig {
 
 	public function withClientId( string $clientId ): self {
 		return new self(
-			$clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -114,7 +112,7 @@ final class OpenIDConnectClientConfig {
 
 	public function withClientSecret( string $clientSecret ): self {
 		return new self(
-			$this->clientId, $clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -124,16 +122,7 @@ final class OpenIDConnectClientConfig {
 	/** @todo v2 this will be renamed to withRedirectUri, matching the OIDC spec's `redirect_uri`. */
 	public function withRedirectUrl( string $redirectUrl ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $redirectUrl, $this->providerUrl, $this->issuer,
-			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
-			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
-			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
-		);
-	}
-
-	public function withProviderUrl( ?string $providerUrl ): self {
-		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -142,7 +131,7 @@ final class OpenIDConnectClientConfig {
 
 	public function withIssuer( ?string $issuer ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -154,7 +143,7 @@ final class OpenIDConnectClientConfig {
 	 */
 	public function withScopes( array $scopes ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			array_values(array_unique([ ...$this->scopes, ...$scopes ])),
 			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
@@ -167,7 +156,7 @@ final class OpenIDConnectClientConfig {
 	 */
 	public function withAudience( array|string|null $audience ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -179,7 +168,7 @@ final class OpenIDConnectClientConfig {
 	 */
 	public function withEndpointOverrides( array $endpointOverrides ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -191,7 +180,7 @@ final class OpenIDConnectClientConfig {
 	 */
 	public function withExtraAuthParams( array $extraAuthParams ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -200,7 +189,7 @@ final class OpenIDConnectClientConfig {
 
 	public function withPkce( PkceMode $pkce ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -209,7 +198,7 @@ final class OpenIDConnectClientConfig {
 
 	public function withAllowInsecureSchemes( bool $allowInsecureSchemes ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -228,7 +217,7 @@ final class OpenIDConnectClientConfig {
 	 */
 	public function withAllowedHosts( ?array $allowedHosts ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -244,7 +233,7 @@ final class OpenIDConnectClientConfig {
 	 */
 	public function withAllowedAlgorithms( array $allowedAlgorithms ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -256,7 +245,7 @@ final class OpenIDConnectClientConfig {
 	 */
 	public function withMaxTokenLifetimeSeconds( ?int $maxTokenLifetimeSeconds ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -265,7 +254,7 @@ final class OpenIDConnectClientConfig {
 
 	public function withAllowUntrustedAudiences( bool $allowUntrustedAudiences ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
@@ -277,7 +266,7 @@ final class OpenIDConnectClientConfig {
 	 */
 	public function withAllowAnyHost( bool $allowAnyHost ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $allowAnyHost, $this->clientAuthMethod,
@@ -286,22 +275,11 @@ final class OpenIDConnectClientConfig {
 
 	public function withClientAuthMethod( ClientAuthMethod $clientAuthMethod ): self {
 		return new self(
-			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->providerUrl, $this->issuer,
+			$this->clientId, $this->clientSecret, $this->redirectUrl, $this->issuer,
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $clientAuthMethod,
 		);
-	}
-
-	/**
-	 * The provider identity to fetch discovery from and validate everything else against:
-	 * `issuer`, when configured, or `providerUrl` as its fallback - never the other way
-	 * around. `providerUrl` exists for a caller that has not yet confirmed the provider's
-	 * canonical issuer (e.g. a base URL known before discovery has ever run); once `issuer`
-	 * is set, it always wins. Null when neither is configured.
-	 */
-	public function resolveIssuer(): ?string {
-		return $this->issuer ?? $this->providerUrl;
 	}
 
 }

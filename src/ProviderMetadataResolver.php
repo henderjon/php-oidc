@@ -88,18 +88,18 @@ final class ProviderMetadataResolver {
 		$value    = $document[$endpointKey] ?? null;
 
 		if( !is_string($value) || $value === '' ) {
-			// fetchWellKnownConfiguration() already rejected a null resolveIssuer() before
+			// fetchWellKnownConfiguration() already rejected a null $config->issuer before
 			// ever returning $document, so it is guaranteed non-null here.
-			$providerUrl = $config->resolveIssuer();
+			$issuer = $config->issuer;
 
 			$this->logger->error('OIDC: provider configuration is missing the requested endpoint', [
 				'endpoint_key' => $endpointKey,
-				'provider_url' => $providerUrl,
+				'provider_url' => $issuer,
 				'state'        => $this->state,
 				'security_relevant' => false,
 			]);
 
-			throw new ProviderDiscoveryException("Provider configuration from {$providerUrl} is missing '{$endpointKey}'", state: $this->state);
+			throw new ProviderDiscoveryException("Provider configuration from {$issuer} is missing '{$endpointKey}'", state: $this->state);
 		}
 
 		$this->assertUrlAllowed($value, $config, $endpointKey);
@@ -118,33 +118,33 @@ final class ProviderMetadataResolver {
 	 * @return array<string,mixed>
 	 */
 	private function fetchWellKnownConfiguration( OpenIDConnectClientConfig $config ): array {
-		$providerUrl = $config->resolveIssuer();
+		$issuer = $config->issuer;
 
-		if( $providerUrl === null ) {
-			$this->logger->error('OIDC: cannot discover provider configuration without a providerUrl or issuer', [ 'state' => $this->state, 'security_relevant' => false ]);
+		if( $issuer === null ) {
+			$this->logger->error('OIDC: cannot discover provider configuration without an issuer', [ 'state' => $this->state, 'security_relevant' => false ]);
 
-			throw new ProviderDiscoveryException('Cannot discover provider configuration without a providerUrl or issuer', state: $this->state);
+			throw new ProviderDiscoveryException('Cannot discover provider configuration without an issuer', state: $this->state);
 		}
 
-		if( isset($this->discovered[$providerUrl]) ) {
+		if( isset($this->discovered[$issuer]) ) {
 			$this->logger->debug('OIDC: reusing an already-fetched provider configuration', [
-				'provider_url' => $providerUrl,
+				'provider_url' => $issuer,
 				'state'        => $this->state,
 			]);
 
-			return $this->discovered[$providerUrl];
+			return $this->discovered[$issuer];
 		}
 
 		// OpenID Connect Discovery 1.0 §4: the provider's configuration document always lives
-		// at this well-known suffix appended to the issuer/providerUrl - never a URL configured
+		// at this well-known suffix appended to the issuer - never a URL configured
 		// separately, and never anything a caller chooses. Logged explicitly, by name, rather
 		// than leaving the convention only implicit in $url's own value - the "issuer plus
 		// /.well-known/openid-configuration" rule is exactly the detail worth restating every
 		// time discovery actually happens.
-		$url = rtrim($providerUrl, '/') . '/.well-known/openid-configuration';
+		$url = rtrim($issuer, '/') . '/.well-known/openid-configuration';
 
 		$this->logger->debug('OIDC: discovering provider configuration via /.well-known/openid-configuration', [
-			'provider_url'  => $providerUrl,
+			'provider_url'  => $issuer,
 			'discovery_url' => $url,
 			'state'         => $this->state,
 		]);
@@ -212,16 +212,16 @@ final class ProviderMetadataResolver {
 			throw new ProviderDiscoveryException("Provider configuration endpoint {$url} returned invalid JSON", state: $this->state, previous: $decodeError);
 		}
 
-		$this->assertIssuerMatches($decoded, $providerUrl);
+		$this->assertIssuerMatches($decoded, $issuer);
 
 		$this->logger->debug('OIDC: fetched a fresh provider configuration', [
-			'provider_url'         => $providerUrl,
+			'provider_url'         => $issuer,
 			'discovery_url'        => $url,
 			'advertised_endpoints' => array_keys($decoded),
 			'state'                => $this->state,
 		]);
 
-		return $this->discovered[$providerUrl] = $decoded;
+		return $this->discovered[$issuer] = $decoded;
 	}
 
 	/**
@@ -247,19 +247,19 @@ final class ProviderMetadataResolver {
 	 * (OpenID Connect Discovery 1.0 §4.3) - otherwise nothing else in the document can be
 	 * trusted, since a network attacker or a compromised provider could otherwise redirect
 	 * this client's endpoints anywhere. A trailing slash is normalized away first, since
-	 * issuer identifiers are conventionally written without one and providerUrl/issuer are
-	 * plain user-entered config - everything else (scheme, host, port, path) still has to
-	 * match exactly.
+	 * issuer identifiers are conventionally written without one and `issuer` is plain
+	 * user-entered config - everything else (scheme, host, port, path) still has to match
+	 * exactly.
 	 *
 	 * @param array<string,mixed> $document
 	 * @throws ProviderDiscoveryException
 	 */
-	private function assertIssuerMatches( array $document, string $providerUrl ): void {
-		$issuer = $document['issuer'] ?? null;
+	private function assertIssuerMatches( array $document, string $expectedIssuer ): void {
+		$actualIssuer = $document['issuer'] ?? null;
 
-		if( is_string($issuer) && rtrim($issuer, '/') === rtrim($providerUrl, '/') ) {
+		if( is_string($actualIssuer) && rtrim($actualIssuer, '/') === rtrim($expectedIssuer, '/') ) {
 			$this->logger->debug('OIDC: provider configuration issuer matches the URL used to fetch it', [
-				'issuer' => $issuer,
+				'issuer' => $actualIssuer,
 				'state'  => $this->state,
 			]);
 
@@ -267,13 +267,13 @@ final class ProviderMetadataResolver {
 		}
 
 		$this->logger->error('OIDC: provider configuration issuer does not match the URL used to fetch it', [
-			'expected' => $providerUrl,
-			'actual'   => $issuer,
+			'expected' => $expectedIssuer,
+			'actual'   => $actualIssuer,
 			'state'    => $this->state,
 			'security_relevant' => false,
 		]);
 
-		throw new ProviderDiscoveryException("Provider configuration issuer does not match {$providerUrl}, the URL used to fetch it", state: $this->state);
+		throw new ProviderDiscoveryException("Provider configuration issuer does not match {$expectedIssuer}, the URL used to fetch it", state: $this->state);
 	}
 
 }

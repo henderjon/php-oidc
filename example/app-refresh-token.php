@@ -40,7 +40,6 @@ $config = new OpenIDConnectClientConfig(
 	// anything shorter on both sign and verify.
 	clientSecret: 'example-secret-0123456789abcdef0123456789',
 	redirectUrl: 'https://application.example.test/oidc/callback',
-	providerUrl: $providerUrl,
 	issuer: $providerUrl,
 	allowedAlgorithms: [ 'HS256' ],
 );

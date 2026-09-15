@@ -19,7 +19,7 @@ class ProviderMetadataResolverTest extends TestCase {
 			clientId: 'client-id',
 			clientSecret: 'client-secret',
 			redirectUrl: 'https://example.com/callback',
-			providerUrl: 'https://issuer.example.com',
+			issuer: 'https://issuer.example.com',
 			endpointOverrides: $endpointOverrides,
 		);
 	}
@@ -81,7 +81,7 @@ class ProviderMetadataResolverTest extends TestCase {
 			clientId: 'client-id',
 			clientSecret: 'client-secret',
 			redirectUrl: 'https://example.com/callback',
-			providerUrl: 'http://issuer.example.com',
+			issuer: 'http://issuer.example.com',
 		);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
 
