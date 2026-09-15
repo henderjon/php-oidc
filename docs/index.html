@@ -345,7 +345,7 @@ $config = new OpenIDConnectClientConfig(
     clientId: 'my-client-id',
     clientSecret: 'my-client-secret',
     redirectUrl: 'https://app.example.com/oidc/callback',
-    providerUrl: 'https://idp.example.com',
+    issuer: 'https://idp.example.com',
 );
 
 $client = (new OpenIDConnectClientFactory())-&gt;make($psr16Cache);
@@ -436,7 +436,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         <thead><tr><th>Acronym</th><th>Stands for</th><th>In practice</th></tr></thead>
         <tbody>
           <tr><td><code>RP</code></td><td>Relying Party</td><td>Your application - the role this library plays for you.</td></tr>
-          <tr><td><code>OP</code></td><td>OpenID Provider</td><td>The identity provider you registered with (Google, Okta, Auth0, Azure AD, ...) - what <code>providerUrl</code>/<code>issuer</code> points at.</td></tr>
+          <tr><td><code>OP</code></td><td>OpenID Provider</td><td>The identity provider you registered with (Google, Okta, Auth0, Azure AD, ...) - what <code>issuer</code> points at.</td></tr>
           <tr><td><code>AS</code></td><td>Authorization Server</td><td>The generic OAuth name for that same server, used when no identity is involved at all (e.g. the Client Credentials grant).</td></tr>
           <tr><td><code>RS</code></td><td>Resource Server</td><td>Whatever API actually accepts the access token this library gets back - often the OP itself, sometimes a separate API.</td></tr>
           <tr><td><code>UA</code></td><td>User Agent</td><td>The end user's browser, carrying the redirect back and forth for every interactive flow.</td></tr>
@@ -508,7 +508,6 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         string $clientId,
         string $clientSecret,
         string $redirectUrl,
-        ?string $providerUrl = null,
         ?string $issuer = null,
         array $scopes = [],
         array|string|null $audience = null,
@@ -532,15 +531,14 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>clientId</code></td><td><code>string</code></td><td>required</td><td>Sent as <code>client_id</code> on every request.</td></tr>
           <tr><td><code>clientSecret</code></td><td><code>string</code></td><td>required</td><td>Empty string marks a <strong>public client</strong> - PKCE and client authentication both change behavior accordingly.</td></tr>
           <tr><td><code>redirectUrl</code></td><td><code>string</code></td><td>required</td><td>Must match the <code>redirect_uri</code> registered with the provider.</td></tr>
-          <tr><td><code>providerUrl</code></td><td><code>?string</code></td><td><code>null</code></td><td>Base URL for <code>.well-known/openid-configuration</code> discovery, and the default <code>issuer</code> when that is not set.</td></tr>
-          <tr><td><code>issuer</code></td><td><code>?string</code></td><td><code>null</code></td><td>Expected <code>iss</code> claim value. Falls back to <code>providerUrl</code>.</td></tr>
+          <tr><td><code>issuer</code></td><td><code>?string</code></td><td><code>null</code></td><td>Expected <code>iss</code> claim value, and the base URL for <code>.well-known/openid-configuration</code> discovery.</td></tr>
           <tr><td><code>scopes</code></td><td><code>list&lt;string&gt;</code></td><td><code>[]</code></td><td>Merged with the always-included <code>openid</code> scope.</td></tr>
           <tr><td><code>audience</code></td><td><code>list&lt;string&gt;|string|null</code></td><td><code>null</code></td><td>Expected <code>aud</code> value(s) when it must differ from <code>clientId</code>. Also doubles as the full trusted set unless <code>allowUntrustedAudiences</code> opts out.</td></tr>
           <tr><td><code>endpointOverrides</code></td><td><code>array&lt;string,string&gt;</code></td><td><code>[]</code></td><td>Known endpoint values (e.g. <code>token_endpoint</code>) that skip discovery for that value.</td></tr>
           <tr><td><code>extraAuthParams</code></td><td><code>array&lt;string,string&gt;</code></td><td><code>[]</code></td><td>Merged into the authorization request.</td></tr>
           <tr><td><code>pkce</code></td><td><code><a href="#PkceMode">PkceMode</a></code></td><td><code>Disabled</code></td><td>How strictly RFC 7636 PKCE is enforced on the authorization code flow.</td></tr>
           <tr><td><code>allowInsecureSchemes</code></td><td><code>bool</code></td><td><code>false</code></td><td>Allows <code>http://</code> endpoints. TLS certificate/hostname verification itself is never affected by this - see <a href="#CurlHttpFetcher"><code>CurlHttpFetcher</code></a>.</td></tr>
-          <tr><td><code>allowedHosts</code></td><td><code>?list&lt;string&gt;</code></td><td><code>null</code></td><td>Bare hostnames every resolved endpoint must match. Null falls back to the host of <code>issuer</code>/<code>providerUrl</code>, unless <code>allowAnyHost</code> is set.</td></tr>
+          <tr><td><code>allowedHosts</code></td><td><code>?list&lt;string&gt;</code></td><td><code>null</code></td><td>Bare hostnames every resolved endpoint must match. Null falls back to the host of <code>issuer</code>, unless <code>allowAnyHost</code> is set.</td></tr>
           <tr><td><code>allowedAlgorithms</code></td><td><code>list&lt;string&gt;</code></td><td><code>['RS256']</code></td><td>ID token signing algorithms accepted. HS* is always rejected outright for a public client, regardless of this list.</td></tr>
           <tr><td><code>maxTokenLifetimeSeconds</code></td><td><code>?int</code></td><td><code>null</code></td><td>Optional cap on <code>exp - iat</code>, independent of clock-skew leeway.</td></tr>
           <tr><td><code>allowUntrustedAudiences</code></td><td><code>bool</code></td><td><code>false</code></td><td>Opts out of rejecting <code>aud</code> values outside the trusted set - keeps only the "expected value present" half of the check.</td></tr>
@@ -745,7 +743,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>length</code>, <code>max</code></td><td><code>int</code></td><td>An oversized value's actual length vs. the configured or hard-coded maximum (ID token byte length, <code>sub</code> claim length).</td></tr>
           <tr><td><code>exp</code>, <code>iat</code></td><td><code>mixed</code></td><td>The raw <code>exp</code>/<code>iat</code> claim values that failed validation.</td></tr>
           <tr><td><code>lifetime_seconds</code>, <code>max_lifetime_seconds</code></td><td><code>int</code></td><td>Computed token lifetime (<code>exp - iat</code>) vs. the configured <code>maxTokenLifetimeSeconds</code>.</td></tr>
-          <tr><td><code>expected</code>, <code>actual</code></td><td><code>mixed</code></td><td>Generic pair used for every claim-mismatch check (issuer, audience, nonce, subject, <code>auth_time</code>, discovered issuer vs. <code>providerUrl</code>) - what this client expected vs. what was actually present.</td></tr>
+          <tr><td><code>expected</code>, <code>actual</code></td><td><code>mixed</code></td><td>Generic pair used for every claim-mismatch check (issuer, audience, nonce, subject, <code>auth_time</code>, discovered issuer vs. configured <code>issuer</code>) - what this client expected vs. what was actually present.</td></tr>
           <tr><td><code>aud</code></td><td><code>mixed</code></td><td>The raw <code>aud</code> claim value, when it contains a malformed (non-string) entry.</td></tr>
           <tr><td><code>malformed</code></td><td><code>list&lt;mixed&gt;</code></td><td>The non-string entries filtered out of a malformed <code>aud</code> claim.</td></tr>
           <tr><td><code>untrusted</code></td><td><code>list&lt;string&gt;</code></td><td><code>aud</code> values present on the token but outside the configured trusted set.</td></tr>

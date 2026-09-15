@@ -11,14 +11,14 @@ $config = new OpenIDConnectClientConfig(
 	clientId: 'my-client-id',
 	clientSecret: 'my-client-secret',
 	redirectUrl: 'https://app.example.com/oidc/callback',
-	providerUrl: 'https://idp.example.com',
+	issuer: 'https://idp.example.com',
 );
 
 $client = (new OpenIDConnectClientFactory())->make($psr16Cache);
 
 // By default, every endpoint discovery resolves - authorization, token, jwks_uri,
-// userinfo - has to stay on the provider's own host (issuer, or providerUrl when issuer
-// is not set). https and a matching issuer are not, by themselves, a guarantee that every
+// userinfo - has to stay on the provider's own host (issuer). https and a matching
+// issuer are not, by themselves, a guarantee that every
 // endpoint inside a discovery document is safe to call - a compromised or misconfigured
 // provider, or a network attacker tampering with the response, could point token_endpoint
 // anywhere.

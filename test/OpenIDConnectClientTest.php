@@ -206,8 +206,8 @@ class OpenIDConnectClientTest extends TestCase {
 		$logger = new ArrayLogger;
 		$client = $this->makeClient($fetcher, logger: $logger);
 
-		// Neither issuer nor providerUrl set - resolveIssuer() returns null even though every
-		// endpoint needed to get this far is available via override.
+		// issuer is not set - even though every endpoint needed to get this far is available
+		// via override.
 		$config = new OpenIDConnectClientConfig(
 			clientId: self::CLIENT_ID,
 			clientSecret: self::CLIENT_SECRET,
@@ -420,7 +420,6 @@ class OpenIDConnectClientTest extends TestCase {
 			clientId: self::CLIENT_ID,
 			clientSecret: self::CLIENT_SECRET,
 			redirectUrl: self::REDIRECT_URL,
-			providerUrl: self::ISSUER,
 			issuer: self::ISSUER,
 		);
 

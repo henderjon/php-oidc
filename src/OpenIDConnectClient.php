@@ -244,7 +244,7 @@ final class OpenIDConnectClient implements
 			// OpenID Connect Core 1.0 §5.3.2: iss/aud are only REQUIRED "if signed" - a plain
 			// JSON UserInfo response carries no such requirement, so these two checks are
 			// scoped to this branch only.
-			$issuer = $config->resolveIssuer();
+			$issuer = $config->issuer;
 
 			if( $issuer === null ) {
 				$this->logger->error('OIDC: no issuer configured against which to validate the signed userinfo response', [
@@ -487,7 +487,7 @@ final class OpenIDConnectClient implements
 			$idTokenVerifier = $this->idTokenVerifier->withState($state);
 			$claims          = $idTokenVerifier->verify($idToken, $jwksUri, $config->clientSecret, $config->allowedAlgorithms, $accessToken, $requireAtHash);
 
-			$issuer = $config->resolveIssuer();
+			$issuer = $config->issuer;
 
 			if( $issuer === null ) {
 				$this->logger->error('OIDC: no issuer configured against which to validate the ID token', [

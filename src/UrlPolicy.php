@@ -21,12 +21,11 @@ use Psr\Log\NullLogger;
  * The host check has three tiers, most specific first: an explicit
  * `$config->allowedHosts` always wins outright when set; `$allowAnyHost`
  * opts out of the tier below entirely; otherwise a discovered or overridden
- * URL must stay on the provider's own host (`issuer`, or `providerUrl` when
- * `issuer` is not set) - a discovery document naming an endpoint on some
- * other host does not get followed just because no allowlist was ever set
- * up. See defaultAllowedHost() for why that tier falls back to unrestricted,
- * rather than rejecting everything, when neither `issuer` nor `providerUrl`
- * is configured at all.
+ * URL must stay on the provider's own host (`issuer`) - a discovery document
+ * naming an endpoint on some other host does not get followed just because
+ * no allowlist was ever set up. See defaultAllowedHost() for why that tier
+ * falls back to unrestricted, rather than rejecting everything, when
+ * `issuer` is not configured at all.
  *
  * Each `$config->allowedHosts` entry is meant to be a bare hostname, but a caller pasting a
  * full endpoint URL (scheme included, e.g. copied straight from a provider's documentation) is
@@ -107,27 +106,27 @@ final class UrlPolicy {
 
 	/**
 	 * The one host trusted by default when the caller has set neither an explicit
-	 * `allowedHosts` nor `allowAnyHost`: the config's own `issuer` (or `providerUrl`, when
-	 * `issuer` is not set) - the same value ProviderMetadataResolver already fetches
-	 * discovery from and validates the discovery document's own `issuer` claim against.
+	 * `allowedHosts` nor `allowAnyHost`: the config's own `issuer` - the same value
+	 * ProviderMetadataResolver already fetches discovery from and validates the discovery
+	 * document's own `issuer` claim against.
 	 *
-	 * Returns null - meaning "no default to enforce, allow it" - when neither `issuer` nor
-	 * `providerUrl` is configured at all. That is a deliberate choice, not an oversight: with
-	 * neither set, ProviderMetadataResolver never performs discovery in the first place (see
-	 * its own null check), so every URL this predicate is ever asked about in that
-	 * configuration is exactly what the caller's own `endpointOverrides` declared in code -
-	 * not something a discovery document could have redirected. There is no discovery-driven
-	 * trust boundary to protect in that shape, so defaulting to a restriction here would only
-	 * punish a caller who never uses discovery at all.
+	 * Returns null - meaning "no default to enforce, allow it" - when `issuer` is not
+	 * configured at all. That is a deliberate choice, not an oversight: with it unset,
+	 * ProviderMetadataResolver never performs discovery in the first place (see its own null
+	 * check), so every URL this predicate is ever asked about in that configuration is exactly
+	 * what the caller's own `endpointOverrides` declared in code - not something a discovery
+	 * document could have redirected. There is no discovery-driven trust boundary to protect
+	 * in that shape, so defaulting to a restriction here would only punish a caller who never
+	 * uses discovery at all.
 	 */
 	private static function defaultAllowedHost( OpenIDConnectClientConfig $config ): ?string {
-		$providerUrl = $config->resolveIssuer();
+		$issuer = $config->issuer;
 
-		if( $providerUrl === null ) {
+		if( $issuer === null ) {
 			return null;
 		}
 
-		$host = parse_url($providerUrl, PHP_URL_HOST);
+		$host = parse_url($issuer, PHP_URL_HOST);
 
 		return is_string($host) ? $host : null;
 	}
