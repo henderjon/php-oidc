@@ -203,4 +203,73 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertSame(ClientAuthMethod::Post, $new->clientAuthMethod);
 	}
 
+	/**
+	 * Every `with*()` test above only asserts its own field changed - none of them would catch
+	 * two adjacent constructor arguments getting silently swapped, since a swap between two
+	 * still-default field values looks identical either way. This builds a config with every
+	 * field set to a distinct, non-default value, calls every wither once, and asserts every
+	 * OTHER field survived that call completely unchanged - the one place an argument landing
+	 * in the wrong constructor slot would actually be caught.
+	 */
+	public function testWithersOnlyChangeTheirOwnField(): void {
+		$config = new OpenIDConnectClientConfig(
+			clientId: 'the-client-id',
+			clientSecret: 'the-client-secret',
+			redirectUri: 'https://example.com/callback',
+			issuer: 'https://issuer.example.com',
+			scopes: [ 'profile' ],
+			audience: 'the-audience',
+			endpointOverrides: [ 'token_endpoint' => 'https://issuer.example.com/token' ],
+			extraAuthParams: [ 'prompt' => 'consent' ],
+			pkce: PkceMode::Required,
+			allowInsecureSchemes: true,
+			allowedHosts: [ 'issuer.example.com' ],
+			allowedAlgorithms: [ 'ES256' ],
+			maxTokenLifetimeSeconds: 3600,
+			allowUntrustedAudiences: true,
+			allowAnyHost: false,
+			clientAuthMethod: ClientAuthMethod::Post,
+		);
+
+		$this->assertUnchangedExcept($config, $config->withClientId('other-id'), 'clientId');
+		$this->assertUnchangedExcept($config, $config->withClientSecret('other-secret'), 'clientSecret');
+		$this->assertUnchangedExcept($config, $config->withRedirectUri('https://example.com/other'), 'redirectUri');
+		$this->assertUnchangedExcept($config, $config->withIssuer('https://other-issuer.example.com'), 'issuer');
+		$this->assertUnchangedExcept($config, $config->withScopes([ 'email' ]), 'scopes');
+		$this->assertUnchangedExcept($config, $config->withAudience('other-audience'), 'audience');
+		$this->assertUnchangedExcept($config, $config->withEndpointOverrides([ 'jwks_uri' => 'https://issuer.example.com/jwks' ]), 'endpointOverrides');
+		$this->assertUnchangedExcept($config, $config->withExtraAuthParams([ 'response_mode' => 'form_post' ]), 'extraAuthParams');
+		$this->assertUnchangedExcept($config, $config->withPkce(PkceMode::Optional), 'pkce');
+		$this->assertUnchangedExcept($config, $config->withAllowInsecureSchemes(false), 'allowInsecureSchemes');
+		$this->assertUnchangedExcept($config, $config->withAllowedHosts([ 'other.example.com' ]), 'allowedHosts');
+		$this->assertUnchangedExcept($config, $config->withAllowedAlgorithms([ 'RS256' ]), 'allowedAlgorithms');
+		$this->assertUnchangedExcept($config, $config->withMaxTokenLifetimeSeconds(7200), 'maxTokenLifetimeSeconds');
+		$this->assertUnchangedExcept($config, $config->withAllowUntrustedAudiences(false), 'allowUntrustedAudiences');
+		$this->assertUnchangedExcept($config, $config->withAllowAnyHost(true), 'allowAnyHost');
+		$this->assertUnchangedExcept($config, $config->withClientAuthMethod(ClientAuthMethod::Basic), 'clientAuthMethod');
+	}
+
+	/**
+	 * Asserts every constructor field of $actual matches $expected except $changedField, which
+	 * is skipped here precisely because the caller already changed it and is asserting that
+	 * change separately - or, for testWithersOnlyChangeTheirOwnField(), doesn't need to check
+	 * the new value at all, only that nothing else moved.
+	 */
+	private function assertUnchangedExcept( OpenIDConnectClientConfig $expected, OpenIDConnectClientConfig $actual, string $changedField ): void {
+		$fields = [
+			'clientId', 'clientSecret', 'redirectUri', 'issuer', 'scopes', 'audience',
+			'endpointOverrides', 'extraAuthParams', 'pkce', 'allowInsecureSchemes',
+			'allowedHosts', 'allowedAlgorithms', 'maxTokenLifetimeSeconds',
+			'allowUntrustedAudiences', 'allowAnyHost', 'clientAuthMethod',
+		];
+
+		foreach( $fields as $field ) {
+			if( $field === $changedField ) {
+				continue;
+			}
+
+			$this->assertEquals($expected->$field, $actual->$field, "expected {$field} to be unchanged");
+		}
+	}
+
 }
