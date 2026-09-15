@@ -197,7 +197,6 @@ function callbackUrl(): string {
  */
 function setupForm( array $config ): string {
 	$issuer                   = escape($config['issuer'] ?? '');
-	$providerUrl              = escape($config['providerUrl'] ?? '');
 	$clientId                 = escape($config['clientId'] ?? '');
 	$clientSecret             = escape($config['clientSecret'] ?? '');
 	$scopes                   = escape($config['scopes'] ?? 'profile email');
@@ -229,11 +228,7 @@ function setupForm( array $config ): string {
 			<label for="issuer">Issuer</label>
 			<input type="text" id="issuer" name="issuer" value="{$issuer}" required
 				placeholder="https://www.certification.openid.net/test/a/your-alias">
-			<span class="field-hint">From the plan's exported values. Also used to derive discovery when Provider URL is blank.</span>
-
-			<label for="providerUrl">Provider URL (optional)</label>
-			<input type="text" id="providerUrl" name="providerUrl" value="{$providerUrl}"
-				placeholder="defaults to Issuer">
+			<span class="field-hint">From the plan's exported values. Also the base URL for <code>.well-known/openid-configuration</code> discovery.</span>
 		</fieldset>
 
 		<fieldset>
