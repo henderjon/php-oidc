@@ -14,7 +14,7 @@ class ProviderMetadataResolverTest extends TestCase {
 	/**
 	 * @param array<string,string> $endpointOverrides
 	 */
-	private function configWithProviderUrl( array $endpointOverrides = [] ): OpenIDConnectClientConfig {
+	private function configWithIssuer( array $endpointOverrides = [] ): OpenIDConnectClientConfig {
 		return new OpenIDConnectClientConfig(
 			clientId: 'client-id',
 			clientSecret: 'client-secret',
@@ -27,7 +27,7 @@ class ProviderMetadataResolverTest extends TestCase {
 	public function testResolveReturnsAnOverrideWithoutFetching(): void {
 		$fetcher  = new FakeHttpFetcher;
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
-		$config   = $this->configWithProviderUrl([ ProviderMetadataResolver::AUTHORIZATION_ENDPOINT => 'https://issuer.example.com/authorize' ]);
+		$config   = $this->configWithIssuer([ ProviderMetadataResolver::AUTHORIZATION_ENDPOINT => 'https://issuer.example.com/authorize' ]);
 
 		$endpoint = $resolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
 
@@ -39,7 +39,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher = new FakeHttpFetcher;
 		$logger  = new ArrayLogger;
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
-		$config   = $this->configWithProviderUrl([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'http://issuer.example.com/token' ]);
+		$config   = $this->configWithIssuer([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'http://issuer.example.com/token' ]);
 
 		try {
 			$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
@@ -72,7 +72,7 @@ class ProviderMetadataResolverTest extends TestCase {
 
 		$this->expectException(ProviderDiscoveryException::class);
 
-		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 	}
 
 	public function testResolveDoesNotFetchDiscoveryWhenTheDiscoveryUrlItselfViolatesTheUrlPolicy(): void {
@@ -110,7 +110,7 @@ class ProviderMetadataResolverTest extends TestCase {
 
 	public function testResolveRejectsAHostNotInTheAllowlist(): void {
 		$fetcher = new FakeHttpFetcher;
-		$config  = $this->configWithProviderUrl([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'https://issuer.example.com/token' ])
+		$config  = $this->configWithIssuer([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'https://issuer.example.com/token' ])
 			->withAllowedHosts([ 'somewhere-else.example.com' ]);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
 
@@ -121,7 +121,7 @@ class ProviderMetadataResolverTest extends TestCase {
 
 	public function testResolveAllowsAHostInTheAllowlist(): void {
 		$fetcher = new FakeHttpFetcher;
-		$config  = $this->configWithProviderUrl([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'https://issuer.example.com/token' ])
+		$config  = $this->configWithIssuer([ ProviderMetadataResolver::TOKEN_ENDPOINT => 'https://issuer.example.com/token' ])
 			->withAllowedHosts([ 'issuer.example.com' ]);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
 
@@ -141,7 +141,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -164,7 +164,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
 
-		$this->assertSame('https://issuer.example.com/token', $resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT));
+		$this->assertSame('https://issuer.example.com/token', $resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT));
 	}
 
 	public function testResolveFetchesDiscoveryDocumentWhenNoOverride(): void {
@@ -178,7 +178,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
 
-		$endpoint = $resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$endpoint = $resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 
 		$this->assertSame('https://issuer.example.com/token', $endpoint);
 	}
@@ -194,7 +194,7 @@ class ProviderMetadataResolverTest extends TestCase {
 			], JSON_THROW_ON_ERROR), 200),
 		);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
-		$config   = $this->configWithProviderUrl();
+		$config   = $this->configWithIssuer();
 
 		$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
 		$resolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
@@ -202,33 +202,13 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertCount(1, $fetcher->requests, 'second resolve() for the same provider must not re-fetch discovery');
 	}
 
-	public function testResolveThrowsWithNoProviderUrlOrIssuer(): void {
+	public function testResolveThrowsWithNoIssuer(): void {
 		$resolver = new ProviderMetadataResolver(new FakeHttpFetcher, new UrlPolicy);
 		$config   = new OpenIDConnectClientConfig('client-id', 'client-secret', 'https://example.com/callback');
 
 		$this->expectException(ProviderDiscoveryException::class);
 
 		$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
-	}
-
-	public function testResolveFallsBackToIssuerWhenNoProviderUrl(): void {
-		$fetcher = new FakeHttpFetcher;
-		$fetcher->respondTo(
-			'https://issuer.example.com/.well-known/openid-configuration',
-			new FetchResponse(json_encode([
-				'issuer'         => 'https://issuer.example.com',
-				'token_endpoint' => 'https://issuer.example.com/token',
-			], JSON_THROW_ON_ERROR), 200),
-		);
-		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
-		$config   = new OpenIDConnectClientConfig(
-			clientId: 'client-id',
-			clientSecret: 'client-secret',
-			redirectUri: 'https://example.com/callback',
-			issuer: 'https://issuer.example.com',
-		);
-
-		$this->assertSame('https://issuer.example.com/token', $resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT));
 	}
 
 	public function testResolveThrowsOnNonSuccessStatus(): void {
@@ -238,7 +218,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = (new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException $e ) {
 			$this->assertSame('the-state', $e->getState());
@@ -261,7 +241,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = (new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -280,7 +260,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = (new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException $e ) {
 			$this->assertInstanceOf(\JsonException::class, $e->getPrevious());
@@ -303,7 +283,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = (new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -323,7 +303,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver = (new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger))->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
@@ -347,7 +327,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$logger   = new ArrayLogger;
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
 
-		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 
 		$this->assertSame([], $logger->recordsAboveDebug());
 	}
@@ -356,7 +336,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$fetcher  = new FakeHttpFetcher;
 		$logger   = new ArrayLogger;
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
-		$config   = $this->configWithProviderUrl([ ProviderMetadataResolver::AUTHORIZATION_ENDPOINT => 'https://issuer.example.com/authorize' ]);
+		$config   = $this->configWithIssuer([ ProviderMetadataResolver::AUTHORIZATION_ENDPOINT => 'https://issuer.example.com/authorize' ]);
 
 		$resolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
 
@@ -378,7 +358,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$logger   = new ArrayLogger;
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
 
-		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 
 		$records = $logger->recordsAt(LogLevel::DEBUG);
 		$this->assertSame('OIDC: discovering provider configuration via /.well-known/openid-configuration', $records[0]['message']);
@@ -403,7 +383,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$logger   = new ArrayLogger;
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
 
-		$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+		$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 
 		$discovering = $logger->recordsAt(LogLevel::DEBUG)[0];
 		$this->assertSame('https://issuer.example.com', $discovering['context']['issuer']);
@@ -422,7 +402,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		);
 		$logger   = new ArrayLogger;
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
-		$config   = $this->configWithProviderUrl();
+		$config   = $this->configWithIssuer();
 
 		$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
 		$resolver->resolve($config, ProviderMetadataResolver::AUTHORIZATION_ENDPOINT);
@@ -446,7 +426,7 @@ class ProviderMetadataResolverTest extends TestCase {
 			], JSON_THROW_ON_ERROR), 200),
 		);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
-		$config   = $this->configWithProviderUrl();
+		$config   = $this->configWithIssuer();
 
 		$resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
 		$scoped = $resolver->withState('the-state');
@@ -476,7 +456,7 @@ class ProviderMetadataResolverTest extends TestCase {
 			], JSON_THROW_ON_ERROR), 200),
 		);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
-		$config   = $this->configWithProviderUrl();
+		$config   = $this->configWithIssuer();
 
 		$scoped = $resolver->withState('the-state');
 		$scoped->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT);
@@ -494,7 +474,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$resolver->withState('the-state');
 
 		try {
-			$resolver->resolve($this->configWithProviderUrl(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
 			$this->fail('Expected ProviderDiscoveryException to be thrown');
 		} catch( ProviderDiscoveryException ) {
 		}
