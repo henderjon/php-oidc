@@ -854,6 +854,7 @@ class OpenIDConnectClientTest extends TestCase {
 			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
 				'error'             => 'access_denied',
 				'error_description' => 'The user denied access',
+				'error_uri'         => 'https://example.com/errors/access_denied',
 				'state'             => 'the-callback-state',
 			]));
 			$this->fail('Expected AuthenticationFailedException to be thrown');
@@ -869,6 +870,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertCount(1, $providerErrorRecords);
 		$this->assertSame('access_denied', $providerErrorRecords[0]['context']['error']);
 		$this->assertSame('The user denied access', $providerErrorRecords[0]['context']['error_description']);
+		$this->assertSame('https://example.com/errors/access_denied', $providerErrorRecords[0]['context']['error_uri']);
 		$this->assertSame('the-callback-state', $providerErrorRecords[0]['context']['state']);
 	}
 
@@ -1311,7 +1313,33 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: userinfo endpoint returned an unsuccessful response', $records[0]['message']);
 		$this->assertSame(401, $records[0]['context']['http_status']);
+		$this->assertNull($records[0]['context']['provider_error'], 'no WWW-Authenticate header on this response - nothing to parse');
 		$this->assertNoPiiInContext($records[0]['context']);
+	}
+
+	public function testFetchUserInfoLogsTheWwwAuthenticateErrorDetailWhenGiven(): void {
+		// OpenID Connect Core 1.0 §5.3.3 / RFC 6750 §3: the UserInfo endpoint's own error
+		// detail arrives via this response header, not a JSON body - unlike the token
+		// endpoint's error response.
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::USERINFO_ENDPOINT, new FetchResponse(
+			'',
+			401,
+			wwwAuthenticate: 'Bearer error="invalid_token", error_description="The access token expired", error_uri="https://example.com/errors/invalid_token"',
+		));
+		$logger = new ArrayLogger;
+
+		try {
+			$this->makeClient($fetcher, logger: $logger)->fetchUserInfo($this->config(), 'the-access-token', 'user-1');
+			$this->fail('Expected UserInfoRequestException to be thrown');
+		} catch( UserInfoRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('invalid_token', $records[0]['context']['provider_error']);
+		$this->assertSame('The access token expired', $records[0]['context']['provider_error_description']);
+		$this->assertSame('https://example.com/errors/invalid_token', $records[0]['context']['provider_error_uri']);
 	}
 
 	public function testFetchUserInfoThrowsOnUnexpectedContentType(): void {

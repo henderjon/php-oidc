@@ -29,6 +29,13 @@ final class IncomingAuthorizationResponse {
 	public readonly ?string $errorDescription;
 
 	/**
+	 * RFC 6749 §4.1.2.1: OPTIONAL, a URI identifying a human-readable web page describing the
+	 * error, meant for a developer to follow, not text to show inline - kept separate from
+	 * errorSummary()'s prose rather than folded into it.
+	 */
+	public readonly ?string $errorUri;
+
+	/**
 	 * @param array<string,mixed> $params The `$GET` or `$POST` array for the callback request.
 	 */
 	public function __construct( array $params ) {
@@ -38,6 +45,7 @@ final class IncomingAuthorizationResponse {
 		$this->state            = self::stringOrNull($params['state'] ?? null);
 		$this->error            = self::truncated(self::stringOrNull($params['error'] ?? null));
 		$this->errorDescription = self::truncated(self::stringOrNull($params['error_description'] ?? null));
+		$this->errorUri         = self::truncated(self::stringOrNull($params['error_uri'] ?? null));
 	}
 
 	public function hasError(): bool {

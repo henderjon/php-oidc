@@ -206,10 +206,19 @@ final class OpenIDConnectClient implements
 		}
 
 		if( $response->status !== 200 ) {
+			// OpenID Connect Core 1.0 §5.3.3 / RFC 6750 §3: unlike the token endpoint, the
+			// UserInfo endpoint hands back error detail in this WWW-Authenticate response
+			// header, not a JSON body - the one place this library reads a response header at
+			// all, see FetchResponse::$wwwAuthenticate.
+			$wwwAuthenticateParams = $response->wwwAuthenticate !== null ? self::wwwAuthenticateParams($response->wwwAuthenticate) : [];
+
 			$this->logger->error('OIDC: userinfo endpoint returned an unsuccessful response', [
-				'endpoint'     => $endpoint,
-				'http_status'  => $response->status,
-				'content_type' => $response->contentType,
+				'endpoint'                    => $endpoint,
+				'http_status'                 => $response->status,
+				'content_type'                => $response->contentType,
+				'provider_error'              => $wwwAuthenticateParams['error'] ?? null,
+				'provider_error_description'  => $wwwAuthenticateParams['error_description'] ?? null,
+				'provider_error_uri'          => $wwwAuthenticateParams['error_uri'] ?? null,
 				'security_relevant' => false,
 			]);
 
@@ -382,6 +391,26 @@ final class OpenIDConnectClient implements
 	}
 
 	/**
+	 * Pulls the quoted-string auth-params (RFC 7235 §2.1) out of a WWW-Authenticate header
+	 * value - `error`/`error_description`/`error_uri`, for the one caller that needs them
+	 * (fetchUserInfo()), but not scoped to only those three keys, since a provider is free to
+	 * add its own.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function wwwAuthenticateParams( string $header ): array {
+		$params = [];
+
+		preg_match_all('/([a-zA-Z_]+)="([^"]*)"/', $header, $matches, PREG_SET_ORDER);
+
+		foreach( $matches as $match ) {
+			$params[$match[1]] = $match[2];
+		}
+
+		return $params;
+	}
+
+	/**
 	 * @throws AuthenticationFailedException
 	 */
 	private function assertNoProviderError( IncomingAuthorizationResponse $response ): void {
@@ -396,6 +425,7 @@ final class OpenIDConnectClient implements
 			$this->logger->error('OIDC: provider returned an error on the callback', [
 				'error'             => $response->error,
 				'error_description' => $response->errorDescription,
+				'error_uri'         => $response->errorUri,
 				'state'             => $response->state,
 				'security_relevant' => false,
 			]);

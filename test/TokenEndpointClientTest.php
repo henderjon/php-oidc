@@ -223,10 +223,35 @@ class TokenEndpointClientTest extends TestCase {
 		$this->assertSame(self::TOKEN_ENDPOINT, $records[0]['context']['endpoint']);
 		$this->assertSame(400, $records[0]['context']['http_status']);
 		$this->assertSame('invalid_grant', $records[0]['context']['provider_error']);
+		// error_description is OPTIONAL per RFC 6749 §5.2 - absent here, must not be confused
+		// with an empty string or dropped from the context array entirely.
+		$this->assertNull($records[0]['context']['provider_error_description']);
 		$this->assertNull($records[0]['context']['state'], 'client credentials is non-interactive - there is no flow to correlate with');
 		// A rejected grant is an ordinary provider-side failure, not one of the curated
 		// high-confidence attack indicators - security_relevant stays false.
 		$this->assertFalse($records[0]['context']['security_relevant']);
+	}
+
+	public function testThrowsOnNonSuccessStatusLogsTheProviderErrorDescriptionWhenGiven(): void {
+		$fetcher = new FakeHttpFetcher;
+		$logger  = new ArrayLogger;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'error'             => 'invalid_request',
+			'error_description' => 'The authorization code has expired',
+			'error_uri'         => 'https://example.com/errors/invalid_request',
+		], JSON_THROW_ON_ERROR), 400));
+
+		try {
+			$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->config());
+			$this->fail('Expected a TokenRequestException to be thrown');
+		} catch( TokenRequestException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('invalid_request', $records[0]['context']['provider_error']);
+		$this->assertSame('The authorization code has expired', $records[0]['context']['provider_error_description']);
+		$this->assertSame('https://example.com/errors/invalid_request', $records[0]['context']['provider_error_uri']);
 	}
 
 	public function testExchangeAuthorizationCodeLogsTheGivenStateOnFailure(): void {
