@@ -421,6 +421,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           </ul>
           <h4>Exceptions</h4>
           <ul>
+            <li><a href="#ProviderError">ProviderError</a></li>
             <li><a href="#Exceptions">Oidc\Exceptions\*</a></li>
           </ul>
         </div>
@@ -726,6 +727,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>exception</code></td><td><code>Throwable</code></td><td>The underlying caught exception - a network error, a JSON decode failure, a signature verification failure.</td></tr>
           <tr><td><code>http_status</code></td><td><code>?int</code></td><td>HTTP status code of the response, logged on every fetch failure against the token endpoint, provider discovery, or JWKS endpoint regardless of which check actually failed. Null when no response was ever received (a transport failure).</td></tr>
           <tr><td><code>content_type</code></td><td><code>?string</code></td><td>The response's <code>Content-Type</code> header, logged alongside <code>http_status</code> on every fetch failure against those same three endpoints, not only when the content type itself was the problem. Null when no response was ever received (a transport failure).</td></tr>
+          <tr><td><code>www_authenticate</code></td><td><code>?string</code></td><td>The <code>WWW-Authenticate</code> response header verbatim, logged only on the UserInfo endpoint's unsuccessful-response check, alongside the <code>provider_error*</code> fields parsed from it below - unlike the token endpoint's JSON body, nothing else in that log line would otherwise show the actual header a caller debugging a parsing mismatch would need to check against. Null when the response carried no such header.</td></tr>
           <tr><td><code>provider_error</code></td><td><code>?string</code></td><td>The <code>error</code> value a provider returned - from the token endpoint's JSON error body (RFC 6749 &sect;5.2), or from the UserInfo endpoint's <code>WWW-Authenticate</code> response header (OpenID Connect Core 1.0 &sect;5.3.3 / RFC 6750 &sect;3) - whichever call site logged it.</td></tr>
           <tr><td><code>provider_error_description</code>, <code>provider_error_uri</code></td><td><code>?string</code></td><td>The <code>error_description</code>/<code>error_uri</code> alongside <code>provider_error</code>, from the same source, when present. Both OPTIONAL. <code>error_description</code> is the human-readable detail that tells apart failures (an expired code, a wrong <code>redirect_uri</code>, an unauthorized client) that can otherwise share the same <code>provider_error</code> value; <code>error_uri</code> is a link to a page about the error, not prose itself.</td></tr>
           <tr><td><code>max_response_bytes</code></td><td><code>int</code></td><td>The configured response-size cap that was exceeded.</td></tr>
@@ -1319,6 +1321,29 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 
+    <!-- PROVIDER ERROR -->
+    <div class="type-section" id="ProviderError">
+      <h2>type ProviderError<a class="section-anchor" href="#ProviderError" aria-label="Link to this section">&para;</a></h2>
+      <div class="method-sig">final class ProviderError {
+    public function __construct(
+        public readonly ?string $error = null,
+        public readonly ?string $errorDescription = null,
+        public readonly ?string $errorUri = null,
+    )
+}</div>
+      <p>
+        The <code>error</code>/<code>error_description</code>/<code>error_uri</code> triple a provider
+        hands back on failure - RFC 6749 &sect;4.1.2.1 (authorization callback) and &sect;5.2 (token
+        endpoint) via a JSON body, RFC 6750 &sect;3 / OpenID Connect Core 1.0 &sect;5.3.3 (UserInfo
+        endpoint) via the <code>WWW-Authenticate</code> header. One shape for all three sources, so a
+        caller catching any exception that carries one checks it the same way regardless of where it
+        came from - see <a href="#Exceptions.getProviderError"><code>getProviderError()</code></a> below.
+        <code>error</code> is the only field RFC 6749 requires when an error is reported at all;
+        <code>errorDescription</code>/<code>errorUri</code> are both OPTIONAL and commonly absent.
+      </p>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
     <!-- EXCEPTIONS -->
     <div class="type-section" id="Exceptions">
       <h2>namespace Oidc\Exceptions<a class="section-anchor" href="#Exceptions" aria-label="Link to this section">&para;</a></h2>
@@ -1336,10 +1361,11 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
       <h3 id="Exceptions.getState">getState<a class="section-anchor" href="#Exceptions.getState" aria-label="Link to this section">&para;</a></h3>
       <div class="method-sig">public function getState(): ?string</div>
       <div class="alert-box">
-        Three more discrete getters exist beyond <code>getState()</code> - <code>getIdToken()</code>,
-        <code>getHttpStatus()</code>, and <code>getRawBody()</code> - each scoped to the specific
-        exception(s) that actually have something to attach. See each one's own section just below,
-        and the table's "Carries" column for which exception(s) carry which.
+        Four more discrete getters exist beyond <code>getState()</code> - <code>getIdToken()</code>,
+        <code>getHttpStatus()</code>, <code>getRawBody()</code>, and <code>getProviderError()</code> -
+        each scoped to the specific exception(s) that actually have something to attach. See each
+        one's own section just below, and the table's "Carries" column for which exception(s) carry
+        which.
       </div>
       <h3 id="Exceptions.getIdToken">getIdToken<a class="section-anchor" href="#Exceptions.getIdToken" aria-label="Link to this section">&para;</a></h3>
       <div class="method-sig">public function getIdToken(): ?string</div>
@@ -1369,16 +1395,26 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
         UserInfo response that failed further verification or claims validation, this is the JWT
         itself, not a JSON body.
       </p>
+      <h3 id="Exceptions.getProviderError">getProviderError<a class="section-anchor" href="#Exceptions.getProviderError" aria-label="Link to this section">&para;</a></h3>
+      <div class="method-sig">public function getProviderError(): ?ProviderError</div>
+      <p>
+        On <code>AuthenticationFailedException</code>, <code>TokenRequestException</code>, and
+        <code>UserInfoRequestException</code>. The <a href="#ProviderError"><code>ProviderError</code></a>
+        this failure carries, when the provider actually reported a decodable one - null for a
+        transport failure, a response with no usable error detail, or any other failure covered by
+        that exception type that has nothing to do with a provider-reported error at all (a
+        state/nonce mismatch, a missing authorization code, ID token validation, and so on).
+      </p>
       <table>
         <thead><tr><th>Exception</th><th>Thrown when</th><th>Carries</th></tr></thead>
         <tbody>
           <tr><td><code>OpenIDConnectException</code></td><td>Base class for every exception below. Never thrown directly.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
-          <tr><td><code>AuthenticationFailedException</code></td><td>A callback carries a provider <code>error</code>, an invalid or expired state/nonce, or an ID token that fails signature or claims validation.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getIdToken"><code>getIdToken()</code></a></td></tr>
+          <tr><td><code>AuthenticationFailedException</code></td><td>A callback carries a provider <code>error</code>, an invalid or expired state/nonce, or an ID token that fails signature or claims validation.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getIdToken"><code>getIdToken()</code></a>, <a href="#Exceptions.getProviderError"><code>getProviderError()</code></a></td></tr>
           <tr><td><code>AuthorizationStateException</code></td><td><code>AuthorizationStateStore</code> cannot persist a new authorization attempt because the underlying cache write itself failed - distinct from a clean miss on lookup (a forged, expired, or already-consumed state), which is a normal outcome, not a failure.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
           <tr><td><code>HttpTransportException</code></td><td>The HTTP transport itself fails (connection failure, timeout), below the level of any specific OIDC operation. Rewrapped by callers into whichever domain exception fits.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
           <tr><td><code>ProviderDiscoveryException</code></td><td>A provider's <code>.well-known/openid-configuration</code> or JWKS document cannot be fetched, parsed, or is missing a required endpoint.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
-          <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getHttpStatus"><code>getHttpStatus()</code></a>, <a href="#Exceptions.getRawBody"><code>getRawBody()</code></a></td></tr>
-          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response. <code>getState()</code> is always null here - see above.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getHttpStatus"><code>getHttpStatus()</code></a>, <a href="#Exceptions.getRawBody"><code>getRawBody()</code></a></td></tr>
+          <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getHttpStatus"><code>getHttpStatus()</code></a>, <a href="#Exceptions.getRawBody"><code>getRawBody()</code></a>, <a href="#Exceptions.getProviderError"><code>getProviderError()</code></a></td></tr>
+          <tr><td><code>UserInfoRequestException</code></td><td>The UserInfo endpoint cannot be reached or returns an unusable response. <code>getState()</code> is always null here - see above.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getHttpStatus"><code>getHttpStatus()</code></a>, <a href="#Exceptions.getRawBody"><code>getRawBody()</code></a>, <a href="#Exceptions.getProviderError"><code>getProviderError()</code></a></td></tr>
         </tbody>
       </table>
       <div class="alert-box">

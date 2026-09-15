@@ -2,17 +2,20 @@
 
 namespace Oidc\Exceptions;
 
+use Oidc\ProviderError;
+
 /**
  * Thrown when a callback carries an `error` response, an invalid or expired
  * state/nonce, or an ID token that fails signature or claims validation.
  */
-class AuthenticationFailedException extends OpenIDConnectException {
+class AuthenticationFailedException extends OpenIDConnectException implements ProviderErrorAwareInterface {
 
 	public function __construct(
 		string $message = '',
 		private readonly ?string $idToken = null,
 		?string $state = null,
 		?\Throwable $previous = null,
+		private readonly ?ProviderError $providerError = null,
 	) {
 		parent::__construct($message, $state, $previous);
 	}
@@ -38,6 +41,15 @@ class AuthenticationFailedException extends OpenIDConnectException {
 	 */
 	public function getIdToken(): ?string {
 		return $this->idToken;
+	}
+
+	/**
+	 * The provider's `error`/`error_description`/`error_uri`, when this failure came from a
+	 * provider-reported error on the callback - null for every other kind of failure this
+	 * exception covers (state/nonce/PKCE mismatch, a missing code, ID token validation).
+	 */
+	public function getProviderError(): ?ProviderError {
+		return $this->providerError;
 	}
 
 }
