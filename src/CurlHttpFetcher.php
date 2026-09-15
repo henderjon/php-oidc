@@ -68,6 +68,10 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 		// an authorization code, or a bearer token, since every caller (discovery, token,
 		// userinfo, JWKS) shares this one seam. A caller that wants a value logged decides that,
 		// and how much of it, for itself - see TokenEndpointClient and ClientAuthenticator.
+		// The one exception, in the other direction, is FetchResponse::$wwwAuthenticate below -
+		// a RESPONSE header this class does capture, since it is the only place RFC 6750 §3
+		// lets a resource server hand back error detail outside a JSON body, and nothing about
+		// it can carry a credential a caller supplied.
 		$this->logger->debug('OIDC: sending HTTP request', [
 			'url'          => $url,
 			'has_body'     => $body !== null,
@@ -97,6 +101,19 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 			$buffer .= $chunk;
 
 			return strlen($chunk);
+		});
+
+		$wwwAuthenticate = null;
+
+		// Also reset per call. Combines multiple WWW-Authenticate lines (RFC 7235 §4.1 allows
+		// more than one challenge) with the same ", " separator HTTP itself uses to combine
+		// repeated header fields, rather than keeping only the last one seen.
+		curl_setopt($handle, CURLOPT_HEADERFUNCTION, function ( \CurlHandle $ch, string $line ) use ( &$wwwAuthenticate ): int {
+			if( preg_match('/^WWW-Authenticate:\s*(.*?)\s*$/i', $line, $matches) === 1 ) {
+				$wwwAuthenticate = $wwwAuthenticate === null ? $matches[1] : "{$wwwAuthenticate}, {$matches[1]}";
+			}
+
+			return strlen($line);
 		});
 
 		if( $body === null ) {
@@ -168,6 +185,7 @@ final class CurlHttpFetcher implements HttpFetcherInterface {
 			body: $buffer,
 			status: $status,
 			contentType: is_string($contentType) ? $this->stripParameters($contentType) : null,
+			wwwAuthenticate: $wwwAuthenticate,
 		);
 	}
 

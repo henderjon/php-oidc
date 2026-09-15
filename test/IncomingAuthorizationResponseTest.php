@@ -35,11 +35,28 @@ class IncomingAuthorizationResponseTest extends TestCase {
 		$response = new IncomingAuthorizationResponse([
 			'error'             => 'access_denied',
 			'error_description' => 'The user denied access',
+			'error_uri'         => 'https://example.com/errors/access_denied',
 		]);
 
 		$this->assertTrue($response->hasError());
 		$this->assertSame('access_denied', $response->error);
 		$this->assertSame('The user denied access', $response->errorDescription);
+		$this->assertSame('https://example.com/errors/access_denied', $response->errorUri);
+	}
+
+	public function testErrorUriIsNullWhenNotGiven(): void {
+		$response = new IncomingAuthorizationResponse([ 'error' => 'access_denied' ]);
+
+		$this->assertNull($response->errorUri);
+	}
+
+	public function testErrorUriOverTheLengthLimitIsTruncated(): void {
+		$response = new IncomingAuthorizationResponse([
+			'error'     => 'access_denied',
+			'error_uri' => str_repeat('a', 300),
+		]);
+
+		$this->assertSame(str_repeat('a', 255) . '...(truncated)', $response->errorUri);
 	}
 
 	public function testConstructWithNoRecognizedKeys(): void {
