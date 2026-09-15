@@ -1320,6 +1320,7 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: userinfo endpoint returned an unsuccessful response', $records[0]['message']);
 		$this->assertSame(401, $records[0]['context']['http_status']);
+		$this->assertNull($records[0]['context']['www_authenticate'], 'no WWW-Authenticate header on this response');
 		$this->assertNull($records[0]['context']['provider_error'], 'no WWW-Authenticate header on this response - nothing to parse');
 		$this->assertNoPiiInContext($records[0]['context']);
 	}
@@ -1348,6 +1349,11 @@ class OpenIDConnectClientTest extends TestCase {
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
+		$this->assertSame(
+			'Bearer error="invalid_token", error_description="The access token expired", error_uri="https://example.com/errors/invalid_token"',
+			$records[0]['context']['www_authenticate'],
+			'the raw header must be logged verbatim alongside the parsed fields, so a parsing mismatch can be checked against it',
+		);
 		$this->assertSame('invalid_token', $records[0]['context']['provider_error']);
 		$this->assertSame('The access token expired', $records[0]['context']['provider_error_description']);
 		$this->assertSame('https://example.com/errors/invalid_token', $records[0]['context']['provider_error_uri']);

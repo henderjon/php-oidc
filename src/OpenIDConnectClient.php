@@ -225,6 +225,10 @@ final class OpenIDConnectClient implements
 				'endpoint'                    => $endpoint,
 				'http_status'                 => $response->status,
 				'content_type'                => $response->contentType,
+				// Alongside the fields already parsed from it below - unlike the token
+				// endpoint's JSON body, nothing else here would otherwise show the actual
+				// header a caller debugging a parsing mismatch would need to check against.
+				'www_authenticate'            => $response->wwwAuthenticate,
 				'provider_error'              => $providerError?->error,
 				'provider_error_description'  => $providerError?->errorDescription,
 				'provider_error_uri'          => $providerError?->errorUri,
