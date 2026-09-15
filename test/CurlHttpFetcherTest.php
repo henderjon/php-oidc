@@ -300,6 +300,31 @@ class CurlHttpFetcherTest extends TestCase {
 		$this->assertGreaterThanOrEqual(0.0, $response['context']['elapsed_ms']);
 	}
 
+	public function testCapturesTheWwwAuthenticateResponseHeader(): void {
+		// The one response header this class reads at all - see the class docblock. Everything
+		// else about the response's headers is deliberately never captured.
+		self::$server->setResponseOfPath('/userinfo', new Response(
+			'',
+			[ 'WWW-Authenticate' => 'Bearer error="invalid_token", error_description="The access token expired"' ],
+			401,
+		));
+
+		$fetcher  = new CurlHttpFetcher;
+		$response = $fetcher->fetch($this->url('userinfo'), null);
+
+		$this->assertSame(401, $response->status);
+		$this->assertSame('Bearer error="invalid_token", error_description="The access token expired"', $response->wwwAuthenticate);
+	}
+
+	public function testWwwAuthenticateIsNullWhenTheResponseDoesNotCarryOne(): void {
+		self::$server->setResponseOfPath('/discovery', new Response('{"issuer":"https://example.com"}', [ 'Content-Type' => 'application/json' ], 200));
+
+		$fetcher  = new CurlHttpFetcher;
+		$response = $fetcher->fetch($this->url('discovery'), null);
+
+		$this->assertNull($response->wwwAuthenticate);
+	}
+
 	public function testARedirectResponseLogsWhereItPointed(): void {
 		// This class never follows a redirect (see class docblock), but a caller logging an
 		// "unsuccessful response" on a 3xx it never expected still needs to see where the

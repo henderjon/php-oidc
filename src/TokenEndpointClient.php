@@ -198,11 +198,23 @@ final class TokenEndpointClient {
 			$error = is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : "HTTP {$response->status}";
 
 			$this->logger->error('OIDC: token endpoint returned an unsuccessful response', [
-				'endpoint'       => $endpoint,
-				'http_status'    => $response->status,
-				'provider_error' => is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null,
-				'content_type'   => $response->contentType,
-				'state'          => $this->state,
+				'endpoint'                   => $endpoint,
+				'http_status'                => $response->status,
+				'provider_error'             => is_array($decoded) && is_string($decoded['error'] ?? null) ? $decoded['error'] : null,
+				// RFC 6749 §5.2 makes this OPTIONAL, but a provider that includes it is handing
+				// over exactly the human-readable detail a developer needs to tell "expired
+				// code" apart from "wrong redirect_uri" apart from "client not authorized" -
+				// all of which can legitimately produce the same provider_error value. The full
+				// response body is still on the exception via getRawBody() either way, but a
+				// caller debugging at this log line, not by catching and inspecting the
+				// exception, should not have to already know that to find it.
+				'provider_error_description' => is_array($decoded) && is_string($decoded['error_description'] ?? null) ? $decoded['error_description'] : null,
+				// Also OPTIONAL per RFC 6749 §5.2 - a URI to a human-readable page about the
+				// error, not prose itself, so it stays a separate field rather than appended to
+				// the description above.
+				'provider_error_uri'         => is_array($decoded) && is_string($decoded['error_uri'] ?? null) ? $decoded['error_uri'] : null,
+				'content_type'               => $response->contentType,
+				'state'                      => $this->state,
 				'security_relevant' => false,
 			]);
 
