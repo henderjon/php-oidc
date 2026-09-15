@@ -27,8 +27,7 @@ class MockOpenIDConnectClient implements
 	RefreshTokenClientInterface {
 
 	public function __construct(
-		/** @todo v2 this will be renamed to redirectUri, matching the OIDC spec's `redirect_uri`. */
-		public string $redirectUrl = 'https://example.com/mock-authorize',
+		public string $redirectUri = 'https://example.com/mock-authorize',
 		public AuthenticationResult $authenticationResult = new AuthenticationResult('mock-id-token', new Claims([ 'sub' => 'mock-user' ])),
 		public ?AuthenticationFailedException $authenticationException = null,
 		public TokenResult $tokenResult = new TokenResult([ 'access_token' => 'mock-access-token' ]),
@@ -37,7 +36,7 @@ class MockOpenIDConnectClient implements
 	}
 
 	public function buildAuthorizationCodeRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect {
-		return new AuthorizationRedirect($this->redirectUrl);
+		return new AuthorizationRedirect($this->redirectUri);
 	}
 
 	public function completeAuthorizationCodeFlow(
@@ -48,7 +47,7 @@ class MockOpenIDConnectClient implements
 	}
 
 	public function buildImplicitFlowRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect {
-		return new AuthorizationRedirect($this->redirectUrl);
+		return new AuthorizationRedirect($this->redirectUri);
 	}
 
 	public function completeImplicitFlow(

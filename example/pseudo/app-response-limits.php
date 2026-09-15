@@ -17,7 +17,7 @@ $client  = (new OpenIDConnectClientFactory($fetcher))->make($psr16Cache);
 $config = new OpenIDConnectClientConfig(
 	clientId: 'my-client-id',
 	clientSecret: 'my-client-secret',
-	redirectUrl: 'https://app.example.com/oidc/callback',
+	redirectUri: 'https://app.example.com/oidc/callback',
 	providerUrl: 'https://idp.example.com',
 );
 

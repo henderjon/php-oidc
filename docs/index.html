@@ -344,7 +344,7 @@ use Oidc\IncomingAuthorizationResponse;
 $config = new OpenIDConnectClientConfig(
     clientId: 'my-client-id',
     clientSecret: 'my-client-secret',
-    redirectUrl: 'https://app.example.com/oidc/callback',
+    redirectUri: 'https://app.example.com/oidc/callback',
     providerUrl: 'https://idp.example.com',
 );
 
@@ -506,7 +506,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
     public function __construct(
         string $clientId,
         string $clientSecret,
-        string $redirectUrl,
+        string $redirectUri,
         ?string $providerUrl = null,
         ?string $issuer = null,
         array $scopes = [],
@@ -530,7 +530,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         <tbody>
           <tr><td><code>clientId</code></td><td><code>string</code></td><td>required</td><td>Sent as <code>client_id</code> on every request.</td></tr>
           <tr><td><code>clientSecret</code></td><td><code>string</code></td><td>required</td><td>Empty string marks a <strong>public client</strong> - PKCE and client authentication both change behavior accordingly.</td></tr>
-          <tr><td><code>redirectUrl</code></td><td><code>string</code></td><td>required</td><td>Must match the <code>redirect_uri</code> registered with the provider.</td></tr>
+          <tr><td><code>redirectUri</code></td><td><code>string</code></td><td>required</td><td>Must match the <code>redirect_uri</code> registered with the provider.</td></tr>
           <tr><td><code>providerUrl</code></td><td><code>?string</code></td><td><code>null</code></td><td>Base URL for <code>.well-known/openid-configuration</code> discovery, and the default <code>issuer</code> when that is not set.</td></tr>
           <tr><td><code>issuer</code></td><td><code>?string</code></td><td><code>null</code></td><td>Expected <code>iss</code> claim value. Falls back to <code>providerUrl</code>.</td></tr>
           <tr><td><code>scopes</code></td><td><code>list&lt;string&gt;</code></td><td><code>[]</code></td><td>Merged with the always-included <code>openid</code> scope.</td></tr>
@@ -1305,7 +1305,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
     RefreshTokenClientInterface {
 
     public function __construct(
-        public string $redirectUrl = 'https://example.com/mock-authorize',
+        public string $redirectUri = 'https://example.com/mock-authorize',
         public AuthenticationResult $authenticationResult = ...,
         public ?AuthenticationFailedException $authenticationException = null,
         public TokenResult $tokenResult = ...,

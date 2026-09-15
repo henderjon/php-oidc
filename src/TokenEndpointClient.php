@@ -68,7 +68,7 @@ final class TokenEndpointClient {
 		$params = [
 			'grant_type'   => 'authorization_code',
 			'code'         => $code,
-			'redirect_uri' => $config->redirectUrl,
+			'redirect_uri' => $config->redirectUri,
 		];
 
 		if( $codeVerifier !== null ) {

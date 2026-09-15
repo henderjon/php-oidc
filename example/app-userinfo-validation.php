@@ -42,7 +42,7 @@ $config = new OpenIDConnectClientConfig(
 	// anything shorter on both sign and verify. Signing the UserInfo response with the same
 	// secret keeps this example free of an RSA key pair and a JWKS document.
 	clientSecret: 'example-secret-0123456789abcdef0123456789',
-	redirectUrl: 'https://application.example.test/oidc/callback',
+	redirectUri: 'https://application.example.test/oidc/callback',
 	providerUrl: $providerUrl,
 	issuer: $providerUrl,
 	allowedAlgorithms: [ 'HS256' ],

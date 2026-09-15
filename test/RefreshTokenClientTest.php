@@ -21,7 +21,7 @@ class RefreshTokenClientTest extends TestCase {
 		return new OpenIDConnectClientConfig(
 			clientId: self::CLIENT_ID,
 			clientSecret: 'the-client-secret',
-			redirectUrl: 'https://example.com/callback',
+			redirectUri: 'https://example.com/callback',
 			issuer: self::ISSUER,
 			endpointOverrides: [
 				ProviderMetadataResolver::TOKEN_ENDPOINT => self::TOKEN_ENDPOINT,

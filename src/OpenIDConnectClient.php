@@ -350,7 +350,7 @@ final class OpenIDConnectClient implements
 		$params = array_merge($config->extraAuthParams, [
 			'response_type' => $responseType,
 			'client_id'     => $config->clientId,
-			'redirect_uri'  => $config->redirectUrl,
+			'redirect_uri'  => $config->redirectUri,
 			'scope'         => implode(' ', array_unique([ self::DEFAULT_SCOPE, ...$config->scopes ])),
 			'state'         => $flow->state,
 			'nonce'         => $flow->nonce,

@@ -44,7 +44,7 @@ $http->respondTo($tokenEndpoint, new FetchResponse(
 $config = new OpenIDConnectClientConfig(
 	clientId: 'example-client',
 	clientSecret: 'example-secret',
-	redirectUrl: 'https://application.example.test/oidc/callback',
+	redirectUri: 'https://application.example.test/oidc/callback',
 	providerUrl: $providerUrl,
 	issuer: $providerUrl,
 	scopes: [ 'profile', 'email' ],

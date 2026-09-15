@@ -18,7 +18,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		return new OpenIDConnectClientConfig(
 			clientId: 'client-id',
 			clientSecret: 'client-secret',
-			redirectUrl: 'https://example.com/callback',
+			redirectUri: 'https://example.com/callback',
 			providerUrl: 'https://issuer.example.com',
 			endpointOverrides: $endpointOverrides,
 		);
@@ -80,7 +80,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$config  = new OpenIDConnectClientConfig(
 			clientId: 'client-id',
 			clientSecret: 'client-secret',
-			redirectUrl: 'https://example.com/callback',
+			redirectUri: 'https://example.com/callback',
 			providerUrl: 'http://issuer.example.com',
 		);
 		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
@@ -99,7 +99,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$config  = new OpenIDConnectClientConfig(
 			clientId: 'client-id',
 			clientSecret: 'client-secret',
-			redirectUrl: 'https://example.com/callback',
+			redirectUri: 'https://example.com/callback',
 			endpointOverrides: [ ProviderMetadataResolver::TOKEN_ENDPOINT => 'http://issuer.example.com/token' ],
 			allowInsecureSchemes: true,
 		);
@@ -224,7 +224,7 @@ class ProviderMetadataResolverTest extends TestCase {
 		$config   = new OpenIDConnectClientConfig(
 			clientId: 'client-id',
 			clientSecret: 'client-secret',
-			redirectUrl: 'https://example.com/callback',
+			redirectUri: 'https://example.com/callback',
 			issuer: 'https://issuer.example.com',
 		);
 
