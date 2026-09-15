@@ -493,7 +493,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       <p>
         Everything needed to talk to one OpenID Connect provider for one call - a single immutable
         value instead of a chain of setter calls. The same shape covers both a statically-known
-        integration (provider URL, issuer, and credentials fixed at boot) and a multi-tenant one
+        integration (issuer and credentials fixed at boot) and a multi-tenant one
         (issuer/credentials resolved per request from a database row).
       </p>
       <div class="alert-box">
