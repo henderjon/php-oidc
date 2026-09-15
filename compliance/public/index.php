@@ -36,7 +36,7 @@ function splitList( string $raw ): array {
  *
  * @param array<string,mixed> $raw
  */
-function buildClientConfig( array $raw, string $redirectUrl ): OpenIDConnectClientConfig {
+function buildClientConfig( array $raw, string $redirectUri ): OpenIDConnectClientConfig {
 	$allowedHosts = splitList((string)($raw['allowedHosts'] ?? ''));
 	$audience     = splitList((string)($raw['audience'] ?? ''));
 	$maxLifetime  = trim((string)($raw['maxTokenLifetimeSeconds'] ?? ''));
@@ -44,8 +44,7 @@ function buildClientConfig( array $raw, string $redirectUrl ): OpenIDConnectClie
 	return new OpenIDConnectClientConfig(
 		clientId: (string)($raw['clientId'] ?? ''),
 		clientSecret: (string)($raw['clientSecret'] ?? ''),
-		redirectUrl: $redirectUrl,
-		providerUrl: trim((string)($raw['providerUrl'] ?? '')) !== '' ? trim((string)$raw['providerUrl']) : null,
+		redirectUri: $redirectUri,
 		issuer: (string)($raw['issuer'] ?? ''),
 		scopes: splitList((string)($raw['scopes'] ?? '')),
 		audience: $audience === [] ? null : $audience,
@@ -112,7 +111,6 @@ if( $action === 'reset' ) {
 if( $action === 'start' && $_SERVER['REQUEST_METHOD'] === 'POST' ) {
 	$raw = [
 		'issuer'                   => $_POST['issuer'] ?? '',
-		'providerUrl'              => $_POST['providerUrl'] ?? '',
 		'clientId'                 => $_POST['clientId'] ?? '',
 		'clientSecret'             => $_POST['clientSecret'] ?? '',
 		'clientAuthMethod'         => $_POST['clientAuthMethod'] ?? 'Basic',
