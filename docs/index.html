@@ -384,6 +384,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
             <li><a href="#OpenIDConnectClientConfig">OpenIDConnectClientConfig</a></li>
             <li><a href="#Logging">Logging</a></li>
             <li><a href="#LogLevelFilterLogger">LogLevelFilterLogger</a></li>
+            <li><a href="#LogLevelFilterMode">LogLevelFilterMode</a></li>
             <li><a href="#PkceMode">PkceMode</a></li>
             <li><a href="#ClientAuthMethod">ClientAuthMethod</a></li>
           </ul>
@@ -773,29 +774,29 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
     public function __construct(
         Psr\Log\LoggerInterface $logger,
         array $levels,
-        bool $allow = true,
+        LogLevelFilterMode $mode = LogLevelFilterMode::AllowList,
     )
 
     public static function all( Psr\Log\LoggerInterface $logger ): self
 }</div>
       <p>
-        <code>$levels</code> and <code>$allow</code> together express four distinct patterns,
+        <code>$levels</code> and <code>$mode</code> together express four distinct patterns,
         not just one allow-list:
       </p>
       <table>
         <thead><tr><th>Pattern</th><th>Usage</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td>none</td><td><code>new LogLevelFilterLogger($logger, [])</code></td><td>Nothing passes. <code>$levels</code> is empty and <code>$allow</code> defaults <code>true</code>, so no level can ever satisfy the membership test.</td></tr>
+          <tr><td>none</td><td><code>new LogLevelFilterLogger($logger, [])</code></td><td>Nothing passes. <code>$levels</code> is empty and <code>$mode</code> defaults to <code>AllowList</code>, so no level can ever satisfy the membership test.</td></tr>
           <tr><td>none, except</td><td><code>new LogLevelFilterLogger($logger, [ LogLevel::DEBUG ])</code></td><td>The ordinary allow-list case: nothing passes except the levels named.</td></tr>
-          <tr><td>all</td><td><code>new LogLevelFilterLogger($logger, [], allow: false)</code><br>Sugar: <code>LogLevelFilterLogger::all($logger)</code></td><td>Everything passes, including a level neither PSR-3 nor the caller has defined yet.</td></tr>
-          <tr><td>all, except</td><td><code>new LogLevelFilterLogger($logger, [ LogLevel::DEBUG ], allow: false)</code></td><td>The deny-list case: everything passes except the levels named, including one that does not exist yet. The mirror image of "none, except."</td></tr>
+          <tr><td>all</td><td><code>new LogLevelFilterLogger($logger, [], LogLevelFilterMode::DenyList)</code><br>Sugar: <code>LogLevelFilterLogger::all($logger)</code></td><td>Everything passes, including a level neither PSR-3 nor the caller has defined yet.</td></tr>
+          <tr><td>all, except</td><td><code>new LogLevelFilterLogger($logger, [ LogLevel::DEBUG ], LogLevelFilterMode::DenyList)</code></td><td>The deny-list case: everything passes except the levels named, including one that does not exist yet. The mirror image of "none, except."</td></tr>
         </tbody>
       </table>
       <p>
         The default, opt-in posture - "none, except" - is the same reason this class exists at
         all (see <a href="#Logging">Logging</a>): the default stance toward this library's noise
         is to filter all of it, not to let everything through until told otherwise. Pass an
-        empty array with the default <code>$allow</code> and every log call is dropped,
+        empty array with the default <code>$mode</code> and every log call is dropped,
         including a level a caller might assume always gets through, such as <code>error</code>
         - nothing passes unless its exact level is named.
       </p>
@@ -816,23 +817,40 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
         "Every level, without having to name any of them" - the one case not reachable just by
         listing levels, custom or not, since it does not require knowing in advance which levels
         might ever be logged - is technically reachable directly as an empty deny-list
-        (<code>new LogLevelFilterLogger($logger, [], allow: false)</code>), but that is not
-        obviously what it means at a glance. Use the <code>all()</code> named constructor
-        instead:
+        (<code>new LogLevelFilterLogger($logger, [], LogLevelFilterMode::DenyList)</code>), but
+        that is not obviously what it means at a glance. Use the <code>all()</code> named
+        constructor instead:
       </p>
       <pre>$logger = LogLevelFilterLogger::all($yourAppLogger);</pre>
       <p>
-        The default, <code>$allow: true</code>, fails <em>closed</em> - a level nobody named
-        gets dropped, including one this library or a wrapped logger adds later.
-        <code>$allow: false</code> fails <em>open</em> - a level nobody named gets forwarded
-        instead. That is a deliberate trade for the specific case it exists for (skip this
-        library's <code>debug</code> tracing, forward every other level unconditionally), not a
-        reason to prefer it generally over naming an allow-list directly. It is also why
+        The default, <code>LogLevelFilterMode::AllowList</code>, fails <em>closed</em> - a level
+        nobody named gets dropped, including one this library or a wrapped logger adds later.
+        <code>DenyList</code> fails <em>open</em> - a level nobody named gets forwarded instead.
+        That is a deliberate trade for the specific case it exists for (skip this library's
+        <code>debug</code> tracing, forward every other level unconditionally), not a reason to
+        prefer it generally over naming an allow-list directly. It is also why
         <code>$levels</code> is not called <code>$allowedLevels</code> or
-        <code>$excludedLevels</code>: it holds an allow-list when <code>$allow</code> is true
-        and a deny-list when it is false, and a name tied to one mode would be wrong in the
-        other.
+        <code>$excludedLevels</code>: it holds an allow-list under <code>AllowList</code> and a
+        deny-list under <code>DenyList</code>, and a name tied to one mode would be wrong under
+        the other.
       </p>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- LOGLEVELFILTERMODE -->
+    <div class="type-section" id="LogLevelFilterMode">
+      <h2>enum LogLevelFilterMode<a class="section-anchor" href="#LogLevelFilterMode" aria-label="Link to this section">&para;</a></h2>
+      <p>How <a href="#LogLevelFilterLogger"><code>LogLevelFilterLogger</code></a>'s <code>$levels</code> is interpreted.</p>
+      <div class="method-sig">enum LogLevelFilterMode {
+    case AllowList;
+    case DenyList;
+}</div>
+      <dl>
+        <dt><code>AllowList</code></dt>
+        <dd>Only a level named in <code>$levels</code> is forwarded - an empty array means nothing passes, including a level nobody has named yet.</dd>
+        <dt><code>DenyList</code></dt>
+        <dd>Every level is forwarded except the ones named in <code>$levels</code> - an empty array means nothing is excluded, so everything passes, including a level neither PSR-3 nor the caller has defined yet.</dd>
+      </dl>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 

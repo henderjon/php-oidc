@@ -110,18 +110,18 @@ class LogLevelFilterLoggerTest extends TestCase {
 		$this->assertSame('a-custom-non-psr3-level', $inner->records[0]['level']);
 	}
 
-	public function testAllowFalseTreatsLevelsAsADenylistDroppingTheNamedLevel(): void {
+	public function testDenyListDropsTheNamedLevel(): void {
 		$inner  = new ArrayLogger;
-		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], allow: false);
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], LogLevelFilterMode::DenyList);
 
 		$logger->debug('a debug message');
 
 		$this->assertSame([], $inner->records);
 	}
 
-	public function testAllowFalseForwardsEveryOtherStandardLevel(): void {
+	public function testDenyListForwardsEveryOtherStandardLevel(): void {
 		$inner  = new ArrayLogger;
-		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], allow: false);
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], LogLevelFilterMode::DenyList);
 
 		$logger->emergency('m');
 		$logger->alert('m');
@@ -134,12 +134,12 @@ class LogLevelFilterLoggerTest extends TestCase {
 		$this->assertCount(7, $inner->records);
 	}
 
-	public function testAllowFalseForwardsALevelPsr3DoesNotDefine(): void {
+	public function testDenyListForwardsALevelPsr3DoesNotDefine(): void {
 		// A level nobody named - including a custom one neither PSR-3 nor $levels knows about
 		// - is exactly what a deny-list forwards by design, unlike the default allow-list,
 		// which would drop it.
 		$inner  = new ArrayLogger;
-		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], allow: false);
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG ], LogLevelFilterMode::DenyList);
 
 		$logger->log('a-custom-non-psr3-level', 'm');
 
@@ -147,9 +147,9 @@ class LogLevelFilterLoggerTest extends TestCase {
 		$this->assertSame('a-custom-non-psr3-level', $inner->records[0]['level']);
 	}
 
-	public function testAllowFalseCanExcludeMultipleLevelsAtOnce(): void {
+	public function testDenyListCanExcludeMultipleLevelsAtOnce(): void {
 		$inner  = new ArrayLogger;
-		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG, LogLevel::INFO ], allow: false);
+		$logger = new LogLevelFilterLogger($inner, [ LogLevel::DEBUG, LogLevel::INFO ], LogLevelFilterMode::DenyList);
 
 		$logger->debug('m');
 		$logger->info('m');
@@ -162,7 +162,7 @@ class LogLevelFilterLoggerTest extends TestCase {
 	public function testAllIsEquivalentToAnEmptyDenylist(): void {
 		// all()'s own docblock calls it sugar for an empty deny-list - proves that directly.
 		$inner  = new ArrayLogger;
-		$logger = new LogLevelFilterLogger($inner, [], allow: false);
+		$logger = new LogLevelFilterLogger($inner, [], LogLevelFilterMode::DenyList);
 
 		$logger->emergency('m');
 		$logger->debug('m');
