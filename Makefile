@@ -4,6 +4,6 @@ phpunit:
 	vendor/bin/phpunit
 
 phpstan:
-	vendor/bin/phpstan analyse --memory-limit 128M
+	vendor/bin/phpstan analyse --memory-limit 256M
 
 test: phpunit phpstan

@@ -303,9 +303,11 @@ function setupForm( array $config ): string {
 function continueToProviderPanel( string $redirectUrl ): string {
 	$escapedUrl = escape($redirectUrl);
 
-	$query        = (string)(parse_url($redirectUrl, PHP_URL_QUERY) ?? '');
+	$queryValue = parse_url($redirectUrl, PHP_URL_QUERY);
+	$query      = is_string($queryValue) ? $queryValue : '';
 	parse_str($query, $queryParams);
-	$responseType = escape((string)($queryParams['response_type'] ?? '(none)'));
+	$responseTypeValue = $queryParams['response_type'] ?? '(none)';
+	$responseType      = escape(is_string($responseTypeValue) ? $responseTypeValue : '(none)');
 
 	return <<<HTML
 	<h2>Discovery resolved</h2>
@@ -388,7 +390,7 @@ function savedResultPanel( array $result ): string {
 	$claimsRows = '';
 
 	foreach( $result['claims'] as $key => $value ) {
-		$claimsRows .= '<tr><th>' . escape((string)$key) . '</th><td>' . escape(is_scalar($value) ? (string)$value : json_encode($value)) . "</td></tr>\n";
+		$claimsRows .= '<tr><th>' . escape((string)$key) . '</th><td>' . escape(is_scalar($value) ? (string)$value : (json_encode($value) ?: 'null')) . "</td></tr>\n";
 	}
 
 	$accessToken  = escape($result['accessToken'] ?? '(none)');
@@ -451,18 +453,18 @@ function errorPanel( string $heading, \Throwable $e, CollectingLogger $logger ):
 	HTML;
 }
 
-function successPanel( string $heading, string $idToken, Claims $claims, ?string $accessToken, ?string $refreshToken, ?int $expiresIn, CollectingLogger $logger ): string {
+function successPanel( string $heading, ?string $idToken, Claims $claims, ?string $accessToken, ?string $refreshToken, ?int $expiresIn, CollectingLogger $logger ): string {
 	$claimsRows = '';
 
 	foreach( $claims->all() as $key => $value ) {
-		$claimsRows .= '<tr><th>' . escape((string)$key) . '</th><td>' . escape(is_scalar($value) ? (string)$value : json_encode($value)) . "</td></tr>\n";
+		$claimsRows .= '<tr><th>' . escape((string)$key) . '</th><td>' . escape(is_scalar($value) ? (string)$value : (json_encode($value) ?: 'null')) . "</td></tr>\n";
 	}
 
 	$log          = logPanel($logger);
 	$accessCell   = escape($accessToken ?? '(none)');
 	$refreshCell  = escape($refreshToken ?? '(none)');
 	$expiresCell  = $expiresIn === null ? '(not returned)' : escape((string)$expiresIn) . ' seconds';
-	$idTokenShort = escape(substr($idToken, 0, 40) . '...');
+	$idTokenShort = escape($idToken !== null ? substr($idToken, 0, 40) . '...' : '(none)');
 
 	return <<<HTML
 	<h2>{$heading}</h2>

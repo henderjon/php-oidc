@@ -21,3 +21,5 @@ jobs:
       - run: composer audit --locked
       - run: vendor/bin/phpunit
       - run: vendor/bin/phpstan analyse
+      - name: Syntax-check example/
+        run: find example -name '*.php' -print0 | xargs -0 -n1 php -l
