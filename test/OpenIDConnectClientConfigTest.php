@@ -210,6 +210,17 @@ class OpenIDConnectClientConfigTest extends TestCase {
 	 * field set to a distinct, non-default value, calls every wither once, and asserts every
 	 * OTHER field survived that call completely unchanged - the one place an argument landing
 	 * in the wrong constructor slot would actually be caught.
+	 *
+	 * One gap this cannot close: there are three `bool` fields but only two possible values, so
+	 * by pigeonhole at least one same-type pair must share a value below, and a swap between
+	 * exactly that pair would go undetected. `allowUntrustedAudiences`/`allowAnyHost` - adjacent
+	 * constructor parameters, and so the pair a real merge-conflict resolution could plausibly
+	 * swap - are deliberately given different values (`true`/`false`) to guarantee that swap is
+	 * caught. `allowInsecureSchemes` is left colliding with `allowUntrustedAudiences` (both
+	 * `true`) instead: it sits four parameters away from both other bools, separated by three
+	 * non-bool parameters, so a hand-resolved conflict swapping it with either while leaving
+	 * everything between correctly ordered is not a realistic failure mode the way an adjacent
+	 * swap is.
 	 */
 	public function testWithersOnlyChangeTheirOwnField(): void {
 		$config = new OpenIDConnectClientConfig(
@@ -247,6 +258,28 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertUnchangedExcept($config, $config->withAllowUntrustedAudiences(false), 'allowUntrustedAudiences');
 		$this->assertUnchangedExcept($config, $config->withAllowAnyHost(true), 'allowAnyHost');
 		$this->assertUnchangedExcept($config, $config->withClientAuthMethod(ClientAuthMethod::Basic), 'clientAuthMethod');
+	}
+
+	/**
+	 * testWithersOnlyChangeTheirOwnField() above calls every wither by name in a fixed,
+	 * hand-written sequence - not reflection-driven - so a new `with*()` method added to the
+	 * class later would silently get zero coverage from it rather than failing anything. This
+	 * counts the class's actual `with*()` methods via reflection and fails loudly if that count
+	 * ever drifts from the number this test file was written to cover, as a prompt to update
+	 * testWithersOnlyChangeTheirOwnField() (and its sibling single-field `with*()` tests above)
+	 * rather than leaving the new method silently untested by either.
+	 */
+	public function testEveryWitherIsCoveredByTheFieldIsolationTest(): void {
+		$witherCount = count(array_filter(
+			(new \ReflectionClass(OpenIDConnectClientConfig::class))->getMethods(\ReflectionMethod::IS_PUBLIC),
+			static fn ( \ReflectionMethod $method ): bool => str_starts_with($method->getName(), 'with'),
+		));
+
+		$this->assertSame(
+			16,
+			$witherCount,
+			'OpenIDConnectClientConfig gained or lost a with*() method - update testWithersOnlyChangeTheirOwnField() to cover it',
+		);
 	}
 
 	/**
