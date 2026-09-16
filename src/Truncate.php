@@ -13,6 +13,15 @@ namespace Oidc;
  * callback's `state`, `error`, or `error_description` - none of them checked against anything
  * yet), so a crafted, arbitrarily large value cannot bloat or flood a log record just because
  * this library chose to log it before validating its shape.
+ *
+ * Cuts with `mb_strcut()`, not `substr()`: `substr()` operates on bytes, not UTF-8 codepoints,
+ * and can split a multi-byte character in half at the cut point. A `state`/`error`/
+ * `error_description` crafted to land a multi-byte character across the cutoff produces an
+ * invalid UTF-8 byte sequence - confirmed directly, not assumed: `json_encode()` on a context
+ * array containing one returns `false` for the *entire* record, not just that field, which for a
+ * JSON-formatting logger means losing the whole log line this class exists to protect in the
+ * first place. `mb_strcut()` cuts at the same byte length but backs off to the start of
+ * whichever character would otherwise straddle it, so the result is always valid UTF-8.
  */
 final class Truncate {
 
@@ -26,7 +35,7 @@ final class Truncate {
 		$maxLength = max(0, $maxLength);
 
 		return strlen($value) > $maxLength
-			? substr($value, 0, $maxLength) . '...(truncated)'
+			? mb_strcut($value, 0, $maxLength) . '...(truncated)'
 			: $value;
 	}
 

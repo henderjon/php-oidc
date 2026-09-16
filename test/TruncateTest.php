@@ -39,4 +39,16 @@ class TruncateTest extends TestCase {
 		$this->assertSame('', Truncate::to('', -2));
 	}
 
+	public function testNeverSplitsAMultiByteCharacterAtTheCutPoint(): void {
+		// A 2-byte UTF-8 character ("é") straddling the byte-64 cutoff, confirmed to actually
+		// produce invalid UTF-8 (and break json_encode() for the whole log record it is
+		// embedded in) when cut with a byte-oblivious substr() instead - see this class's own
+		// docblock.
+		$value  = str_repeat('a', 63) . 'é' . str_repeat('b', 10);
+		$result = Truncate::to($value, 64);
+
+		$this->assertTrue(mb_check_encoding($result, 'UTF-8'));
+		$this->assertNotFalse(json_encode([ 'k' => $result ]));
+	}
+
 }
