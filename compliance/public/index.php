@@ -70,6 +70,13 @@ function sessionConfig(): ?array {
 	return $_SESSION['harness_config'] ?? null;
 }
 
+/**
+ * @return array{idToken:?string,accessToken:?string,refreshToken:?string,expiresIn:?int,claims:array<string,mixed>}|null
+ */
+function sessionResult(): ?array {
+	return $_SESSION['harness_result'] ?? null;
+}
+
 function render( string $title, string $body ): void {
 	echo \Compliance\layout($title, $body);
 }
@@ -80,7 +87,7 @@ if( $action === 'home' ) {
 	$config = sessionConfig() ?? [];
 	$body   = \Compliance\setupForm($config);
 
-	$result = $_SESSION['harness_result'] ?? null;
+	$result = sessionResult();
 
 	if( is_array($result) ) {
 		$body .= \Compliance\savedResultPanel($result);
@@ -207,7 +214,7 @@ if( $action === 'callback' ) {
 
 if( $action === 'userinfo' ) {
 	$raw    = sessionConfig();
-	$result = $_SESSION['harness_result'] ?? null;
+	$result = sessionResult();
 
 	if( $raw === null || !is_array($result) || $result['accessToken'] === null ) {
 		render('UserInfo', \Compliance\errorPanel('No saved login', new \RuntimeException('Complete a login first - there is no access_token in this session.'), new CollectingLogger()));
@@ -235,7 +242,7 @@ if( $action === 'userinfo' ) {
 
 if( $action === 'refresh' ) {
 	$raw    = sessionConfig();
-	$result = $_SESSION['harness_result'] ?? null;
+	$result = sessionResult();
 
 	if( $raw === null || !is_array($result) || $result['refreshToken'] === null ) {
 		render('Refresh', \Compliance\errorPanel('No refresh token', new \RuntimeException('There is no refresh_token in this session to redeem.'), new CollectingLogger()));
