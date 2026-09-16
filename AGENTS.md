@@ -20,10 +20,19 @@ composer update -W vendor/package       # update one dependency with its own dep
 php example/app.php                     # run the example application (see example/README.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs `composer audit --locked`, `vendor/bin/phpunit`, and
-`vendor/bin/phpstan analyse` against PHP 8.1 through 8.5. PHPStan is configured at level 8 over `src` only.
-`test/` and `example/` are deliberately out of scope for now - add them back to `paths` in `phpstan.neon` when
-they are ready. There is no configured code-style linter in this repository - do not assume `phpcs` exists.
+CI (`.github/workflows/ci.yml`) runs `composer audit --locked`, `vendor/bin/phpunit`,
+`vendor/bin/phpstan analyse`, and a `php -l` syntax check over `example/`, against PHP 8.1
+through 8.5. PHPStan is configured at level 8 over `src` and `compliance` - `compliance/` is a
+real, runnable app with no test coverage of its own, so this is its only automated check; a
+past bug there (a call site left passing named arguments a library API change had already
+removed) went undetected until a manual review found it, specifically because nothing ran
+against that directory at all. `test/` and `example/` are deliberately out of PHPStan's scope -
+`example/pseudo/*.php` intentionally references undefined variables and functions as stand-ins
+for a consuming application's own code, which a static analyzer cannot tell apart from a real
+bug; `example/`'s runnable scripts get the cheaper `php -l` check instead, which only rejects
+genuine syntax errors and tolerates that pattern. Add `test`/`example` back to phpstan's `paths`
+only if `example/pseudo` moves elsewhere or gets excluded via `excludePaths`. There is no
+configured code-style linter in this repository - do not assume `phpcs` exists.
 `.editorconfig` covers whitespace only: PHP indents with tabs, everything else with spaces (2 for YAML and
 Markdown, 4 otherwise).
 
@@ -136,3 +145,7 @@ subclass hooks. This library replaces that with plain constructor injection - ca
 - Default branch is `dev`. Treat it as the merge target for pull requests, not a branch to commit to directly.
 - Keep commits focused. A commit that adds a feature and a commit that hardens/tests it are both fine as separate
   commits; do not squash a branch down to one commit by default.
+- `dev` currently carries breaking changes staged for the next major (v2.0.0) release - see `CHANGELOG.md`'s
+  `[Unreleased]` section for the full list. A bug fix that targets the still-supported 1.x line must branch off
+  the `v1.6.0` tag instead of `dev`, so the fix (and its own release) never carries those breaking changes along
+  with it.
