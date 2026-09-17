@@ -58,6 +58,7 @@ final class ClaimsValidator {
 		$this->validateRequiredClaims($claims);
 		$this->validateIssuer($claims, $expectedIssuer);
 		$this->validateAudience($claims, $expectedClientId, $allowUntrustedAudiences);
+		$this->validateAuthorizedParty($claims, $expectedClientId);
 		$this->validateNonce($claims, $expectedNonce);
 		$this->validateTokenLifetime($claims, $maxLifetimeSeconds);
 	}
@@ -254,6 +255,45 @@ final class ClaimsValidator {
 		]);
 
 		throw new AuthenticationFailedException('ID token audience contains additional values not trusted by this client', state: $this->state);
+	}
+
+	/**
+	 * OpenID Connect Core 1.0 §3.1.3.7 step 5, the check validateAudience() alone does not
+	 * cover: an `azp` (Authorized Party) claim that IS present must name this Client's own
+	 * `client_id`, not whatever value `$expectedAudience` was widened to for validateAudience()
+	 * itself - `azp` identifies who the token was actually issued to, which is always this
+	 * Client, never a secondary trusted audience such as a resource API.
+	 *
+	 * Step 4 ("if the ID Token contains multiple audiences, the Client SHOULD verify that an
+	 * azp Claim is present") is deliberately NOT enforced as a rejection here. Unlike step 3's
+	 * two audience MUSTs (see validateAudience()'s own docblock for why those are strict),
+	 * step 4 is a bare SHOULD, and a caller who explicitly widened the trusted audience set via
+	 * `OpenIDConnectClientConfig::$audience` - the resource-audience pattern
+	 * example/app-audience-validation.php demonstrates - already knows every audience that
+	 * token can legitimately carry without needing `azp` to disambiguate anything, and many
+	 * otherwise-compliant providers never set `azp` at all. Rejecting that case outright would
+	 * break real interoperability for a claim this method can still act on the one place it
+	 * unambiguously matters: when `azp` is present and wrong.
+	 *
+	 * Must run after validateAudience() has already confirmed `$expectedClientId` is present
+	 * among `aud` - this only narrows which of several already-trusted audiences actually
+	 * received this specific token.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateAuthorizedParty( Claims $claims, string $expectedClientId ): void {
+		$azp = $claims->get('azp');
+
+		if( $azp !== null && $azp !== $expectedClientId ) {
+			$this->logger->error('OIDC: ID token azp claim does not match the expected client id', [
+				'expected' => $expectedClientId,
+				'actual'   => $azp,
+				'state'    => $this->state,
+				'security_relevant' => false,
+			]);
+
+			throw new AuthenticationFailedException('ID token azp claim does not match the expected client id', state: $this->state);
+		}
 	}
 
 	/**

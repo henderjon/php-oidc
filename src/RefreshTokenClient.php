@@ -85,6 +85,7 @@ final class RefreshTokenClient implements RefreshTokenClientInterface {
 			$this->claimsValidator->validateIssuer($claims, (string)$originalClaims->get('iss'));
 			$this->claimsValidator->validateRefreshedSubject($claims, (string)$originalClaims->get('sub'));
 			$this->claimsValidator->validateAudience($claims, $this->normalizedAudience($originalClaims->get('aud')));
+			$this->claimsValidator->validateAuthorizedParty($claims, $config->clientId);
 			$this->claimsValidator->validateRefreshedAuthTime($claims, $originalClaims->get('auth_time'));
 
 			$originalNonce = $originalClaims->get('nonce');
