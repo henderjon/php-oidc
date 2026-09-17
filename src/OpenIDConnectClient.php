@@ -513,6 +513,11 @@ final class OpenIDConnectClient implements
 			// Core 1.0 §3.1.3.7 step 3's other half) unless allowUntrustedAudiences opts out of it.
 			$claimsValidator->validateAudience($claims, $audience ?? $config->clientId, $config->allowUntrustedAudiences);
 
+			// Unlike the `aud` check just above, `azp` (Authorized Party) always names this
+			// Client's own client_id, never whatever `$audience` widened the accepted `aud` set
+			// to - see ClaimsValidator::validateAuthorizedParty()'s own docblock.
+			$claimsValidator->validateAuthorizedParty($claims, $config->clientId);
+
 			$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
 
 			// sub/iss/aud/exp are standard, non-secret JWT claims - safe to log in full, unlike
