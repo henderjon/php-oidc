@@ -185,9 +185,36 @@ function layout( string $title, string $bodyHtml ): string {
 HTML;
 }
 
+/**
+ * `Host` and `X-Forwarded-Proto` are both attacker-controlled on any request that did not
+ * actually originate from loopback - this harness is documented (see README.md's "never
+ * deploy this anywhere reachable by anyone but you") to only ever be reached that way, whether
+ * directly via `php -S` or proxied through the locally-run Caddy instance `run.sh` starts, so
+ * that assumption is enforced here rather than merely hoped for. This is what lets the harness
+ * follow whatever port or proxy the user picked without hardcoding one - see README.md's
+ * "HTTPS for implicit and hybrid flows" section - while still refusing to build a `redirect_uri`
+ * (handed to a real OIDC provider) from headers a non-loopback peer could have forged.
+ *
+ * @throws \RuntimeException
+ */
 function callbackUrl(): string {
-	$host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+	$remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '';
+
+	if( $remoteAddr !== '127.0.0.1' && $remoteAddr !== '::1' ) {
+		throw new \RuntimeException('This harness only accepts loopback connections - refusing to trust Host/X-Forwarded-Proto from a non-loopback peer');
+	}
+
+	$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
+	if( preg_match('/^[a-zA-Z0-9.-]+(:\d+)?$/', $host) !== 1 ) {
+		throw new \RuntimeException('Malformed Host header');
+	}
+
 	$scheme = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? (!empty($_SERVER['HTTPS']) ? 'https' : 'http');
+
+	if( $scheme !== 'http' && $scheme !== 'https' ) {
+		throw new \RuntimeException('Malformed X-Forwarded-Proto header');
+	}
 
 	return "{$scheme}://{$host}/index.php?action=callback";
 }
@@ -195,7 +222,7 @@ function callbackUrl(): string {
 /**
  * @param array<string,mixed> $config
  */
-function setupForm( array $config ): string {
+function setupForm( array $config, string $csrfToken ): string {
 	$issuer                   = escape($config['issuer'] ?? '');
 	$clientId                 = escape($config['clientId'] ?? '');
 	$clientSecret             = escape($config['clientSecret'] ?? '');
@@ -210,6 +237,7 @@ function setupForm( array $config ): string {
 	$authMethodOptions        = optionsFor([ 'Basic', 'Post' ], (string)($config['clientAuthMethod'] ?? 'Basic'));
 	$responseTypeOptions      = optionsFor([ 'code', 'id_token', 'id_token token' ], (string)($config['responseType'] ?? 'code'));
 	$callbackUrl              = escape(callbackUrl());
+	$escapedCsrfToken         = escape($csrfToken);
 
 	return <<<HTML
 	<h2>1. Register this callback URL with the suite</h2>
@@ -222,6 +250,7 @@ function setupForm( array $config ): string {
 
 	<h2>2. Point this harness at the plan</h2>
 	<form method="post" action="/index.php?action=start">
+		<input type="hidden" name="csrf_token" value="{$escapedCsrfToken}">
 		<fieldset>
 			<legend>Provider</legend>
 
