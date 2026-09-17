@@ -5,6 +5,7 @@ namespace Oidc;
 use Oidc\Exceptions\AuthorizationStateException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Psr\SimpleCache\CacheException;
 use Psr\SimpleCache\CacheInterface;
 
 /**
@@ -76,6 +77,18 @@ final class AuthorizationStateStore {
 	 */
 	private const MAX_LOGGED_STATE_LENGTH = 64;
 
+	/**
+	 * Every state this class itself ever generates is `bin2hex(random_bytes($length))` -
+	 * lowercase hex only, regardless of `$length`. `consume()` checks a callback's `state`
+	 * against this same shape before it is ever used to build a cache key: PSR-16 reserves
+	 * `{}()/\@:` in keys, none of which a hex string can ever contain, and an implausibly long
+	 * value is rejected outright rather than handed to the cache backend to reject however it
+	 * sees fit. 128 comfortably covers any realistic `$length` a caller might pass to `start()`
+	 * (128 hex characters is `$length` = 64 bytes) while still rejecting a callback that pads
+	 * `state` far past anything this class could have generated.
+	 */
+	private const MAX_STATE_LENGTH = 128;
+
 	public function __construct(
 		private readonly CacheInterface $cache,
 		private readonly string $cacheKeySuffix = "",
@@ -86,10 +99,10 @@ final class AuthorizationStateStore {
 
 	/**
 	 * @param int<1,max> $length
-	 * @throws AuthorizationStateException When the cache write itself fails - fail closed
-	 *         rather than hand back a FlowState pointing at an attempt that was never
-	 *         actually persisted, which `consume()` could never find later no matter what
-	 *         the provider echoes back.
+	 * @throws AuthorizationStateException When the cache write itself fails, or the cache
+	 *         backend throws instead of returning `false` - fail closed rather than hand back
+	 *         a FlowState pointing at an attempt that was never actually persisted, which
+	 *         `consume()` could never find later no matter what the provider echoes back.
 	 * @throws \Throwable Whatever the injected logger itself throws, if it throws at all - see
 	 *         this class's own docblock. The cache write above has already succeeded by the
 	 *         time this method logs, so that failure mode is a logging problem, not this
@@ -99,10 +112,20 @@ final class AuthorizationStateStore {
 		$state = $this->randomToken($length);
 		$nonce = $this->randomToken($length);
 
-		$stored = $this->cache->set($this->flowKey($state), [
-			'nonce'         => $nonce,
-			'code_verifier' => $codeVerifier,
-		], $this->ttlSeconds);
+		try {
+			$stored = $this->cache->set($this->flowKey($state), [
+				'nonce'         => $nonce,
+				'code_verifier' => $codeVerifier,
+			], $this->ttlSeconds);
+		} catch( CacheException $e ) {
+			$this->logger->error('OIDC: cache threw while persisting a new authorization attempt', [
+				'state'     => $this->loggableState($state),
+				'exception' => $e,
+				'security_relevant' => false,
+			]);
+
+			throw new AuthorizationStateException('Unable to persist authorization state', state: $this->loggableState($state), previous: $e);
+		}
 
 		if( !$stored ) {
 			$this->logger->error('OIDC: failed to persist a new authorization attempt', [ 'state' => $this->loggableState($state), 'security_relevant' => false ]);
@@ -129,6 +152,9 @@ final class AuthorizationStateStore {
 	 * as "not found". Only a hit that is not the shape this class wrote
 	 * (`corrupted`) is actually distinguishable from that.
 	 *
+	 * @throws AuthorizationStateException When the cache backend throws instead of reporting a
+	 *         miss - a malformed `state` never reaches the cache at all (see below), so this is
+	 *         reserved for the backend genuinely failing on a well-formed key.
 	 * @throws \Throwable Whatever the injected logger itself throws, if it throws at all - see
 	 *         this class's own docblock. The cache entry has already been deleted above by the
 	 *         time any of this method's own logging happens, so a throwing logger here
@@ -137,9 +163,33 @@ final class AuthorizationStateStore {
 	 *         backing it is already gone.
 	 */
 	public function consume(string $state): ?FlowState {
-		$key     = $this->flowKey($state);
-		$flow    = $this->cache->get($key);
-		$deleted = $this->cache->delete($key);
+		// $state reaches here straight from an unauthenticated callback, before it is known to
+		// match anything - PSR-16 reserves several characters in keys and only requires support
+		// for keys up to 64 characters, so a crafted value containing one of those, or simply an
+		// implausibly long one, could make a conformant cache backend throw instead of reporting
+		// an ordinary miss. Rejecting anything not shaped like this class's own generated state
+		// keeps every malformed callback failing the same way every other non-match does,
+		// without ever handing an attacker-controlled string to the cache backend at all.
+		if( !$this->isValidGeneratedStateFormat($state) ) {
+			$this->logger->warning('OIDC: callback state is not shaped like one this class could have generated - rejecting without a cache lookup', [ 'state' => $this->loggableState($state) ]);
+
+			return null;
+		}
+
+		$key = $this->flowKey($state);
+
+		try {
+			$flow    = $this->cache->get($key);
+			$deleted = $this->cache->delete($key);
+		} catch( CacheException $e ) {
+			$this->logger->error('OIDC: cache threw while consuming an authorization attempt', [
+				'state'     => $this->loggableState($state),
+				'exception' => $e,
+				'security_relevant' => false,
+			]);
+
+			throw new AuthorizationStateException('Unable to consume authorization state', state: $this->loggableState($state), previous: $e);
+		}
 
 		if( $flow === null ) {
 			// warning, not alert: alert is reserved for a configuration choice worth a
@@ -195,6 +245,17 @@ final class AuthorizationStateStore {
 
 	private function flowKey(string $state): string {
 		return self::FLOW_KEY_PREFIX . ".{$this->cacheKeySuffix}.{$state}";
+	}
+
+	/**
+	 * Whether `$state` is shaped like something `randomToken()` could have produced -
+	 * non-empty, no longer than `MAX_STATE_LENGTH`, and hex digits only. `ctype_xdigit()`
+	 * accepts both cases even though `randomToken()` only ever generates lowercase - a callback
+	 * echoing back an uppercase-hex state is still exactly as safe a cache key, so there is no
+	 * reason to reject it just because this class would not have generated it in that case.
+	 */
+	private function isValidGeneratedStateFormat( string $state ): bool {
+		return $state !== '' && strlen($state) <= self::MAX_STATE_LENGTH && ctype_xdigit($state);
 	}
 
 	private function loggableState(string $state): string {
