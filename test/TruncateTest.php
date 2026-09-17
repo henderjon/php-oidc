@@ -56,4 +56,9 @@ class TruncateTest extends TestCase {
 		$this->assertNotFalse(json_encode([ 'k' => $result ]));
 	}
 
+	public function testTruncatesJapaneseTextWithoutSplittingCharacters(): void {
+		$this->assertSame('こ...(truncated)', Truncate::to('こんにちは世界', 4));
+		$this->assertSame('こんに...(truncated)', Truncate::to('こんにちは世界', 10));
+	}
+
 }
