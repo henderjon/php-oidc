@@ -14,6 +14,10 @@ class TruncateTest extends TestCase {
 		$this->assertSame('', Truncate::to('', 5));
 	}
 
+	public function testLeavesAMultibyteValueAtTheCharacterLimitUnchanged(): void {
+		$this->assertSame('abcdé', Truncate::to('abcdé', 5));
+	}
+
 	public function testCutsAValueOverTheLimitAndAppendsATruncatedMarker(): void {
 		$this->assertSame('abcde...(truncated)', Truncate::to('abcdefghij', 5));
 	}
@@ -47,6 +51,7 @@ class TruncateTest extends TestCase {
 		$value  = str_repeat('a', 63) . 'é' . str_repeat('b', 10);
 		$result = Truncate::to($value, 64);
 
+		$this->assertSame(str_repeat('a', 63) . '...(truncated)', $result);
 		$this->assertTrue(mb_check_encoding($result, 'UTF-8'));
 		$this->assertNotFalse(json_encode([ 'k' => $result ]));
 	}

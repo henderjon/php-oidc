@@ -34,7 +34,7 @@ final class Truncate {
 	public static function to( string $value, int $maxLength ): string {
 		$maxLength = max(0, $maxLength);
 
-		return strlen($value) > $maxLength
+		return mb_strlen($value) > $maxLength
 			? mb_strcut($value, 0, $maxLength) . '...(truncated)'
 			: $value;
 	}
