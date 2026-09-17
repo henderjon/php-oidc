@@ -66,8 +66,16 @@ final class IncomingAuthorizationResponse {
 			: $this->error;
 	}
 
+	/**
+	 * Every field read here is a protocol value with a defined string shape - never legitimately
+	 * an array. PHP parses a repeated query parameter (`?state[]=x`) into one, and casting that
+	 * with `(string)` used to emit an `Array to string conversion` warning and silently turn it
+	 * into the literal string `"Array"`, which then flowed into state/code/token lookups as if
+	 * it were a real value. Checking `is_string()` first treats an array, or any other
+	 * non-string scalar, the same as if the field had been absent - null, not a coerced guess.
+	 */
 	private static function stringOrNull( mixed $value ): ?string {
-		return $value === null ? null : (string)$value;
+		return is_string($value) ? $value : null;
 	}
 
 	private static function truncated( ?string $value ): ?string {
