@@ -8,6 +8,7 @@ use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\ProviderDiscoveryException;
 use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\EcKeyFixture;
+use Oidc\Fakes\EdDsaKeyFixture;
 use Oidc\Fakes\FakeHttpFetcher;
 use Oidc\Fakes\FixedClock;
 use Oidc\Fakes\RsaKeyFixture;
@@ -821,6 +822,104 @@ class IdTokenVerifierTest extends TestCase {
 		$claims = $verifier->verify($idToken, self::JWKS_URI, self::CLIENT_SECRET, allowedAlgorithms: [ 'HS256' ], accessToken: $accessToken, requireAtHash: true);
 
 		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyComputesAtHashWithSha384ForA384Algorithm(): void {
+		// HS384 needs a key of at least 384 bits (48 bytes) - firebase/php-jwt enforces this
+		// itself and self::CLIENT_SECRET is deliberately shorter than that for the HS256 tests
+		// elsewhere in this file, so this one needs its own, longer secret.
+		$secret       = str_repeat('a', 48);
+		$accessToken  = 'the-access-token';
+		$digest       = hash('sha384', $accessToken, true);
+		$expectedHash = JWT::urlsafeB64Encode(substr($digest, 0, 24));
+
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => $expectedHash ], $secret, 'HS384');
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, $secret, allowedAlgorithms: [ 'HS384' ], accessToken: $accessToken, requireAtHash: true);
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyComputesAtHashWithSha512ForA512Algorithm(): void {
+		// HS512 needs a key of at least 512 bits (64 bytes) - see the HS384 test above.
+		$secret       = str_repeat('a', 64);
+		$accessToken  = 'the-access-token';
+		$digest       = hash('sha512', $accessToken, true);
+		$expectedHash = JWT::urlsafeB64Encode(substr($digest, 0, 32));
+
+		$idToken  = JWT::encode([ 'sub' => 'user-1', 'at_hash' => $expectedHash ], $secret, 'HS512');
+		$verifier = new IdTokenVerifier(new FakeHttpFetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, $secret, allowedAlgorithms: [ 'HS512' ], accessToken: $accessToken, requireAtHash: true);
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	/**
+	 * EdDSA's name carries no bit-length suffix to match on the way HS384/HS512/RS384/... do -
+	 * pairs with SHA-512 by convention (Ed25519 uses SHA-512 internally). A prior bug computed
+	 * this with SHA-256 instead, which this test would catch: the expected_hash below is
+	 * computed with SHA-512, so it only matches what the verifier itself computes if the
+	 * verifier also uses SHA-512.
+	 */
+	public function testVerifyComputesAtHashWithSha512ForEdDSA(): void {
+		$fixture      = new EdDsaKeyFixture;
+		$accessToken  = 'the-access-token';
+		$digest       = hash('sha512', $accessToken, true);
+		$expectedHash = JWT::urlsafeB64Encode(substr($digest, 0, 32));
+
+		$idToken = $fixture->sign([ 'sub' => 'user-1', 'at_hash' => $expectedHash ]);
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$claims = $verifier->verify($idToken, self::JWKS_URI, 'unused', allowedAlgorithms: [ 'EdDSA' ], accessToken: $accessToken, requireAtHash: true);
+
+		$this->assertSame('user-1', $claims->get('sub'));
+	}
+
+	public function testVerifyRejectsAnUnrecognizedKidWithoutFallingBackToSearchingEveryKey(): void {
+		$signingFixture = new RsaKeyFixture;
+		$jwksFixture    = new RsaKeyFixture;
+		$fetcher        = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($jwksFixture->jwksJson(), 200));
+
+		// Signed with a kid this JWKS has never heard of - not "no kid at all", which would
+		// instead search every key. Before the fix, this fell through to that search, found
+		// the JWKS's one key as the sole surviving candidate, and attempted (and failed)
+		// signature verification against it - the wrong failure mode for the wrong reason.
+		$idToken  = $signingFixture->sign([ 'sub' => 'user-1' ], keyId: 'a-kid-the-jwks-does-not-have');
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('names a kid not present in the JWKS');
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+	}
+
+	public function testVerifyLogsTheUnrecognizedKidAndAvailableKids(): void {
+		$signingFixture = new RsaKeyFixture;
+		$jwksFixture    = new RsaKeyFixture;
+		$logger         = new ArrayLogger;
+		$fetcher        = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($jwksFixture->jwksJson(), 200));
+
+		$idToken  = $signingFixture->sign([ 'sub' => 'user-1' ], keyId: 'a-kid-the-jwks-does-not-have');
+		$verifier = new IdTokenVerifier($fetcher, logger: $logger);
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected an AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token names a kid that is not present in the fetched JWKS', $records[0]['message']);
+		$this->assertSame('a-kid-the-jwks-does-not-have', $records[0]['context']['kid']);
+		$this->assertSame([ RsaKeyFixture::KEY_ID ], $records[0]['context']['available_kids']);
+		$this->assertFalse($records[0]['context']['security_relevant']);
 	}
 
 	public function testVerifyLogsARequiredButMissingAtHash(): void {

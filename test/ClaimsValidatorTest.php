@@ -359,6 +359,87 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame('the-state', $records[0]['context']['state']);
 	}
 
+	public function testAzpMatchingExpectedClientIdPasses(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'azp' => 'the-client-id' ]);
+
+		$validator->validateAuthorizedParty($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testNoAzpAtAllWithASingleAudiencePasses(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims();
+
+		$validator->validateAuthorizedParty($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testAzpNotMatchingExpectedClientIdFails(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'azp' => 'someone-elses-client-id' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('azp');
+
+		$validator->validateAuthorizedParty($claims, 'the-client-id');
+	}
+
+	/**
+	 * OpenID Connect Core 1.0 §3.1.3.7 step 4 ("SHOULD verify azp is present" once `aud` carries
+	 * multiple values) is deliberately not enforced as a rejection - see
+	 * ClaimsValidator::validateAuthorizedParty()'s own docblock for why. A multi-audience token
+	 * with no `azp` at all must still pass once its audiences are otherwise trusted.
+	 */
+	public function testNoAzpAtAllWithMultipleAudiencesPasses(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-extra-audience' ] ]);
+
+		$validator->validateAuthorizedParty($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testAzpPresentWithMultipleAudiencesAndMatchingPasses(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'aud' => [ 'the-client-id', 'an-extra-audience' ], 'azp' => 'the-client-id' ]);
+
+		$validator->validateAuthorizedParty($claims, 'the-client-id');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testMismatchedAzpLogsExpectedAndActual(): void {
+		$logger    = new ArrayLogger;
+		$validator = (new ClaimsValidator($logger))->withState('the-state');
+		$claims    = $this->validClaims([ 'azp' => 'someone-elses-client-id' ]);
+
+		try {
+			$validator->validateAuthorizedParty($claims, 'the-client-id');
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token azp claim does not match the expected client id', $records[0]['message']);
+		$this->assertSame('the-client-id', $records[0]['context']['expected']);
+		$this->assertSame('someone-elses-client-id', $records[0]['context']['actual']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+	}
+
+	public function testValidateEndToEndRejectsAMismatchedAzpEvenWithAValidAudience(): void {
+		$validator = new ClaimsValidator;
+		$claims    = $this->validClaims([ 'azp' => 'someone-elses-client-id' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('azp');
+
+		$validator->validate($claims, 'https://issuer.example.com', 'the-client-id', 'the-nonce');
+	}
+
 	public function testMismatchedNonceLogsExpectedAndActual(): void {
 		$logger    = new ArrayLogger;
 		$validator = (new ClaimsValidator($logger))->withState('the-state');
