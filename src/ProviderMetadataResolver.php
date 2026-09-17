@@ -118,13 +118,19 @@ final class ProviderMetadataResolver {
 	 * @return array<string,mixed>
 	 */
 	private function fetchWellKnownConfiguration( OpenIDConnectClientConfig $config ): array {
-		$issuer = $config->issuer;
-
-		if( $issuer === null ) {
+		if( $config->issuer === null ) {
 			$this->logger->error('OIDC: cannot discover provider configuration without an issuer', [ 'state' => $this->state, 'security_relevant' => false ]);
 
 			throw new ProviderDiscoveryException('Cannot discover provider configuration without an issuer', state: $this->state);
 		}
+
+		// Normalized once, here, rather than independently by whichever code happens to need
+		// it: the well-known URL below and assertIssuerMatches()'s comparison must agree on
+		// exactly the same issuer value, or the latter could reject a document the former just
+		// successfully fetched purely because $config->issuer carried a redundant trailing
+		// slash. See assertIssuerMatches()'s own docblock for why the comparison itself no
+		// longer does any normalizing of its own.
+		$issuer = rtrim($config->issuer, '/');
 
 		if( isset($this->discovered[$issuer]) ) {
 			$this->logger->debug('OIDC: reusing an already-fetched provider configuration', [
@@ -141,7 +147,7 @@ final class ProviderMetadataResolver {
 		// than leaving the convention only implicit in $url's own value - the "issuer plus
 		// /.well-known/openid-configuration" rule is exactly the detail worth restating every
 		// time discovery actually happens.
-		$url = rtrim($issuer, '/') . '/.well-known/openid-configuration';
+		$url = $issuer . '/.well-known/openid-configuration';
 
 		$this->logger->debug('OIDC: discovering provider configuration via /.well-known/openid-configuration', [
 			'issuer'        => $issuer,
@@ -246,10 +252,12 @@ final class ProviderMetadataResolver {
 	 * The issuer a discovery document reports must be identical to the URL used to fetch it
 	 * (OpenID Connect Discovery 1.0 §4.3) - otherwise nothing else in the document can be
 	 * trusted, since a network attacker or a compromised provider could otherwise redirect
-	 * this client's endpoints anywhere. A trailing slash is normalized away first, since
-	 * issuer identifiers are conventionally written without one and `issuer` is plain
-	 * user-entered config - everything else (scheme, host, port, path) still has to match
-	 * exactly.
+	 * this client's endpoints anywhere. Compared byte-for-byte, with no trailing-slash
+	 * tolerance here: `$expectedIssuer` is always the value `fetchWellKnownConfiguration()`
+	 * already normalized once, before it was ever used to build the URL fetched - normalizing
+	 * *again* here, independently, would only let a provider's metadata `issuer` differ from
+	 * that canonical value by exactly a trailing slash and still pass, which is precisely the
+	 * byte-for-byte guarantee this check exists to enforce.
 	 *
 	 * @param array<string,mixed> $document
 	 * @throws ProviderDiscoveryException
@@ -257,7 +265,7 @@ final class ProviderMetadataResolver {
 	private function assertIssuerMatches( array $document, string $expectedIssuer ): void {
 		$actualIssuer = $document['issuer'] ?? null;
 
-		if( is_string($actualIssuer) && rtrim($actualIssuer, '/') === rtrim($expectedIssuer, '/') ) {
+		if( $actualIssuer === $expectedIssuer ) {
 			$this->logger->debug('OIDC: provider configuration issuer matches the URL used to fetch it', [
 				'issuer' => $actualIssuer,
 				'state'  => $this->state,

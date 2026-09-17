@@ -153,7 +153,11 @@ class ProviderMetadataResolverTest extends TestCase {
 		$this->assertSame('https://attacker.example.net', $records[0]['context']['actual']);
 	}
 
-	public function testResolveTreatsATrailingSlashDifferenceInTheIssuerAsAMatch(): void {
+	public function testResolveRejectsATrailingSlashDifferenceInTheIssuerAsADistinctValue(): void {
+		// OpenID Connect Discovery 1.0 §4.3 requires a byte-for-byte match - a trailing slash
+		// makes this a genuinely different issuer identifier, not the same one written two
+		// ways, even though the well-known URL fetched (built from the caller's own
+		// already-normalized issuer) is identical either way.
 		$fetcher = new FakeHttpFetcher;
 		$fetcher->respondTo(
 			'https://issuer.example.com/.well-known/openid-configuration',
@@ -162,9 +166,44 @@ class ProviderMetadataResolverTest extends TestCase {
 				'token_endpoint' => 'https://issuer.example.com/token',
 			], JSON_THROW_ON_ERROR), 200),
 		);
-		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
+		$logger   = new ArrayLogger;
+		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy, $logger);
 
-		$this->assertSame('https://issuer.example.com/token', $resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT));
+		try {
+			$resolver->resolve($this->configWithIssuer(), ProviderMetadataResolver::TOKEN_ENDPOINT);
+			$this->fail('Expected ProviderDiscoveryException to be thrown');
+		} catch( ProviderDiscoveryException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: provider configuration issuer does not match the URL used to fetch it', $records[0]['message']);
+		$this->assertSame('https://issuer.example.com', $records[0]['context']['expected']);
+		$this->assertSame('https://issuer.example.com/', $records[0]['context']['actual']);
+	}
+
+	public function testResolveNormalizesATrailingSlashOnTheConfiguredIssuerBeforeComparing(): void {
+		// The caller's own configured issuer having a trailing slash must not, by itself,
+		// cause a spurious mismatch against a provider that correctly reports its issuer with
+		// none - the well-known URL is built from the same normalized value this compares
+		// against, so a real, compliant provider still matches.
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(
+			'https://issuer.example.com/.well-known/openid-configuration',
+			new FetchResponse(json_encode([
+				'issuer'         => 'https://issuer.example.com',
+				'token_endpoint' => 'https://issuer.example.com/token',
+			], JSON_THROW_ON_ERROR), 200),
+		);
+		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
+		$config   = new OpenIDConnectClientConfig(
+			clientId: 'client-id',
+			clientSecret: 'client-secret',
+			redirectUri: 'https://example.com/callback',
+			issuer: 'https://issuer.example.com/',
+		);
+
+		$this->assertSame('https://issuer.example.com/token', $resolver->resolve($config, ProviderMetadataResolver::TOKEN_ENDPOINT));
 	}
 
 	public function testResolveFetchesDiscoveryDocumentWhenNoOverride(): void {
