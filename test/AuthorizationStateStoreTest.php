@@ -7,6 +7,7 @@ use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\DeleteFailingCache;
 use Oidc\Fakes\FailingCache;
 use Oidc\Fakes\InMemoryCache;
+use Oidc\Fakes\ThrowingCache;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 
@@ -46,7 +47,7 @@ class AuthorizationStateStoreTest extends TestCase {
 	}
 
 	public function testConsumeWithoutAMatchingStartReturnsNull(): void {
-		$this->assertNull($this->makeStore()->consume('never-started'));
+		$this->assertNull($this->makeStore()->consume('abcdef0123456789'));
 	}
 
 	public function testStartWithoutACodeVerifierLeavesItNull(): void {
@@ -116,17 +117,17 @@ class AuthorizationStateStoreTest extends TestCase {
 
 	public function testConsumeReturnsNullWhenTheCachedValueIsNotTheExpectedShape(): void {
 		$cache = new InMemoryCache;
-		$cache->set('henderjon.oidc.flow.the-cache-key.some-state', 'not-an-array', 600);
+		$cache->set('henderjon.oidc.flow.the-cache-key.deadbeef01234567', 'not-an-array', 600);
 
 		$logger = new ArrayLogger;
 		$store  = new AuthorizationStateStore($cache, 'the-cache-key', logger: $logger);
 
-		$this->assertNull($store->consume('some-state'));
+		$this->assertNull($store->consume('deadbeef01234567'));
 
 		$records = $logger->recordsAt(LogLevel::ERROR);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: cached authorization flow entry is not the expected shape', $records[0]['message']);
-		$this->assertSame('some-state', $records[0]['context']['state']);
+		$this->assertSame('deadbeef01234567', $records[0]['context']['state']);
 		$this->assertSame('string', $records[0]['context']['type']);
 		// A corrupted cache entry is an infrastructure problem, not an attack indicator - it
 		// stays outside the small curated set of error() calls marked security_relevant: true.
@@ -136,12 +137,12 @@ class AuthorizationStateStoreTest extends TestCase {
 	public function testConsumeLogsWhenNoFlowMatchesTheGivenState(): void {
 		$logger = new ArrayLogger;
 
-		$this->assertNull($this->makeStore($logger)->consume('never-started'));
+		$this->assertNull($this->makeStore($logger)->consume('abcdef0123456789'));
 
 		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
-		$this->assertSame('never-started', $records[0]['context']['state']);
+		$this->assertSame('abcdef0123456789', $records[0]['context']['state']);
 	}
 
 	public function testConsumeDoesNotLogOnASuccessfulMatch(): void {
@@ -187,17 +188,109 @@ class AuthorizationStateStoreTest extends TestCase {
 		$this->assertTrue($consumed['context']['has_code_verifier']);
 	}
 
-	public function testConsumeTruncatesAnOverlongStateBeforeLogging(): void {
-		$logger        = new ArrayLogger;
+	public function testConsumeRejectsAnOverlongStateWithoutTouchingTheCache(): void {
+		$logger         = new ArrayLogger;
 		$oversizedState = str_repeat('a', 5000);
+		// 'a' is a valid hex digit - only the length disqualifies this state. ThrowingCache
+		// proves the cache is never actually reached: if it were, the test itself would fail
+		// with an uncaught exception instead of consume() returning cleanly.
+		$store = new AuthorizationStateStore(new ThrowingCache, 'the-cache-key', logger: $logger);
 
-		$this->assertNull($this->makeStore($logger)->consume($oversizedState));
+		$this->assertNull($store->consume($oversizedState));
 
 		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
+		$this->assertSame(
+			'OIDC: callback state is not shaped like one this class could have generated - rejecting without a cache lookup',
+			$records[0]['message'],
+		);
 		$this->assertLessThan(100, strlen($records[0]['context']['state']));
 		$this->assertStringStartsWith(str_repeat('a', 64), $records[0]['context']['state']);
 		$this->assertStringEndsWith('(truncated)', $records[0]['context']['state']);
+	}
+
+	public function testConsumeRejectsAStateContainingAReservedCharacterWithoutTouchingTheCache(): void {
+		$logger = new ArrayLogger;
+		// ':' is one of the characters PSR-16 reserves in cache keys - a conformant backend may
+		// throw rather than return a miss. ThrowingCache proves it never gets the chance to.
+		$store = new AuthorizationStateStore(new ThrowingCache, 'the-cache-key', logger: $logger);
+
+		$this->assertNull($store->consume('deadbeef:evil'));
+
+		$records = $logger->recordsAt(LogLevel::WARNING);
+		$this->assertCount(1, $records);
+		$this->assertSame(
+			'OIDC: callback state is not shaped like one this class could have generated - rejecting without a cache lookup',
+			$records[0]['message'],
+		);
+		$this->assertSame('deadbeef:evil', $records[0]['context']['state']);
+	}
+
+	public function testConsumeRejectsAnEmptyState(): void {
+		$logger = new ArrayLogger;
+		$store  = new AuthorizationStateStore(new ThrowingCache, 'the-cache-key', logger: $logger);
+
+		$this->assertNull($store->consume(''));
+
+		$this->assertCount(1, $logger->recordsAt(LogLevel::WARNING));
+	}
+
+	public function testConsumeThrowsWhenTheCacheItselfThrowsOnAWellFormedState(): void {
+		$store = new AuthorizationStateStore(new ThrowingCache, 'the-cache-key');
+
+		$this->expectException(AuthorizationStateException::class);
+
+		// Well-formed (plain hex, within the length cap) - this exercises the cache backend
+		// genuinely failing, not the format check rejecting it first.
+		$store->consume('deadbeef');
+	}
+
+	public function testConsumeLogsWhenTheCacheItselfThrowsOnAWellFormedState(): void {
+		$logger = new ArrayLogger;
+		$store  = new AuthorizationStateStore(new ThrowingCache, 'the-cache-key', logger: $logger);
+
+		try {
+			$store->consume('deadbeef');
+			$this->fail('Expected AuthorizationStateException to be thrown');
+		} catch( AuthorizationStateException $e ) {
+			$exceptionState = $e->getState();
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: cache threw while consuming an authorization attempt', $records[0]['message']);
+		$this->assertSame('deadbeef', $records[0]['context']['state']);
+		$this->assertInstanceOf(\Psr\SimpleCache\InvalidArgumentException::class, $records[0]['context']['exception']);
+		$this->assertFalse($records[0]['context']['security_relevant']);
+		$this->assertSame('deadbeef', $exceptionState);
+	}
+
+	public function testStartThrowsWhenTheCacheItselfThrowsOnSet(): void {
+		$store = new AuthorizationStateStore(new ThrowingCache);
+
+		$this->expectException(AuthorizationStateException::class);
+
+		$store->start();
+	}
+
+	public function testStartLogsWhenTheCacheItselfThrowsOnSet(): void {
+		$logger = new ArrayLogger;
+		$store  = new AuthorizationStateStore(new ThrowingCache, logger: $logger);
+
+		try {
+			$store->start();
+			$this->fail('Expected AuthorizationStateException to be thrown');
+		} catch( AuthorizationStateException $e ) {
+			$exceptionState = $e->getState();
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: cache threw while persisting a new authorization attempt', $records[0]['message']);
+		$this->assertIsString($records[0]['context']['state']);
+		$this->assertInstanceOf(\Psr\SimpleCache\InvalidArgumentException::class, $records[0]['context']['exception']);
+		$this->assertFalse($records[0]['context']['security_relevant']);
+		$this->assertSame($records[0]['context']['state'], $exceptionState);
 	}
 
 	public function testConsumeLogsWhenDeleteFailsAfterASuccessfulMatch(): void {
@@ -222,7 +315,7 @@ class AuthorizationStateStoreTest extends TestCase {
 		$logger = new ArrayLogger;
 		$store  = new AuthorizationStateStore(new DeleteFailingCache, 'the-cache-key', logger: $logger);
 
-		$store->consume('never-started');
+		$store->consume('abcdef0123456789');
 
 		// Nothing was found to begin with, so delete() failing here is meaningless - only
 		// the "no pending flow found" warning should fire, not a second one about deletion.

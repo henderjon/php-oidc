@@ -791,7 +791,7 @@ class OpenIDConnectClientTest extends TestCase {
 		try {
 			$client->completeAuthorizationCodeFlow($this->config(), new IncomingAuthorizationResponse([
 				'code'  => 'the-code',
-				'state' => 'a-forged-state',
+				'state' => 'deadbeef89abcdef',
 			]));
 			$this->fail('Expected AuthenticationFailedException to be thrown');
 		} catch( AuthenticationFailedException $e ) {
@@ -799,14 +799,14 @@ class OpenIDConnectClientTest extends TestCase {
 			// getState() still surfaces the raw callback state, since $flow is null here and
 			// there is no FlowState to read it from instead.
 			$this->assertSame('Unable to verify state', $e->getMessage());
-			$this->assertSame('a-forged-state', $e->getState());
+			$this->assertSame('deadbeef89abcdef', $e->getState());
 			$this->assertNull($e->getIdToken(), 'no token was ever fetched before this failure');
 		}
 
 		$records = $logger->recordsAt(LogLevel::WARNING);
 		$this->assertCount(1, $records);
 		$this->assertSame('OIDC: no pending authorization flow found for the given state', $records[0]['message']);
-		$this->assertSame('a-forged-state', $records[0]['context']['state']);
+		$this->assertSame('deadbeef89abcdef', $records[0]['context']['state']);
 	}
 
 	public function testCompleteAuthorizationCodeFlowWithNoStateAtAllLogsDistinctlyFromAWrongState(): void {
