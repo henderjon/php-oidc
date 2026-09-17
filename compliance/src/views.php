@@ -195,7 +195,7 @@ function callbackUrl(): string {
 /**
  * @param array<string,mixed> $config
  */
-function setupForm( array $config ): string {
+function setupForm( array $config, string $csrfToken ): string {
 	$issuer                   = escape($config['issuer'] ?? '');
 	$clientId                 = escape($config['clientId'] ?? '');
 	$clientSecret             = escape($config['clientSecret'] ?? '');
@@ -210,6 +210,7 @@ function setupForm( array $config ): string {
 	$authMethodOptions        = optionsFor([ 'Basic', 'Post' ], (string)($config['clientAuthMethod'] ?? 'Basic'));
 	$responseTypeOptions      = optionsFor([ 'code', 'id_token', 'id_token token' ], (string)($config['responseType'] ?? 'code'));
 	$callbackUrl              = escape(callbackUrl());
+	$escapedCsrfToken         = escape($csrfToken);
 
 	return <<<HTML
 	<h2>1. Register this callback URL with the suite</h2>
@@ -222,6 +223,7 @@ function setupForm( array $config ): string {
 
 	<h2>2. Point this harness at the plan</h2>
 	<form method="post" action="/index.php?action=start">
+		<input type="hidden" name="csrf_token" value="{$escapedCsrfToken}">
 		<fieldset>
 			<legend>Provider</legend>
 

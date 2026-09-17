@@ -29,6 +29,21 @@ function splitList( string $raw ): array {
 }
 
 /**
+ * Lazily creates and remembers one CSRF token per session, so the setup form (the only POST
+ * this app has) can prove a submission actually came from a page this harness rendered, not
+ * from a third-party page that merely knows the URL. `reset` clears $_SESSION entirely, which
+ * clears this too - the next render of the setup form gets a fresh token, which is fine, since
+ * the old one would no longer belong to any page still open anyway.
+ */
+function csrfToken(): string {
+	if( !isset($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token']) ) {
+		$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+	}
+
+	return $_SESSION['csrf_token'];
+}
+
+/**
  * Rebuilds the same OpenIDConnectClientConfig on every request from the raw form values saved
  * in the session - start(), callback(), userinfo(), and refresh() all need an identical config,
  * and none of them can hold onto a live PHP object across the redirect out to the suite and
@@ -85,7 +100,7 @@ $action = $_GET['action'] ?? 'home';
 
 if( $action === 'home' ) {
 	$config = sessionConfig() ?? [];
-	$body   = \Compliance\setupForm($config);
+	$body   = \Compliance\setupForm($config, csrfToken());
 
 	$result = sessionResult();
 
@@ -116,6 +131,13 @@ if( $action === 'reset' ) {
 }
 
 if( $action === 'start' && $_SERVER['REQUEST_METHOD'] === 'POST' ) {
+	if( !hash_equals(csrfToken(), (string)($_POST['csrf_token'] ?? '')) ) {
+		http_response_code(403);
+		render('Forbidden', \Compliance\errorPanel('CSRF token mismatch', new \RuntimeException('The form token did not match this session - reload the setup page and submit it again.'), new CollectingLogger()));
+
+		return;
+	}
+
 	$raw = [
 		'issuer'                   => $_POST['issuer'] ?? '',
 		'clientId'                 => $_POST['clientId'] ?? '',
