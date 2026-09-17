@@ -111,6 +111,48 @@ class IncomingAuthorizationResponseTest extends TestCase {
 		$this->assertSame(str_repeat('a', 255) . '...(truncated)', $response->errorDescription);
 	}
 
+	/**
+	 * PHP parses a repeated query parameter (`?state[]=x&state[]=y`) into an array - this must
+	 * be treated the same as the field being absent, not coerced into the literal string
+	 * "Array" (what a bare `(string)` cast on an array produces, alongside a PHP warning).
+	 */
+	public function testStateSuppliedAsAnArrayIsNull(): void {
+		$response = new IncomingAuthorizationResponse([ 'state' => [ 'x', 'y' ] ]);
+
+		$this->assertNull($response->state);
+	}
+
+	public function testCodeSuppliedAsAnArrayIsNull(): void {
+		$response = new IncomingAuthorizationResponse([ 'code' => [ 'x', 'y' ] ]);
+
+		$this->assertNull($response->code);
+	}
+
+	public function testIdTokenSuppliedAsAnArrayIsNull(): void {
+		$response = new IncomingAuthorizationResponse([ 'id_token' => [ 'x', 'y' ] ]);
+
+		$this->assertNull($response->idToken);
+	}
+
+	public function testAccessTokenSuppliedAsAnArrayIsNull(): void {
+		$response = new IncomingAuthorizationResponse([ 'access_token' => [ 'x', 'y' ] ]);
+
+		$this->assertNull($response->accessToken);
+	}
+
+	public function testErrorFieldsSuppliedAsArraysAreNull(): void {
+		$response = new IncomingAuthorizationResponse([
+			'error'             => [ 'x' ],
+			'error_description' => [ 'x' ],
+			'error_uri'         => [ 'x' ],
+		]);
+
+		$this->assertNull($response->error);
+		$this->assertNull($response->errorDescription);
+		$this->assertNull($response->errorUri);
+		$this->assertFalse($response->hasError(), 'an array is not a real error code - this must not look like a provider-reported error');
+	}
+
 	public function testTruncatedErrorFieldsKeepErrorSummaryBounded(): void {
 		$response = new IncomingAuthorizationResponse([
 			'error'             => str_repeat('a', 300),
