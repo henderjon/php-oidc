@@ -243,7 +243,13 @@ final class IdTokenVerifier {
 			return;
 		}
 
+		// EdDSA's name carries no bit-length suffix to match on, unlike every other algorithm
+		// this class supports - it pairs with SHA-512 by convention (Ed25519 uses SHA-512
+		// internally, and providers signing with EdDSA follow that same pairing for at_hash),
+		// not the 256-bit default every other algorithm without a 384/512 suffix actually
+		// wants.
 		$bitLength = match( true ) {
+			$alg === 'EdDSA'           => 512,
 			str_ends_with($alg, '384') => 384,
 			str_ends_with($alg, '512') => 512,
 			default                    => 256,
