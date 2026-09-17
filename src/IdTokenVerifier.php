@@ -317,7 +317,25 @@ final class IdTokenVerifier {
 			throw new AuthenticationFailedException("Unable to parse the JWKS document from {$jwksUri}", state: $this->state, previous: $e);
 		}
 
-		$candidates = $kid !== null && isset($keySet[$kid]) ? [ $kid ] : $this->findSigningCandidates($jwks, $keySet, $alg);
+		// A kid the token names but that is not in the fetched JWKS is a meaningfully different
+		// situation from no kid being specified at all - most plausibly a key rotated out from
+		// under this token, or an attacker naming an arbitrary value - and deserves its own
+		// distinct rejection rather than silently falling through to the "no kid given, narrow
+		// among every key" path below, which was never meant to also cover "a kid was given and
+		// named nothing real."
+		if( $kid !== null && !isset($keySet[$kid]) ) {
+			$this->logger->error('OIDC: ID token names a kid that is not present in the fetched JWKS', [
+				'jwks_uri'       => $jwksUri,
+				'kid'            => $kid,
+				'available_kids' => array_keys($keySet),
+				'state'          => $this->state,
+				'security_relevant' => false,
+			]);
+
+			throw new AuthenticationFailedException("ID token names a kid not present in the JWKS from {$jwksUri}", state: $this->state);
+		}
+
+		$candidates  = $kid !== null ? [ $kid ] : $this->findSigningCandidates($jwks, $keySet, $alg);
 		$selectedKid = count($candidates) === 1 ? $candidates[0] : null;
 
 		if( $selectedKid === null ) {

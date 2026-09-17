@@ -879,6 +879,49 @@ class IdTokenVerifierTest extends TestCase {
 		$this->assertSame('user-1', $claims->get('sub'));
 	}
 
+	public function testVerifyRejectsAnUnrecognizedKidWithoutFallingBackToSearchingEveryKey(): void {
+		$signingFixture = new RsaKeyFixture;
+		$jwksFixture    = new RsaKeyFixture;
+		$fetcher        = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($jwksFixture->jwksJson(), 200));
+
+		// Signed with a kid this JWKS has never heard of - not "no kid at all", which would
+		// instead search every key. Before the fix, this fell through to that search, found
+		// the JWKS's one key as the sole surviving candidate, and attempted (and failed)
+		// signature verification against it - the wrong failure mode for the wrong reason.
+		$idToken  = $signingFixture->sign([ 'sub' => 'user-1' ], keyId: 'a-kid-the-jwks-does-not-have');
+		$verifier = new IdTokenVerifier($fetcher);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('names a kid not present in the JWKS');
+
+		$verifier->verify($idToken, self::JWKS_URI, 'unused');
+	}
+
+	public function testVerifyLogsTheUnrecognizedKidAndAvailableKids(): void {
+		$signingFixture = new RsaKeyFixture;
+		$jwksFixture    = new RsaKeyFixture;
+		$logger         = new ArrayLogger;
+		$fetcher        = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($jwksFixture->jwksJson(), 200));
+
+		$idToken  = $signingFixture->sign([ 'sub' => 'user-1' ], keyId: 'a-kid-the-jwks-does-not-have');
+		$verifier = new IdTokenVerifier($fetcher, logger: $logger);
+
+		try {
+			$verifier->verify($idToken, self::JWKS_URI, 'unused');
+			$this->fail('Expected an AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame('OIDC: ID token names a kid that is not present in the fetched JWKS', $records[0]['message']);
+		$this->assertSame('a-kid-the-jwks-does-not-have', $records[0]['context']['kid']);
+		$this->assertSame([ RsaKeyFixture::KEY_ID ], $records[0]['context']['available_kids']);
+		$this->assertFalse($records[0]['context']['security_relevant']);
+	}
+
 	public function testVerifyLogsARequiredButMissingAtHash(): void {
 		$idToken  = JWT::encode([ 'sub' => 'user-1' ], self::CLIENT_SECRET, 'HS256');
 		$logger   = new ArrayLogger;
