@@ -28,6 +28,9 @@ interface AuthorizationFlowClientInterface {
 
 	/**
 	 * @throws AuthenticationFailedException
+	 * @throws AuthorizationStateException When the cache backend throws while consuming the
+	 *         callback's state - a malformed state never reaches the cache at all, so this is
+	 *         reserved for the backend genuinely failing on a well-formed one.
 	 * @throws ProviderDiscoveryException
 	 */
 	public function completeAuthorizationCodeFlow( OpenIDConnectClientConfig $config, IncomingAuthorizationResponse $response ): AuthenticationResult;
@@ -40,6 +43,9 @@ interface AuthorizationFlowClientInterface {
 
 	/**
 	 * @throws AuthenticationFailedException
+	 * @throws AuthorizationStateException When the cache backend throws while consuming the
+	 *         callback's state - a malformed state never reaches the cache at all, so this is
+	 *         reserved for the backend genuinely failing on a well-formed one.
 	 * @throws ProviderDiscoveryException
 	 */
 	public function completeImplicitFlow( OpenIDConnectClientConfig $config, IncomingAuthorizationResponse $response ): AuthenticationResult;

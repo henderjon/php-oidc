@@ -499,6 +499,15 @@ final class ClaimsValidator {
 		}
 
 		if( $actual !== $originalNonce ) {
+			// false here, unlike validateNonce()'s true for the same shape of mismatch: that
+			// check guards the initial authorization callback, a public redirect URL an
+			// attacker can inject a forged token into - a mismatch there is essentially
+			// unexplainable except as tampering. A refreshed token instead comes back from a
+			// direct server-to-server POST to the token endpoint, reachable only by whoever
+			// already held a valid refresh_token from a prior successful login - a mismatch
+			// here is far more likely a provider bug (echoing back a stale or wrong nonce)
+			// than a live forgery attempt, since there is no public injection point at this
+			// step for an attacker to exploit in the first place.
 			$this->logger->error('OIDC: refreshed ID token nonce does not match the original ID token', [
 				'expected' => $originalNonce,
 				'actual'   => $actual,
