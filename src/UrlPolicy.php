@@ -96,6 +96,13 @@ final class UrlPolicy {
 			return $value;
 		}
 
+		// debug, not warning like ClaimsValidator's analogous malformed-value case: dropping a
+		// malformed aud entry under allowUntrustedAudiences actually loses information - the
+		// resulting trusted-audience set is less complete than the caller thinks, while a
+		// looser security posture is being exercised right now. Recovering a bare hostname
+		// from a scheme-prefixed allowedHosts entry loses nothing and exercises no looser
+		// posture at all - the effective check behaves exactly as if the entry had been
+		// written correctly in the first place, purely a caller ergonomics correction.
 		$this->logger->debug('OIDC: an allowedHosts entry looks like a full URL rather than a bare hostname - using the host recovered from it', [
 			'configured_entry' => $value,
 			'recovered_host'   => $host,
