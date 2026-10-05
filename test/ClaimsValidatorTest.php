@@ -4,6 +4,7 @@ namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Fakes\ArrayLogger;
+use Oidc\Fakes\FixedClock;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 
@@ -987,6 +988,130 @@ class ClaimsValidatorTest extends TestCase {
 		}
 
 		$this->assertNull($logger->recordsAt(LogLevel::ERROR)[0]['context']['state']);
+	}
+
+	private const NOW = 1_700_001_000;
+
+	private function authTimeValidator( int $leewaySeconds = 60, ?ArrayLogger $logger = null ): ClaimsValidator {
+		return new ClaimsValidator(
+			$logger ?? new ArrayLogger,
+			clock: new FixedClock(new \DateTimeImmutable('@' . self::NOW)),
+			leewaySeconds: $leewaySeconds,
+		);
+	}
+
+	public function testValidateAuthTimeSkipsCheckWhenMaxAgeIsNull(): void {
+		$claims = $this->validClaims();
+
+		$this->authTimeValidator()->validateAuthTime($claims, null);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateAuthTimeAllowsAnAuthenticationWithinMaxAge(): void {
+		$claims = $this->validClaims([ 'auth_time' => self::NOW - 100 ]);
+
+		$this->authTimeValidator()->validateAuthTime($claims, 600);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateAuthTimeAllowsAnAuthenticationExactlyAtMaxAgePlusLeeway(): void {
+		$claims = $this->validClaims([ 'auth_time' => self::NOW - 660 ]);
+
+		$this->authTimeValidator(leewaySeconds: 60)->validateAuthTime($claims, 600);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateAuthTimeRejectsAnAuthenticationOneSecondPastMaxAgePlusLeeway(): void {
+		$claims = $this->validClaims([ 'auth_time' => self::NOW - 661 ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('older than the configured max_age');
+
+		$this->authTimeValidator(leewaySeconds: 60)->validateAuthTime($claims, 600);
+	}
+
+	public function testValidateAuthTimeRejectsAMissingAuthTimeWhenMaxAgeIsSet(): void {
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('auth_time');
+
+		$this->authTimeValidator()->validateAuthTime($this->validClaims(), 600);
+	}
+
+	public function testValidateAuthTimeRejectsANonNumericAuthTime(): void {
+		$claims = $this->validClaims([ 'auth_time' => 'yesterday' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('auth_time');
+
+		$this->authTimeValidator()->validateAuthTime($claims, 600);
+	}
+
+	public function testValidateAuthTimeAllowsAnAuthTimeInTheFuture(): void {
+		$claims = $this->validClaims([ 'auth_time' => self::NOW + 30 ]);
+
+		$this->authTimeValidator()->validateAuthTime($claims, 600);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateAuthTimeLogsTheAgeMaxAgeAndLeewayOnRejection(): void {
+		$logger = new ArrayLogger;
+		$claims = $this->validClaims([ 'auth_time' => self::NOW - 1000 ]);
+
+		try {
+			$this->authTimeValidator(leewaySeconds: 60, logger: $logger)->withState('the-state')->validateAuthTime($claims, 600);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame(1000.0, $records[0]['context']['age_seconds']);
+		$this->assertSame(600, $records[0]['context']['max_age_seconds']);
+		$this->assertSame(60, $records[0]['context']['leeway_seconds']);
+		$this->assertSame('the-state', $records[0]['context']['state']);
+		$this->assertFalse($records[0]['context']['security_relevant']);
+	}
+
+	public function testValidateAuthTimeLogsAMissingAuthTime(): void {
+		$logger = new ArrayLogger;
+
+		try {
+			$this->authTimeValidator(logger: $logger)->validateAuthTime($this->validClaims(), 600);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertNull($records[0]['context']['auth_time']);
+		$this->assertSame(600, $records[0]['context']['max_age_seconds']);
+	}
+
+	public function testValidateAuthTimeDefaultLeewayMatchesTheVerifiers(): void {
+		$validator = new ClaimsValidator(clock: new FixedClock(new \DateTimeImmutable('@' . self::NOW)));
+		$leeway    = IdTokenVerifier::DEFAULT_LEEWAY_SECONDS;
+
+		$validator->validateAuthTime($this->validClaims([ 'auth_time' => self::NOW - 600 - $leeway ]), 600);
+		$this->addToAssertionCount(1);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$validator->validateAuthTime($this->validClaims([ 'auth_time' => self::NOW - 600 - $leeway - 1 ]), 600);
+	}
+
+	public function testWithStateKeepsTheClockAndLeewayForValidateAuthTime(): void {
+		$validator = $this->authTimeValidator(leewaySeconds: 60)->withState('the-state');
+
+		$validator->validateAuthTime($this->validClaims([ 'auth_time' => self::NOW - 660 ]), 600);
+		$this->addToAssertionCount(1);
+
+		$this->expectException(AuthenticationFailedException::class);
+
+		$validator->validateAuthTime($this->validClaims([ 'auth_time' => self::NOW - 661 ]), 600);
 	}
 
 }

@@ -30,6 +30,11 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
   `issuer` tier uses the issuer's own explicit port when it has one. To migrate, add
   `host:port` entries for any endpoint on a non-default port, or an explicit port to a
   non-default `issuer`.
+- **Changed** `max_age` in `extraAuthParams` to throw the new `ConfigurationException` when an
+  authorization redirect is built (#57). Before, it reached the provider but nothing checked
+  `auth_time` on the way back, so it looked enforced and was not. To migrate, replace
+  `extraAuthParams: ['max_age' => '300']` with `withMaxAgeSeconds(300)`, which sends it and
+  checks it.
 
 ### Fixed
 
@@ -42,6 +47,14 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
 
 ### Added
 
+- `OpenIDConnectClientConfig::$maxAgeSeconds` and `withMaxAgeSeconds()` (#57). When set, the
+  authorization request carries `max_age`, and the ID token must carry an `auth_time` no older
+  than that plus the clock-skew leeway (`ClaimsValidator::validateAuthTime()`). Sending `max_age`
+  through `extraAuthParams` now throws, see Breaking changes.
+  Applies to the authorization-code and implicit flows, not to a refresh. The leeway makes a very
+  small value looser than it reads: `0` does not force a fresh login, so send `prompt=login` for
+  that. `ClaimsValidator` now takes a clock and a leeway, and `IdTokenVerifier` exposes its
+  default as `DEFAULT_LEEWAY_SECONDS` so the two share one value.
 - A test verifying every `OpenIDConnectClientConfig` `with*()` method mutates only its own
   field, catching a silently swapped constructor argument that no other test could have
   detected.

@@ -3,6 +3,7 @@
 namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
+use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -27,9 +28,16 @@ final class ClaimsValidator {
 	// OpenID Connect Core 1.0 §2: "sub... MUST NOT exceed 255 ASCII characters in length."
 	private const MAX_SUBJECT_LENGTH = 255;
 
+	/**
+	 * @param int $leewaySeconds How far this client's clock and the provider's may disagree
+	 *                           before validateAuthTime() treats an authentication as too old.
+	 *                           Defaults to the same value IdTokenVerifier uses for `exp`/`iat`.
+	 */
 	public function __construct(
 		private readonly LoggerInterface $logger = new NullLogger,
 		private readonly ?string $state = null,
+		private readonly ClockInterface $clock = new CurrentClock,
+		private readonly int $leewaySeconds = IdTokenVerifier::DEFAULT_LEEWAY_SECONDS,
 	) {
 	}
 
@@ -41,7 +49,7 @@ final class ClaimsValidator {
 	 * scoping it must not leak one flow's state into another's log lines.
 	 */
 	public function withState( ?string $state ): self {
-		return new self($this->logger, $state);
+		return new self($this->logger, $state, $this->clock, $this->leewaySeconds);
 	}
 
 	/**
@@ -156,6 +164,57 @@ final class ClaimsValidator {
 			]);
 
 			throw new AuthenticationFailedException('ID token lifetime exceeds the configured maximum', state: $this->state);
+		}
+	}
+
+	/**
+	 * OpenID Connect Core 1.0 §3.1.2.1: when `max_age` is sent, the provider MUST re-authenticate
+	 * an End-User whose last active authentication is older than it, and the ID token "MUST
+	 * include an `auth_time` Claim Value". Sending `max_age` proves nothing by itself - a
+	 * provider that ignores it, or a token swapped in from an older session, looks identical
+	 * to a good one - so this is the client-side half: require `auth_time`, and require the
+	 * authentication to be no older than `$maxAgeSeconds` plus this validator's clock-skew
+	 * leeway. Null skips the check entirely, matching validateTokenLifetime().
+	 *
+	 * The leeway is not free: it also absorbs the real time between the End-User authenticating
+	 * and this client validating the token (a consent screen, a slow redirect). That makes a
+	 * very small `$maxAgeSeconds` looser than it reads. A `$maxAgeSeconds` of 0 does not force a
+	 * fresh login on its own - send `prompt=login` for that. An `auth_time` in the future is
+	 * not rejected: the leeway covers a provider clock running ahead, and a signed token
+	 * claiming it is already trusted to that extent by the `iat` check.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateAuthTime( Claims $claims, ?int $maxAgeSeconds ): void {
+		if( $maxAgeSeconds === null ) {
+			return;
+		}
+
+		$authTime = $claims->get('auth_time');
+
+		if( !is_numeric($authTime) ) {
+			$this->logger->error('OIDC: ID token is missing the auth_time claim that max_age requires, or it is not numeric', [
+				'auth_time'       => $authTime,
+				'max_age_seconds' => $maxAgeSeconds,
+				'state'           => $this->state,
+				'security_relevant' => false,
+			]);
+
+			throw new AuthenticationFailedException('ID token is missing the auth_time claim that max_age requires, or it is not numeric', state: $this->state);
+		}
+
+		$age = $this->clock->now()->getTimestamp() - (float)$authTime;
+
+		if( $age > $maxAgeSeconds + $this->leewaySeconds ) {
+			$this->logger->error('OIDC: ID token auth_time is older than the configured max_age', [
+				'age_seconds'     => $age,
+				'max_age_seconds' => $maxAgeSeconds,
+				'leeway_seconds'  => $this->leewaySeconds,
+				'state'           => $this->state,
+				'security_relevant' => false,
+			]);
+
+			throw new AuthenticationFailedException('ID token auth_time is older than the configured max_age', state: $this->state);
 		}
 	}
 

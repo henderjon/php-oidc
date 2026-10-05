@@ -179,6 +179,20 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertNull($new->maxTokenLifetimeSeconds);
 	}
 
+	public function testWithMaxAgeSeconds(): void {
+		$config = $this->makeConfig();
+		$new    = $config->withMaxAgeSeconds(900);
+
+		$this->assertNull($config->maxAgeSeconds, 'original must be unchanged');
+		$this->assertSame(900, $new->maxAgeSeconds);
+	}
+
+	public function testWithMaxAgeSecondsCanClearToNull(): void {
+		$new = $this->makeConfig()->withMaxAgeSeconds(900)->withMaxAgeSeconds(null);
+
+		$this->assertNull($new->maxAgeSeconds);
+	}
+
 	public function testWithAllowUntrustedAudiences(): void {
 		$config = $this->makeConfig();
 		$new    = $config->withAllowUntrustedAudiences(true);
@@ -240,6 +254,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 			allowUntrustedAudiences: true,
 			allowAnyHost: false,
 			clientAuthMethod: ClientAuthMethod::Post,
+			maxAgeSeconds: 900,
 		);
 
 		$this->assertUnchangedExcept($config, $config->withClientId('other-id'), 'clientId');
@@ -258,6 +273,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		$this->assertUnchangedExcept($config, $config->withAllowUntrustedAudiences(false), 'allowUntrustedAudiences');
 		$this->assertUnchangedExcept($config, $config->withAllowAnyHost(true), 'allowAnyHost');
 		$this->assertUnchangedExcept($config, $config->withClientAuthMethod(ClientAuthMethod::Basic), 'clientAuthMethod');
+		$this->assertUnchangedExcept($config, $config->withMaxAgeSeconds(1800), 'maxAgeSeconds');
 	}
 
 	/**
@@ -276,7 +292,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 		));
 
 		$this->assertSame(
-			16,
+			17,
 			$witherCount,
 			'OpenIDConnectClientConfig gained or lost a with*() method - update testWithersOnlyChangeTheirOwnField() to cover it',
 		);
@@ -293,7 +309,7 @@ class OpenIDConnectClientConfigTest extends TestCase {
 			'clientId', 'clientSecret', 'redirectUri', 'issuer', 'scopes', 'audience',
 			'endpointOverrides', 'extraAuthParams', 'pkce', 'allowInsecureSchemes',
 			'allowedHosts', 'allowedAlgorithms', 'maxTokenLifetimeSeconds',
-			'allowUntrustedAudiences', 'allowAnyHost', 'clientAuthMethod',
+			'allowUntrustedAudiences', 'allowAnyHost', 'clientAuthMethod', 'maxAgeSeconds',
 		];
 
 		foreach( $fields as $field ) {
