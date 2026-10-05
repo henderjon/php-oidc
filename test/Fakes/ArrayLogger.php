@@ -15,7 +15,13 @@ final class ArrayLogger extends AbstractLogger {
 	/** @var list<array{level: mixed, message: string, context: array<string,mixed>}> */
 	public array $records = [];
 
-	public function log( $level, string|\Stringable $message, array $context = [] ): void {
+	/**
+	 * Untyped `$message` so this also loads against psr/log 1.x - see LogLevelFilterLogger::log().
+	 *
+	 * @param string|\Stringable  $message
+	 * @param array<string,mixed> $context
+	 */
+	public function log( $level, $message, array $context = [] ): void {
 		$this->records[] = [ 'level' => $level, 'message' => (string)$message, 'context' => $context ];
 	}
 
