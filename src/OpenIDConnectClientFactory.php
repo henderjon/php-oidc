@@ -38,7 +38,7 @@ class OpenIDConnectClientFactory {
 		$providerMetadataResolver = new ProviderMetadataResolver($this->httpFetcher, new UrlPolicy($this->logger), $this->logger);
 		$idTokenVerifier          = new IdTokenVerifier($this->httpFetcher, $this->clock, logger: $this->logger);
 		$claimsValidator          = new ClaimsValidator($this->logger, clock: $this->clock);
-		$tokenEndpointClient      = new TokenEndpointClient($this->httpFetcher, $providerMetadataResolver, $this->logger);
+		$tokenEndpointClient      = new TokenEndpointClient($this->httpFetcher, $providerMetadataResolver, $this->logger, clock: $this->clock);
 
 		return new OpenIDConnectClient(
 			new AuthorizationStateStore($stateCache, $cacheKeySuffix, logger: $this->logger),

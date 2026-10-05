@@ -4,6 +4,7 @@ namespace Oidc;
 
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\TokenRequestException;
+use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -43,6 +44,7 @@ final class TokenEndpointClient {
 		private readonly ProviderMetadataResolver $providerMetadataResolver,
 		private readonly LoggerInterface $logger = new NullLogger,
 		private readonly ?string $state = null,
+		private readonly ClockInterface $clock = new CurrentClock,
 	) {
 	}
 
@@ -58,7 +60,7 @@ final class TokenEndpointClient {
 	 * fetching it themselves.
 	 */
 	public function withState( ?string $state, ProviderMetadataResolver $providerMetadataResolver ): self {
-		return new self($this->httpFetcher, $providerMetadataResolver, $this->logger, $state);
+		return new self($this->httpFetcher, $providerMetadataResolver, $this->logger, $state, $this->clock);
 	}
 
 	/**
@@ -169,7 +171,7 @@ final class TokenEndpointClient {
 			'state'    => $this->state,
 		]);
 
-		[ $params, $headers ] = ClientAuthenticator::apply($config, $params, $this->logger, $this->state);
+		[ $params, $headers ] = ClientAuthenticator::apply($config, $params, $this->logger, $this->state, $endpoint, $this->clock);
 
 		try {
 			$response = $this->httpFetcher->fetch($endpoint, $this->buildRequestBody($params), $headers);
