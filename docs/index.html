@@ -522,6 +522,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         bool $allowUntrustedAudiences = false,
         bool $allowAnyHost = false,
         ClientAuthMethod $clientAuthMethod = ClientAuthMethod::Basic,
+        ?int $maxAgeSeconds = null,
     )
 }</div>
 
@@ -545,6 +546,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>allowUntrustedAudiences</code></td><td><code>bool</code></td><td><code>false</code></td><td>Opts out of rejecting <code>aud</code> values outside the trusted set - keeps only the "expected value present" half of the check.</td></tr>
           <tr><td><code>allowAnyHost</code></td><td><code>bool</code></td><td><code>false</code></td><td>Opts out of the default provider-host restriction when <code>allowedHosts</code> is null - for a provider that splits endpoints across hosts.</td></tr>
           <tr><td><code>clientAuthMethod</code></td><td><code><a href="#ClientAuthMethod">ClientAuthMethod</a></code></td><td><code>Basic</code></td><td>Which OpenID Connect Core 1.0 §9 method to use for a confidential client. No effect on a public client.</td></tr>
+          <tr><td><code>maxAgeSeconds</code></td><td><code>?int</code></td><td><code>null</code></td><td>OpenID Connect <code>max_age</code>: the longest the End-User's last active authentication may be, in seconds. When set, it is sent on the authorization request and the ID token must carry an <code>auth_time</code> no older than this, plus the verifier's 300 second clock-skew leeway - so a very small value is looser than it reads, and <code>0</code> does not force a fresh login (send <code>prompt=login</code> for that). Null sends and checks nothing. Applies to the authorization-code and implicit flows, not a refresh.</td></tr>
         </tbody>
       </table>
 
@@ -744,6 +746,8 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>length</code>, <code>max</code></td><td><code>int</code></td><td>An oversized value's actual length vs. the configured or hard-coded maximum (ID token byte length, <code>sub</code> claim length).</td></tr>
           <tr><td><code>exp</code>, <code>iat</code></td><td><code>mixed</code></td><td>The raw <code>exp</code>/<code>iat</code> claim values that failed validation.</td></tr>
           <tr><td><code>lifetime_seconds</code>, <code>max_lifetime_seconds</code></td><td><code>int</code></td><td>Computed token lifetime (<code>exp - iat</code>) vs. the configured <code>maxTokenLifetimeSeconds</code>.</td></tr>
+          <tr><td><code>age_seconds</code>, <code>max_age_seconds</code>, <code>leeway_seconds</code></td><td><code>int</code></td><td>How long ago the End-User authenticated (now minus <code>auth_time</code>) vs. the configured <code>maxAgeSeconds</code> and the clock-skew leeway added to it.</td></tr>
+          <tr><td><code>auth_time</code></td><td><code>mixed</code></td><td>The raw <code>auth_time</code> claim value, when <code>maxAgeSeconds</code> is set and it was missing or not numeric.</td></tr>
           <tr><td><code>expected</code>, <code>actual</code></td><td><code>mixed</code></td><td>Generic pair used for every claim-mismatch check (issuer, audience, nonce, subject, <code>auth_time</code>, discovered issuer vs. configured <code>issuer</code>) - what this client expected vs. what was actually present.</td></tr>
           <tr><td><code>aud</code></td><td><code>mixed</code></td><td>The raw <code>aud</code> claim value, when it contains a malformed (non-string) entry.</td></tr>
           <tr><td><code>malformed</code></td><td><code>list&lt;mixed&gt;</code></td><td>The non-string entries filtered out of a malformed <code>aud</code> claim.</td></tr>

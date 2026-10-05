@@ -350,7 +350,7 @@ final class OpenIDConnectClient implements
 		// logged either way a few lines down, but only this line says a collision happened at all.
 		$overriddenExtraAuthParamKeys = array_values(array_intersect(
 			array_keys($config->extraAuthParams),
-			[ 'response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce' ],
+			[ 'response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce', ...( $config->maxAgeSeconds !== null ? [ 'max_age' ] : [] ) ],
 		));
 
 		if( $overriddenExtraAuthParamKeys !== [] ) {
@@ -368,6 +368,10 @@ final class OpenIDConnectClient implements
 			'state'         => $flow->state,
 			'nonce'         => $flow->nonce,
 		]);
+
+		if( $config->maxAgeSeconds !== null ) {
+			$params['max_age'] = (string)$config->maxAgeSeconds;
+		}
 
 		if( $codeVerifier !== null ) {
 			$params['code_challenge']        = Pkce::challengeFor($codeVerifier);
@@ -519,6 +523,11 @@ final class OpenIDConnectClient implements
 			$claimsValidator->validateAuthorizedParty($claims, $config->clientId);
 
 			$claimsValidator->validateTokenLifetime($claims, $config->maxTokenLifetimeSeconds);
+
+			// No-op unless maxAgeSeconds is configured - see ClaimsValidator::validateAuthTime().
+			// Not called from RefreshTokenClient: a refresh does not re-authenticate anyone, and
+			// validateRefreshedAuthTime() already pins its auth_time to the original.
+			$claimsValidator->validateAuthTime($claims, $config->maxAgeSeconds);
 
 			// sub/iss/aud/exp are standard, non-secret JWT claims - safe to log in full, unlike
 			// the token they came from (see verifySignedUserInfo() and TokenEndpointClient for

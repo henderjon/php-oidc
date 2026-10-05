@@ -42,6 +42,14 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
 
 ### Added
 
+- `OpenIDConnectClientConfig::$maxAgeSeconds` and `withMaxAgeSeconds()` (#57). When set, the
+  authorization request carries `max_age`, and the ID token must carry an `auth_time` no older
+  than that plus the clock-skew leeway (`ClaimsValidator::validateAuthTime()`). Before, a caller
+  could send `max_age` through `extraAuthParams`, but nothing checked `auth_time` on the way back.
+  Applies to the authorization-code and implicit flows, not to a refresh. The leeway makes a very
+  small value looser than it reads: `0` does not force a fresh login, so send `prompt=login` for
+  that. `ClaimsValidator` now takes a clock and a leeway, and `IdTokenVerifier` exposes its
+  default as `DEFAULT_LEEWAY_SECONDS` so the two share one value.
 - A test verifying every `OpenIDConnectClientConfig` `with*()` method mutates only its own
   field, catching a silently swapped constructor argument that no other test could have
   detected.

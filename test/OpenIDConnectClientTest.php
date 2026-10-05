@@ -406,6 +406,148 @@ class OpenIDConnectClientTest extends TestCase {
 		]));
 	}
 
+	public function testBuildAuthorizationCodeRedirectSendsMaxAgeWhenConfigured(): void {
+		$client = $this->makeClient(new FakeHttpFetcher);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config()->withMaxAgeSeconds(900));
+
+		$this->assertSame('900', $this->queryParams($redirect->url)['max_age']);
+	}
+
+	public function testBuildAuthorizationCodeRedirectSendsNoMaxAgeByDefault(): void {
+		$client = $this->makeClient(new FakeHttpFetcher);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($this->config());
+
+		$this->assertArrayNotHasKey('max_age', $this->queryParams($redirect->url));
+	}
+
+	public function testConfiguredMaxAgeOverridesOneSmuggledInThroughExtraAuthParamsAndLogsIt(): void {
+		$logger = new ArrayLogger;
+		$client = $this->makeClient(new FakeHttpFetcher, logger: $logger);
+		$config = $this->config()->withExtraAuthParams([ 'max_age' => '1' ])->withMaxAgeSeconds(900);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+
+		$this->assertSame('900', $this->queryParams($redirect->url)['max_age']);
+
+		$collisions = array_filter(
+			$logger->recordsAt(LogLevel::DEBUG),
+			static fn ( array $record ): bool => $record['message'] === 'OIDC: extraAuthParams collided with a reserved param and was overridden',
+		);
+		$this->assertCount(1, $collisions);
+		$this->assertSame([ 'max_age' ], array_values($collisions)[0]['context']['overridden_keys']);
+	}
+
+	public function testCompleteAuthorizationCodeFlowAcceptsAnIdTokenWhoseAuthTimeIsWithinMaxAge(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+		$config = $this->config()->withMaxAgeSeconds(600);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $fixture->sign([
+				'iss'       => self::ISSUER,
+				'aud'       => self::CLIENT_ID,
+				'nonce'     => $params['nonce'],
+				'auth_time' => time() - 60,
+			]),
+		], JSON_THROW_ON_ERROR), 200));
+
+		$result = $client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+
+		$this->assertSame('default-test-subject', $result->claims->get('sub'));
+	}
+
+	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenWhoseAuthTimeIsOlderThanMaxAge(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+		$config = $this->config()->withMaxAgeSeconds(600);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $fixture->sign([
+				'iss'       => self::ISSUER,
+				'aud'       => self::CLIENT_ID,
+				'nonce'     => $params['nonce'],
+				'auth_time' => time() - 7200,
+			]),
+		], JSON_THROW_ON_ERROR), 200));
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('older than the configured max_age');
+
+		$client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+	}
+
+	public function testCompleteAuthorizationCodeFlowRejectsAnIdTokenWithNoAuthTimeWhenMaxAgeIsSet(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+		$config = $this->config()->withMaxAgeSeconds(600);
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $fixture->sign([ 'iss' => self::ISSUER, 'aud' => self::CLIENT_ID, 'nonce' => $params['nonce'] ]),
+		], JSON_THROW_ON_ERROR), 200));
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('auth_time');
+
+		$client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+	}
+
+	public function testCompleteAuthorizationCodeFlowNeverChecksAuthTimeWhenMaxAgeWasNotConfigured(): void {
+		$fixture = new RsaKeyFixture;
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::JWKS_URI, new FetchResponse($fixture->jwksJson(), 200));
+		$client = $this->makeClient($fetcher);
+		$config = $this->config();
+
+		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$params   = $this->queryParams($redirect->url);
+
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([
+			'access_token' => 'the-access-token',
+			'id_token'     => $fixture->sign([
+				'iss'       => self::ISSUER,
+				'aud'       => self::CLIENT_ID,
+				'nonce'     => $params['nonce'],
+				'auth_time' => time() - 86_400,
+			]),
+		], JSON_THROW_ON_ERROR), 200));
+
+		$result = $client->completeAuthorizationCodeFlow($config, new IncomingAuthorizationResponse([
+			'code'  => 'the-code',
+			'state' => $params['state'],
+		]));
+
+		$this->assertNotNull($result->claims->get('auth_time'));
+	}
+
 	public function testCompletionResolvesTokenEndpointAndJwksUriFromOneDiscoveryFetch(): void {
 		$fixture = new RsaKeyFixture;
 		$fetcher = new FakeHttpFetcher;

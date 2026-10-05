@@ -64,6 +64,10 @@ final class IdTokenVerifier {
 	// within CurlHttpFetcher's own byte cap.
 	private const MAX_JWKS_KEYS = 50;
 
+	// Shared with ClaimsValidator's auth_time check, so the two cannot drift apart: both are
+	// answering how far this client's clock and the provider's may disagree.
+	public const DEFAULT_LEEWAY_SECONDS = 300;
+
 	// A real ID token's claims are a handful of standard fields plus whatever a provider
 	// adds - well under this in practice. This is checked before any work (splitting,
 	// decoding) is done on the token string, and applies regardless of how the token
@@ -74,7 +78,7 @@ final class IdTokenVerifier {
 	public function __construct(
 		private readonly HttpFetcherInterface $httpFetcher,
 		private readonly ClockInterface $clock = new CurrentClock,
-		private readonly int $leewaySeconds = 300,
+		private readonly int $leewaySeconds = self::DEFAULT_LEEWAY_SECONDS,
 		private readonly LoggerInterface $logger = new NullLogger,
 		private readonly ?string $state = null,
 	) {

@@ -85,6 +85,17 @@ final class OpenIDConnectClientConfig {
 	 *                                                        Defaults to `Basic`, the spec default when no method is
 	 *                                                        registered. Has no effect on a public client (empty
 	 *                                                        `clientSecret`) - see `ClientAuthMethod`'s own docblock.
+	 * @param ?int                     $maxAgeSeconds        OpenID Connect Core 1.0 §3.1.2.1 `max_age`: the longest the
+	 *                                                        End-User's last active authentication at the provider may
+	 *                                                        be, in seconds. When set, it is sent on the authorization
+	 *                                                        request, and the ID token must carry an `auth_time` no
+	 *                                                        older than this (see ClaimsValidator::validateAuthTime(),
+	 *                                                        which also allows the verifier's clock-skew leeway, so
+	 *                                                        a very small value is looser than it reads - `0` does not
+	 *                                                        force a fresh login on its own, use
+	 *                                                        `extraAuthParams: ['prompt' => 'login']` for that). Null
+	 *                                                        sends nothing and checks nothing. Applies to the
+	 *                                                        authorization-code and implicit flows, not to a refresh.
 	 */
 	public function __construct(
 		public readonly string $clientId,
@@ -103,6 +114,7 @@ final class OpenIDConnectClientConfig {
 		public readonly bool $allowUntrustedAudiences = false,
 		public readonly bool $allowAnyHost = false,
 		public readonly ClientAuthMethod $clientAuthMethod = ClientAuthMethod::Basic,
+		public readonly ?int $maxAgeSeconds = null,
 	) {
 	}
 
@@ -112,6 +124,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -121,6 +134,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -130,6 +144,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -139,6 +154,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -152,6 +168,7 @@ final class OpenIDConnectClientConfig {
 			$this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -164,6 +181,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -176,6 +194,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, [ ...$this->endpointOverrides, ...$endpointOverrides ], $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -188,6 +207,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, [ ...$this->extraAuthParams, ...$extraAuthParams ], $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -197,6 +217,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -206,6 +227,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -225,6 +247,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -241,6 +264,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -253,6 +277,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -262,6 +287,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -274,6 +300,7 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $allowAnyHost, $this->clientAuthMethod,
+			$this->maxAgeSeconds,
 		);
 	}
 
@@ -283,6 +310,20 @@ final class OpenIDConnectClientConfig {
 			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
 			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
 			$this->allowUntrustedAudiences, $this->allowAnyHost, $clientAuthMethod,
+			$this->maxAgeSeconds,
+		);
+	}
+
+	/**
+	 * Null clears it: no `max_age` is sent and `auth_time` is never checked.
+	 */
+	public function withMaxAgeSeconds( ?int $maxAgeSeconds ): self {
+		return new self(
+			$this->clientId, $this->clientSecret, $this->redirectUri, $this->issuer,
+			$this->scopes, $this->audience, $this->endpointOverrides, $this->extraAuthParams, $this->pkce,
+			$this->allowInsecureSchemes, $this->allowedHosts, $this->allowedAlgorithms, $this->maxTokenLifetimeSeconds,
+			$this->allowUntrustedAudiences, $this->allowAnyHost, $this->clientAuthMethod,
+			$maxAgeSeconds,
 		);
 	}
 
