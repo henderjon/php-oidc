@@ -77,7 +77,15 @@ final class LogLevelFilterLogger extends AbstractLogger {
 		return new self($logger, [], LogLevelFilterMode::DenyList);
 	}
 
-	public function log( $level, string|\Stringable $message, array $context = [] ): void {
+	/**
+	 * `$message` has no native type on purpose. psr/log 1.x leaves it untyped, and PHP rejects a
+	 * child method that narrows a parameter its parent leaves open, so `string|\Stringable` here
+	 * would be a fatal error on v1. Untyped is valid on v1, v2, and v3 alike.
+	 *
+	 * @param string|\Stringable  $message
+	 * @param array<string,mixed> $context
+	 */
+	public function log( $level, $message, array $context = [] ): void {
 		$isNamed = in_array($level, $this->levels, true);
 		$passes  = $this->mode === LogLevelFilterMode::AllowList ? $isNamed : !$isNamed;
 

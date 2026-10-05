@@ -23,3 +23,19 @@ jobs:
       - run: vendor/bin/phpstan analyse
       - name: Syntax-check example/
         run: find example -name '*.php' -print0 | xargs -0 -n1 php -l
+
+  # composer.json allows psr/log 1, 2, and 3, but the lock file pins only one of them, so the
+  # job above never exercises the others. This one does, on the oldest supported PHP.
+  psr-log:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        psr-log: ['^1.0', '^2.0', '^3.0']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - run: composer require --no-interaction --no-progress -W "psr/log:${{ matrix.psr-log }}"
+      - run: vendor/bin/phpunit

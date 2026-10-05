@@ -38,6 +38,10 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
 
 ### Fixed
 
+- `LogLevelFilterLogger::log()` no longer fatals on psr/log 1.x. `composer.json` allowed
+  `^1.0 || ^2.0 || ^3.0`, but the `string|\Stringable` type on `$message` is narrower than 1.x's
+  untyped parameter, which PHP rejects. The parameter is now untyped, documented with `@param`.
+  CI now runs the test suite against each psr/log major version.
 - `Truncate::to()` no longer splits a multi-byte UTF-8 character mid-codepoint, which could
   corrupt `json_encode()` for the whole log record it appeared in.
 - Fixed `compliance/`, the RP-conformance test harness, which the `providerUrl`/`redirectUri`
