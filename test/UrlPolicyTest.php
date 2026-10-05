@@ -165,4 +165,107 @@ class UrlPolicyTest extends TestCase {
 		$this->assertSame([], $logger->records);
 	}
 
+	public function testIssuerDefaultRejectsANonDefaultPortOnTheIssuerHost(): void {
+		$config = $this->config(issuer: 'https://issuer.example.com');
+
+		$this->assertFalse($this->urlPolicy->isAllowed('https://issuer.example.com:6379/token', $config));
+	}
+
+	public function testIssuerDefaultAcceptsTheExplicitDefaultPort(): void {
+		$config = $this->config(issuer: 'https://issuer.example.com');
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com:443/token', $config));
+	}
+
+	public function testIssuerDefaultWithANonDefaultPortPermitsThatPortOnly(): void {
+		$config = $this->config(issuer: 'https://issuer.example.com:8443');
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com:8443/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('https://issuer.example.com:9443/token', $config));
+	}
+
+	public function testIssuerDefaultOnAnInsecureLocalIssuerPermitsItsPort(): void {
+		$config = $this->config(allowInsecureSchemes: true, issuer: 'http://localhost:8080');
+
+		$this->assertTrue($this->urlPolicy->isAllowed('http://localhost:8080/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('http://localhost:6379/token', $config));
+	}
+
+	public function testBareHostnameAllowlistEntryPermitsOnlyTheDefaultPort(): void {
+		$config = $this->config(allowedHosts: [ 'issuer.example.com' ]);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('https://issuer.example.com:8443/token', $config));
+	}
+
+	public function testAllowlistEntryWithAPortPermitsThatPortOnly(): void {
+		$config = $this->config(allowedHosts: [ 'issuer.example.com:8443' ]);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com:8443/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+	}
+
+	public function testAllowlistMayListTheSameHostOnSeveralPorts(): void {
+		$config = $this->config(allowedHosts: [ 'issuer.example.com', 'issuer.example.com:8443' ]);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com:8443/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('https://issuer.example.com:9443/token', $config));
+	}
+
+	public function testAllowlistEntryWithAnExplicitDefaultPortMatchesAUrlWithNoPort(): void {
+		$config = $this->config(allowedHosts: [ 'issuer.example.com:443' ]);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+	}
+
+	public function testSchemePrefixedAllowlistEntryKeepsItsPort(): void {
+		$config = $this->config(allowedHosts: [ 'https://issuer.example.com:8443/path' ]);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com:8443/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+	}
+
+	public function testSchemePrefixedAllowlistEntryLogsTheRecoveredPort(): void {
+		$logger    = new ArrayLogger;
+		$urlPolicy = new UrlPolicy($logger);
+		$config    = $this->config(allowedHosts: [ 'https://issuer.example.com:8443' ]);
+
+		$urlPolicy->isAllowed('https://issuer.example.com:8443/token', $config);
+
+		$records = $logger->recordsAt(LogLevel::DEBUG);
+		$this->assertCount(1, $records);
+		$this->assertSame(8443, $records[0]['context']['recovered_port']);
+	}
+
+	public function testHostAndPortEntryDoesNotLogAnything(): void {
+		$logger    = new ArrayLogger;
+		$urlPolicy = new UrlPolicy($logger);
+		$config    = $this->config(allowedHosts: [ 'issuer.example.com:8443' ]);
+
+		$urlPolicy->isAllowed('https://issuer.example.com:8443/token', $config);
+
+		$this->assertSame([], $logger->records);
+	}
+
+	public function testIpv6LiteralEntryWithAPortMatches(): void {
+		$config = $this->config(allowInsecureSchemes: true, allowedHosts: [ '[::1]:8080' ]);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('http://[::1]:8080/token', $config));
+		$this->assertFalse($this->urlPolicy->isAllowed('http://[::1]/token', $config));
+	}
+
+	public function testAnUnparseableAllowlistEntryMatchesNothing(): void {
+		$config = $this->config(allowedHosts: [ 'issuer.example.com:notaport' ]);
+
+		$this->assertFalse($this->urlPolicy->isAllowed('https://issuer.example.com/token', $config));
+	}
+
+	public function testAllowAnyHostStillPermitsAnyPort(): void {
+		$config = $this->config(issuer: 'https://issuer.example.com', allowAnyHost: true);
+
+		$this->assertTrue($this->urlPolicy->isAllowed('https://issuer.example.com:6379/token', $config));
+	}
+
 }

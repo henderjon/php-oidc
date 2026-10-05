@@ -22,6 +22,14 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
   `LogLevelFilterMode $mode = LogLevelFilterMode::AllowList` (new enum, cases
   `AllowList`/`DenyList`) - `allow: false` said nothing about what `false` meant without
   opening the class docblock first.
+- **Changed** the host allowlist to match the port as well as the host (#122). Before, an
+  allowed host made every port on that host reachable, so a discovery document or
+  `endpointOverrides` value could steer a request to another service on a trusted host. An
+  `allowedHosts` entry with no port now permits only the default port of the request's scheme
+  (443 for `https`, 80 for `http`). Write `host:port` to permit another port. The default
+  `issuer` tier uses the issuer's own explicit port when it has one. To migrate, add
+  `host:port` entries for any endpoint on a non-default port, or an explicit port to a
+  non-default `issuer`.
 
 ### Fixed
 

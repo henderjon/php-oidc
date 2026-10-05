@@ -34,18 +34,24 @@ final class OpenIDConnectClientConfig {
 	 * @param ?list<string>            $allowedHosts         Bare hostnames (e.g. `login.example.com`, not
 	 *                                                        `https://login.example.com`) every resolved endpoint
 	 *                                                        (override or discovered) must match, checked by
-	 *                                                        UrlPolicy. A scheme-prefixed entry is tolerated - the
-	 *                                                        host is recovered from it - but never write one on
-	 *                                                        purpose: it is stripped and ignored either way, since
-	 *                                                        scheme is enforced once, globally, via
+	 *                                                        UrlPolicy. The port is part of the match: an entry with
+	 *                                                        no port (`login.example.com`) permits only the default
+	 *                                                        port of the request's scheme (443 for https, 80 for
+	 *                                                        http); write `login.example.com:8443` to permit another
+	 *                                                        port, and list both forms to permit both. A
+	 *                                                        scheme-prefixed entry is tolerated - the host and port
+	 *                                                        are recovered from it - but never write one on
+	 *                                                        purpose: the scheme is stripped and ignored either way,
+	 *                                                        since scheme is enforced once, globally, via
 	 *                                                        `allowInsecureSchemes`, never per host. Null skips the
 	 *                                                        explicit-list check and falls back to a default: the
-	 *                                                        host of `issuer`, or every host when `issuer` is not
-	 *                                                        configured or `allowAnyHost` is set. A discovery document
-	 *                                                        can name an endpoint on any host it likes - this default
-	 *                                                        means that, without an explicit `allowedHosts`, a
-	 *                                                        discovered endpoint still has to stay on the provider's
-	 *                                                        own host to be followed.
+	 *                                                        host and explicit port (if any) of `issuer`, or every
+	 *                                                        host when `issuer` is not configured or `allowAnyHost`
+	 *                                                        is set. A discovery document can name an endpoint on
+	 *                                                        any host it likes - this default means that, without an
+	 *                                                        explicit `allowedHosts`, a discovered endpoint still has
+	 *                                                        to stay on the provider's own host and port to be
+	 *                                                        followed.
 	 * @param bool                     $allowAnyHost         Opts out of the default-to-provider-host fallback above
 	 *                                                        when `allowedHosts` is null, restoring "every host allowed"
 	 *                                                        for a provider that legitimately splits its endpoints
