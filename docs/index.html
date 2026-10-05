@@ -895,14 +895,26 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       <div class="method-sig">enum ClientAuthMethod {
     case Basic;
     case Post;
+    case ClientSecretJwt;
 }</div>
       <dl>
         <dt><code>Basic</code></dt>
         <dd>HTTP Basic (RFC 6749 §2.3.1) - the spec default when no method is registered.</dd>
         <dt><code>Post</code></dt>
         <dd>Client credentials in the request body instead of the <code>Authorization</code> header.</dd>
+        <dt><code>ClientSecretJwt</code></dt>
+        <dd>
+          <code>client_secret_jwt</code>: a short-lived JWT signed with HMAC-SHA256, keyed by the
+          client secret, sent as <code>client_assertion</code> instead of the secret itself. The
+          secret never goes on the wire. The assertion carries <code>iss</code> and <code>sub</code>
+          (both the <code>client_id</code>), <code>aud</code> (the token endpoint URL),
+          <code>iat</code>, an <code>exp</code> 60 seconds later, and a random <code>jti</code>
+          that is never reused. HS256 needs a key of at least 32 bytes (RFC 7518 &sect;3.2), so a
+          shorter client secret throws <code>TokenRequestException</code> before any request is
+          sent.
+        </dd>
       </dl>
-      <p><code>client_secret_jwt</code> and <code>private_key_jwt</code> are not implemented yet - both need a signed JWT assertion.</p>
+      <p><code>private_key_jwt</code> is not implemented yet - it needs a caller-supplied signing key, which this library has no way to receive today.</p>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 

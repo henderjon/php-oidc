@@ -6,6 +6,7 @@ use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\TokenRequestException;
 use Oidc\Fakes\ArrayLogger;
 use Oidc\Fakes\FakeHttpFetcher;
+use Oidc\Fakes\FixedClock;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 
@@ -555,6 +556,105 @@ class TokenEndpointClientTest extends TestCase {
 		// excluded from every debug record this class and ClientAuthenticator produce, unlike
 		// the short-lived values above. See ClientAuthenticator's docblock for why.
 		$this->assertStringNotContainsString('the-client-secret', json_encode($logger->records));
+	}
+
+	private const JWT_SECRET = 'a-client-secret-that-is-long-enough-for-hs256';
+
+	private function jwtConfig( string $secret = self::JWT_SECRET ): OpenIDConnectClientConfig {
+		return (new OpenIDConnectClientConfig(
+			clientId: 'the-client-id',
+			clientSecret: $secret,
+			redirectUri: 'https://example.com/callback',
+			endpointOverrides: [ ProviderMetadataResolver::TOKEN_ENDPOINT => self::TOKEN_ENDPOINT ],
+		))->withClientAuthMethod(ClientAuthMethod::ClientSecretJwt);
+	}
+
+	/**
+	 * @return array<string,mixed>
+	 */
+	private function assertionClaims( string $assertion ): array {
+		[ $header, $claims, $signature ] = explode('.', $assertion);
+
+		$expected = rtrim(strtr(base64_encode(hash_hmac('sha256', $header . '.' . $claims, self::JWT_SECRET, true)), '+/', '-_'), '=');
+		$this->assertTrue(hash_equals($expected, $signature), 'assertion must verify against the client secret');
+
+		return json_decode(base64_decode(strtr($claims, '-_', '+/')), true);
+	}
+
+	public function testClientSecretJwtRequestCarriesAnAssertionAudiencedToTheTokenEndpoint(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'the-access-token' ], JSON_THROW_ON_ERROR), 200));
+
+		$this->makeClient($fetcher)->exchangeAuthorizationCode($this->jwtConfig(), 'the-code');
+
+		$request = $fetcher->requests[0];
+		parse_str($request['body'], $body);
+
+		$this->assertSame('authorization_code', $body['grant_type']);
+		$this->assertSame('urn:ietf:params:oauth:client-assertion-type:jwt-bearer', $body['client_assertion_type']);
+		$this->assertSame('the-client-id', $body['client_id']);
+		$this->assertArrayNotHasKey('client_secret', $body);
+		$this->assertArrayNotHasKey('Authorization', $request['headers']);
+		$this->assertStringNotContainsString(self::JWT_SECRET, $request['body']);
+
+		$claims = $this->assertionClaims($body['client_assertion']);
+		$this->assertSame(self::TOKEN_ENDPOINT, $claims['aud']);
+		$this->assertSame('the-client-id', $claims['iss']);
+		$this->assertEqualsWithDelta(time(), $claims['iat'], 5);
+	}
+
+	public function testClientSecretJwtAppliesToEveryGrant(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'the-access-token' ], JSON_THROW_ON_ERROR), 200));
+		$client = $this->makeClient($fetcher);
+
+		$client->requestClientCredentialsToken($this->jwtConfig());
+		$client->refreshToken($this->jwtConfig(), 'the-refresh-token');
+
+		$this->assertCount(2, $fetcher->requests);
+		foreach( $fetcher->requests as $request ) {
+			parse_str($request['body'], $body);
+			$this->assertArrayHasKey('client_assertion', $body);
+		}
+	}
+
+	public function testClientSecretJwtUsesTheInjectedClockAndKeepsItThroughWithState(): void {
+		$fetcher  = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'the-access-token' ], JSON_THROW_ON_ERROR), 200));
+		$resolver = new ProviderMetadataResolver($fetcher, new UrlPolicy);
+		$client   = (new TokenEndpointClient($fetcher, $resolver, new ArrayLogger, clock: new FixedClock(new \DateTimeImmutable('@1700000000'))))
+			->withState('the-state', $resolver);
+
+		$client->requestClientCredentialsToken($this->jwtConfig());
+
+		parse_str($fetcher->requests[0]['body'], $body);
+		$this->assertSame(1_700_000_000, $this->assertionClaims($body['client_assertion'])['iat']);
+	}
+
+	public function testClientSecretJwtNeverLogsTheAssertionOrTheSecret(): void {
+		$fetcher = new FakeHttpFetcher;
+		$fetcher->respondTo(self::TOKEN_ENDPOINT, new FetchResponse(json_encode([ 'access_token' => 'the-access-token' ], JSON_THROW_ON_ERROR), 200));
+		$logger = new ArrayLogger;
+
+		$this->makeClient($fetcher, $logger)->requestClientCredentialsToken($this->jwtConfig());
+
+		parse_str($fetcher->requests[0]['body'], $body);
+		$serialized = json_encode($logger->records);
+		$this->assertStringNotContainsString($body['client_assertion'], $serialized);
+		$this->assertStringNotContainsString(self::JWT_SECRET, $serialized);
+	}
+
+	public function testClientSecretJwtWithATooShortSecretFailsBeforeAnyRequestIsSent(): void {
+		$fetcher = new FakeHttpFetcher;
+
+		try {
+			$this->makeClient($fetcher)->requestClientCredentialsToken($this->jwtConfig('too-short'));
+			$this->fail('Expected TokenRequestException to be thrown');
+		} catch( TokenRequestException $e ) {
+			$this->assertStringContainsString('too short', $e->getMessage());
+		}
+
+		$this->assertSame([], $fetcher->requests);
 	}
 
 	public function testSuccessfulResponseLogsThePartiallyRedactedTokens(): void {

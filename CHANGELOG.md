@@ -55,6 +55,13 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
   small value looser than it reads: `0` does not force a fresh login, so send `prompt=login` for
   that. `ClaimsValidator` now takes a clock and a leeway, and `IdTokenVerifier` exposes its
   default as `DEFAULT_LEEWAY_SECONDS` so the two share one value.
+- `ClientAuthMethod::ClientSecretJwt` (#60, `client_secret_jwt` only; `private_key_jwt` stays
+  open). The token request carries a short-lived HS256 `client_assertion` signed with the client
+  secret instead of the secret itself. The assertion expires after 60 seconds and has a fresh
+  random `jti` every time. A client secret shorter than 32 bytes throws `TokenRequestException`
+  before any request is sent. `TokenEndpointClient` takes an optional clock, and
+  `ClientAuthenticator::apply()` takes an optional audience and clock. Existing calls and the
+  default `Basic` method are unchanged.
 - A test verifying every `OpenIDConnectClientConfig` `with*()` method mutates only its own
   field, catching a silently swapped constructor argument that no other test could have
   detected.

@@ -86,7 +86,8 @@ final class OpenIDConnectClientConfig {
 	 * @param ClientAuthMethod         $clientAuthMethod     Which OpenID Connect Core 1.0 §9 method
 	 *                                                        `ClientAuthenticator` uses for a confidential client.
 	 *                                                        Defaults to `Basic`, the spec default when no method is
-	 *                                                        registered. Has no effect on a public client (empty
+	 *                                                        registered. `ClientSecretJwt` needs a `clientSecret` of at
+	 *                                                        least 32 bytes. Has no effect on a public client (empty
 	 *                                                        `clientSecret`) - see `ClientAuthMethod`'s own docblock.
 	 * @param ?int                     $maxAgeSeconds        OpenID Connect Core 1.0 §3.1.2.1 `max_age`: the longest the
 	 *                                                        End-User's last active authentication at the provider may
