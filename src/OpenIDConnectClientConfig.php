@@ -31,6 +31,9 @@ final class OpenIDConnectClientConfig {
 	 * @param array<string,string>     $endpointOverrides    Known endpoint values (e.g. `authorization_endpoint`,
 	 *                                                        `jwks_uri`, `token_endpoint`) that skip discovery for that value.
 	 * @param array<string,string>     $extraAuthParams      Additional parameters merged into the authorization request.
+	 *                                                        Must not contain `max_age`: building a redirect throws
+	 *                                                        ConfigurationException, since nothing would check `auth_time`.
+	 *                                                        Use `maxAgeSeconds`.
 	 * @param ?list<string>            $allowedHosts         Bare hostnames (e.g. `login.example.com`, not
 	 *                                                        `https://login.example.com`) every resolved endpoint
 	 *                                                        (override or discovered) must match, checked by

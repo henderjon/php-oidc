@@ -6,6 +6,7 @@ use Oidc\AuthenticationResult;
 use Oidc\AuthorizationRedirect;
 use Oidc\Exceptions\AuthenticationFailedException;
 use Oidc\Exceptions\AuthorizationStateException;
+use Oidc\Exceptions\ConfigurationException;
 use Oidc\Exceptions\ProviderDiscoveryException;
 use Oidc\IncomingAuthorizationResponse;
 use Oidc\OpenIDConnectClientConfig;
@@ -22,6 +23,7 @@ interface AuthorizationFlowClientInterface {
 
 	/**
 	 * @throws AuthorizationStateException
+	 * @throws ConfigurationException
 	 * @throws ProviderDiscoveryException
 	 */
 	public function buildAuthorizationCodeRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect;
@@ -37,6 +39,7 @@ interface AuthorizationFlowClientInterface {
 
 	/**
 	 * @throws AuthorizationStateException
+	 * @throws ConfigurationException
 	 * @throws ProviderDiscoveryException
 	 */
 	public function buildImplicitFlowRedirect( OpenIDConnectClientConfig $config ): AuthorizationRedirect;

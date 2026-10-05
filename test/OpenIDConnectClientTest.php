@@ -4,6 +4,7 @@ namespace Oidc;
 
 use Firebase\JWT\JWT;
 use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\ConfigurationException;
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\ProviderDiscoveryException;
 use Oidc\Exceptions\UserInfoRequestException;
@@ -422,21 +423,49 @@ class OpenIDConnectClientTest extends TestCase {
 		$this->assertArrayNotHasKey('max_age', $this->queryParams($redirect->url));
 	}
 
-	public function testConfiguredMaxAgeOverridesOneSmuggledInThroughExtraAuthParamsAndLogsIt(): void {
-		$logger = new ArrayLogger;
-		$client = $this->makeClient(new FakeHttpFetcher, logger: $logger);
+	public function testMaxAgeInExtraAuthParamsIsRejectedWithoutMaxAgeSeconds(): void {
+		$client = $this->makeClient(new FakeHttpFetcher);
+		$config = $this->config()->withExtraAuthParams([ 'max_age' => '300' ]);
+
+		$this->expectException(ConfigurationException::class);
+		$this->expectExceptionMessage('use withMaxAgeSeconds()');
+
+		$client->buildAuthorizationCodeRedirect($config);
+	}
+
+	public function testMaxAgeInExtraAuthParamsIsRejectedEvenWithMaxAgeSeconds(): void {
+		$client = $this->makeClient(new FakeHttpFetcher);
 		$config = $this->config()->withExtraAuthParams([ 'max_age' => '1' ])->withMaxAgeSeconds(900);
 
-		$redirect = $client->buildAuthorizationCodeRedirect($config);
+		$this->expectException(ConfigurationException::class);
 
-		$this->assertSame('900', $this->queryParams($redirect->url)['max_age']);
+		$client->buildAuthorizationCodeRedirect($config);
+	}
 
-		$collisions = array_filter(
-			$logger->recordsAt(LogLevel::DEBUG),
-			static fn ( array $record ): bool => $record['message'] === 'OIDC: extraAuthParams collided with a reserved param and was overridden',
-		);
-		$this->assertCount(1, $collisions);
-		$this->assertSame([ 'max_age' ], array_values($collisions)[0]['context']['overridden_keys']);
+	public function testMaxAgeInExtraAuthParamsIsRejectedForTheImplicitFlowToo(): void {
+		$client = $this->makeClient(new FakeHttpFetcher);
+		$config = $this->config()->withExtraAuthParams([ 'max_age' => '300' ]);
+
+		$this->expectException(ConfigurationException::class);
+
+		$client->buildImplicitFlowRedirect($config);
+	}
+
+	public function testMaxAgeInExtraAuthParamsIsLoggedAtErrorLevelAsNotSecurityRelevant(): void {
+		$logger = new ArrayLogger;
+		$client = $this->makeClient(new FakeHttpFetcher, logger: $logger);
+		$config = $this->config()->withExtraAuthParams([ 'max_age' => '300' ]);
+
+		try {
+			$client->buildAuthorizationCodeRedirect($config);
+			$this->fail('expected a ConfigurationException');
+		} catch( ConfigurationException ) {
+		}
+
+		$errors = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $errors);
+		$this->assertSame('OIDC: max_age was set through extraAuthParams', $errors[array_key_first($errors)]['message']);
+		$this->assertFalse($errors[array_key_first($errors)]['context']['security_relevant']);
 	}
 
 	public function testCompleteAuthorizationCodeFlowAcceptsAnIdTokenWhoseAuthTimeIsWithinMaxAge(): void {

@@ -537,7 +537,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <tr><td><code>scopes</code></td><td><code>list&lt;string&gt;</code></td><td><code>[]</code></td><td>Merged with the always-included <code>openid</code> scope.</td></tr>
           <tr><td><code>audience</code></td><td><code>list&lt;string&gt;|string|null</code></td><td><code>null</code></td><td>Expected <code>aud</code> value(s) when it must differ from <code>clientId</code>. Also doubles as the full trusted set unless <code>allowUntrustedAudiences</code> opts out.</td></tr>
           <tr><td><code>endpointOverrides</code></td><td><code>array&lt;string,string&gt;</code></td><td><code>[]</code></td><td>Known endpoint values (e.g. <code>token_endpoint</code>) that skip discovery for that value.</td></tr>
-          <tr><td><code>extraAuthParams</code></td><td><code>array&lt;string,string&gt;</code></td><td><code>[]</code></td><td>Merged into the authorization request.</td></tr>
+          <tr><td><code>extraAuthParams</code></td><td><code>array&lt;string,string&gt;</code></td><td><code>[]</code></td><td>Merged into the authorization request. Must not contain <code>max_age</code> - that throws <code>ConfigurationException</code>, use <code>maxAgeSeconds</code>.</td></tr>
           <tr><td><code>pkce</code></td><td><code><a href="#PkceMode">PkceMode</a></code></td><td><code>Disabled</code></td><td>How strictly RFC 7636 PKCE is enforced on the authorization code flow.</td></tr>
           <tr><td><code>allowInsecureSchemes</code></td><td><code>bool</code></td><td><code>false</code></td><td>Allows <code>http://</code> endpoints. TLS certificate/hostname verification itself is never affected by this - see <a href="#CurlHttpFetcher"><code>CurlHttpFetcher</code></a>.</td></tr>
           <tr><td><code>allowedHosts</code></td><td><code>?list&lt;string&gt;</code></td><td><code>null</code></td><td>Bare hostnames every resolved endpoint must match, port included. An entry with no port (<code>login.example.com</code>) permits only the scheme's default port; write <code>login.example.com:8443</code> to permit another. Null falls back to the host and explicit port of <code>issuer</code>, unless <code>allowAnyHost</code> is set.</td></tr>
@@ -918,6 +918,7 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       <p>Starts an authorization code flow attempt and returns the URL to send the user-agent to.</p>
       <ul class="throws-list">
         <li><code>throws AuthorizationStateException</code></li>
+        <li><code>throws ConfigurationException</code></li>
         <li><code>throws ProviderDiscoveryException</code></li>
       </ul>
 
@@ -940,6 +941,7 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       <p>Same as <code>buildAuthorizationCodeRedirect()</code>, but for the implicit flow (<code>response_type=id_token</code>).</p>
       <ul class="throws-list">
         <li><code>throws AuthorizationStateException</code></li>
+        <li><code>throws ConfigurationException</code></li>
         <li><code>throws ProviderDiscoveryException</code></li>
       </ul>
 
@@ -1103,6 +1105,7 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
       </p>
       <ul class="throws-list">
         <li><code>throws AuthorizationStateException</code></li>
+        <li><code>throws ConfigurationException</code></li>
         <li><code>throws ProviderDiscoveryException</code></li>
       </ul>
       <div class="alert-box">
@@ -1436,6 +1439,7 @@ $email = $result-&gt;claims-&gt;get('email', default: null);</pre>
           <tr><td><code>OpenIDConnectException</code></td><td>Base class for every exception below. Never thrown directly.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
           <tr><td><code>AuthenticationFailedException</code></td><td>A callback carries a provider <code>error</code>, an invalid or expired state/nonce, or an ID token that fails signature or claims validation.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getIdToken"><code>getIdToken()</code></a>, <a href="#Exceptions.getProviderError"><code>getProviderError()</code></a></td></tr>
           <tr><td><code>AuthorizationStateException</code></td><td><code>AuthorizationStateStore</code> cannot persist a new authorization attempt, or cannot consume one, because the underlying cache itself failed or threw - distinct from a clean miss on lookup (a forged, expired, or already-consumed state, or one not even shaped like a real one), which is a normal outcome, not a failure.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
+          <tr><td><code>ConfigurationException</code></td><td>The config asks for something the library refuses to do safely. Today: <code>max_age</code> set through <code>extraAuthParams</code>, where nothing would check <code>auth_time</code>. Use <code>withMaxAgeSeconds()</code> instead.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
           <tr><td><code>HttpTransportException</code></td><td>The HTTP transport itself fails (connection failure, timeout), below the level of any specific OIDC operation. Rewrapped by callers into whichever domain exception fits.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
           <tr><td><code>ProviderDiscoveryException</code></td><td>A provider's <code>.well-known/openid-configuration</code> or JWKS document cannot be fetched, parsed, or is missing a required endpoint.</td><td><a href="#Exceptions.getState"><code>getState()</code></a></td></tr>
           <tr><td><code>TokenRequestException</code></td><td>A token, introspection, revocation, or dynamic client registration request fails or returns an unusable response.</td><td><a href="#Exceptions.getState"><code>getState()</code></a>, <a href="#Exceptions.getHttpStatus"><code>getHttpStatus()</code></a>, <a href="#Exceptions.getRawBody"><code>getRawBody()</code></a>, <a href="#Exceptions.getProviderError"><code>getProviderError()</code></a></td></tr>

@@ -3,6 +3,7 @@
 namespace Oidc;
 
 use Oidc\Exceptions\AuthenticationFailedException;
+use Oidc\Exceptions\ConfigurationException;
 use Oidc\Exceptions\HttpTransportException;
 use Oidc\Exceptions\UserInfoRequestException;
 use Oidc\Interfaces\RefreshTokenClientInterface;
@@ -143,6 +144,8 @@ final class OpenIDConnectClient implements
 	 * completeImplicitFlow() needs no equivalent variant - it already validates at_hash and
 	 * returns the access token whenever the provider includes one, regardless of which method
 	 * built the original redirect.
+	 *
+	 * @throws ConfigurationException
 	 */
 	public function buildImplicitFlowRedirectWithAccessToken( OpenIDConnectClientConfig $config ): AuthorizationRedirect {
 		return $this->buildRedirect($config, responseType: 'id_token token');
@@ -321,7 +324,19 @@ final class OpenIDConnectClient implements
 		return $claims;
 	}
 
+	/**
+	 * @throws ConfigurationException
+	 */
 	private function buildRedirect( OpenIDConnectClientConfig $config, string $responseType ): AuthorizationRedirect {
+		// Checked first, before discovery or any cache write: this is a setup mistake, not a
+		// runtime event. max_age sent this way would reach the provider, but nothing would check
+		// auth_time on the way back, so it would look enforced and not be. maxAgeSeconds does both.
+		if( array_key_exists('max_age', $config->extraAuthParams) ) {
+			$this->logger->error('OIDC: max_age was set through extraAuthParams', [ 'security_relevant' => false ]);
+
+			throw new ConfigurationException('max_age cannot be set through extraAuthParams, use withMaxAgeSeconds() so auth_time is checked');
+		}
+
 		// No state exists yet to correlate this resolve() with - it is not generated until
 		// stateStore->start() below, and generating it earlier just to label a discovery
 		// failure would mean writing a cache entry for an attempt that never got as far as
@@ -350,7 +365,7 @@ final class OpenIDConnectClient implements
 		// logged either way a few lines down, but only this line says a collision happened at all.
 		$overriddenExtraAuthParamKeys = array_values(array_intersect(
 			array_keys($config->extraAuthParams),
-			[ 'response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce', ...( $config->maxAgeSeconds !== null ? [ 'max_age' ] : [] ) ],
+			[ 'response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce' ],
 		));
 
 		if( $overriddenExtraAuthParamKeys !== [] ) {
