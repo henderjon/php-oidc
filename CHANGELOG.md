@@ -36,6 +36,16 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
   `extraAuthParams: ['max_age' => '300']` with `withMaxAgeSeconds(300)`, which sends it and
   checks it.
 
+#### Upgrading from 1.x
+
+1. Replace `providerUrl` and `withProviderUrl()` with `issuer`.
+2. Rename `redirectUrl` and `withRedirectUrl()` to `redirectUri` and `withRedirectUri()`.
+3. Replace `new LogLevelFilterLogger(..., allow: false)` with
+   `mode: LogLevelFilterMode::DenyList`, and `allow: true` with `LogLevelFilterMode::AllowList`.
+4. Add a `host:port` entry to `allowedHosts` for any endpoint on a non-default port. An entry
+   with no port now permits only 443 for `https` and 80 for `http`.
+5. Replace `extraAuthParams: ['max_age' => ...]` with `withMaxAgeSeconds()`.
+
 ### Fixed
 
 - `LogLevelFilterLogger::log()` no longer fatals on psr/log 1.x. `composer.json` allowed
