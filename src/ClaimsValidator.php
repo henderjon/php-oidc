@@ -219,6 +219,46 @@ final class ClaimsValidator {
 	}
 
 	/**
+	 * How long ago the token was issued, from its own `iat`. The only replay defense a flow with
+	 * no nonce has: an ID token older than `$maxAgeSeconds` plus this validator's clock-skew
+	 * leeway is rejected. Unlike validateTokenLifetime() and validateAuthTime() this has no null
+	 * form - a caller using it has no other defense, so there is nothing to opt out of. Fails
+	 * closed on a missing or non-numeric `iat` itself, without leaning on
+	 * validateRequiredClaims() having run first. A future `iat` is not rejected here: the
+	 * signature check already bounds it by the same leeway.
+	 *
+	 * @throws AuthenticationFailedException
+	 */
+	public function validateIssuedAtAge( Claims $claims, int $maxAgeSeconds ): void {
+		$iat = $claims->get('iat');
+
+		if( !is_numeric($iat) ) {
+			$this->logger->error('OIDC: ID token is missing the iat claim that an age check requires, or it is not numeric', [
+				'iat'             => $iat,
+				'max_age_seconds' => $maxAgeSeconds,
+				'state'           => $this->state,
+				'security_relevant' => false,
+			]);
+
+			throw new AuthenticationFailedException('ID token is missing the iat claim that an age check requires, or it is not numeric', state: $this->state);
+		}
+
+		$age = $this->clock->now()->getTimestamp() - (float)$iat;
+
+		if( $age > $maxAgeSeconds + $this->leewaySeconds ) {
+			$this->logger->error('OIDC: ID token was issued longer ago than the configured maximum age', [
+				'age_seconds'     => $age,
+				'max_age_seconds' => $maxAgeSeconds,
+				'leeway_seconds'  => $this->leewaySeconds,
+				'state'           => $this->state,
+				'security_relevant' => false,
+			]);
+
+			throw new AuthenticationFailedException('ID token was issued longer ago than the configured maximum age', state: $this->state);
+		}
+	}
+
+	/**
 	 * @throws AuthenticationFailedException
 	 */
 	public function validateIssuer( Claims $claims, string $expectedIssuer ): void {

@@ -398,6 +398,7 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
           <h4>The Client</h4>
           <ul>
             <li><a href="#OpenIDConnectClient">OpenIDConnectClient</a></li>
+            <li><a href="#StatelessCodeIdTokenClient">StatelessCodeIdTokenClient</a></li>
           </ul>
         </div>
         <div>
@@ -475,6 +476,8 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         string $cacheKeySuffix = "",
     ): OpenIDConnectClient
 
+    public function makeStateless(): StatelessCodeIdTokenClient
+
 }</div>
       <h3 id="OpenIDConnectClientFactory.make">make<a class="section-anchor" href="#OpenIDConnectClientFactory.make" aria-label="Link to this section">&para;</a></h3>
       <p>
@@ -486,6 +489,12 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
         one client (e.g. multi-tenant).
       </p>
       <p>The logger defaults to a no-op - passing one is opt-in. It only ever receives detail behind a failure that already produces a deliberately generic exception.</p>
+      <h3 id="OpenIDConnectClientFactory.makeStateless">makeStateless<a class="section-anchor" href="#OpenIDConnectClientFactory.makeStateless" aria-label="Link to this section">&para;</a></h3>
+      <p>
+        Builds one <a href="#StatelessCodeIdTokenClient"><code>StatelessCodeIdTokenClient</code></a>
+        from the same fetcher, clock, and logger. Takes no cache, because that client stores
+        nothing.
+      </p>
     </div>
 
     <!-- CONFIG -->
@@ -1133,6 +1142,81 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
         certification profile with no equivalent forcing function, on top of being rarer in
         practice than Implicit itself.
       </div>
+      <p class="back-to-index"><a href="#index">↑ back to index</a></p>
+    </div>
+
+    <!-- STATELESS -->
+    <div class="type-section" id="StatelessCodeIdTokenClient">
+      <h2>class StatelessCodeIdTokenClient<a class="section-anchor" href="#StatelessCodeIdTokenClient" aria-label="Link to this section">&para;</a></h2>
+      <p>
+        A separate bolt-on for one vendor-driven login shape, and only that one. Some providers
+        start the login themselves and redirect the user to the client with
+        <code>?code=...</code> and no <code>state</code>. The client never sent an authorization
+        request, so it has no <code>state</code>, <code>nonce</code>, or PKCE verifier to check.
+        Build it with <a href="#OpenIDConnectClientFactory.makeStateless"><code>OpenIDConnectClientFactory::makeStateless()</code></a>.
+        The main client's <code>completeAuthorizationCodeFlow()</code> is unchanged and still requires
+        all three.
+      </p>
+      <div class="alert-box">
+        <strong>Not defined by OpenID Connect Core.</strong> The standard answer is third-party
+        initiated login (Core §4): the provider sends the user to a login initiation URL, and the
+        client starts an ordinary flow. Prefer that wherever the provider allows it. Use this class
+        only for a provider that re-prompts for credentials when you do.
+      </div>
+      <h3>The one response shape it accepts</h3>
+      <ul>
+        <li>An authorization <code>code</code> and nothing else: no <code>state</code>, no <code>error</code>, no <code>id_token</code>, no <code>access_token</code>.</li>
+        <li>The code is redeemed at the token endpoint with the configured client authentication.</li>
+        <li>The token response must contain an ID token.</li>
+      </ul>
+      <p>
+        Anything else throws. The ID token gets the same checks as a code-flow token in the main
+        client (signature, <code>iss</code>, <code>aud</code>, <code>azp</code>, <code>exp</code>,
+        token lifetime, <code>auth_time</code>), minus the nonce, plus one new check: its
+        <code>iat</code> must be no older than <code>$maxIdTokenAgeSeconds</code> plus the clock-skew
+        leeway. A missing <code>iat</code> throws.
+      </p>
+      <div class="alert-box">
+        <strong>What it gives up.</strong> Login CSRF protection (an attacker can hand a victim a
+        link carrying the attacker's own valid code), replay protection by nonce (only the
+        <code>iat</code> age check limits reuse of a captured code and token), and PKCE. Keep the
+        age window short.
+      </div>
+      <p>
+        A different vendor shape (no ID token, an access token and UserInfo only, an
+        <code>id_token</code> posted straight to the callback) needs its own class. This one takes
+        no options to cover another shape.
+      </p>
+      <div class="method-sig">final class StatelessCodeIdTokenClient implements StatelessCodeIdTokenClientInterface {
+
+    public function completeStatelessCodeFlow(
+        OpenIDConnectClientConfig $config,
+        IncomingAuthorizationResponse $response,
+        int $maxIdTokenAgeSeconds,
+        ?string $redirectUriOverride = null,
+    ): AuthenticationResult
+
+}</div>
+      <h3 id="StatelessCodeIdTokenClient.completeStatelessCodeFlow">completeStatelessCodeFlow<a class="section-anchor" href="#StatelessCodeIdTokenClient.completeStatelessCodeFlow" aria-label="Link to this section">&para;</a></h3>
+      <table>
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>config</code></td><td><code>OpenIDConnectClientConfig</code></td><td>The same config the main client uses. <code>issuer</code> must be set.</td></tr>
+          <tr><td><code>response</code></td><td><code>IncomingAuthorizationResponse</code></td><td>The callback parameters. Must carry a <code>code</code> and no <code>state</code>.</td></tr>
+          <tr><td><code>maxIdTokenAgeSeconds</code></td><td><code>int</code></td><td>The longest ago the ID token's <code>iat</code> may be. Must be positive. This is the only replay defense.</td></tr>
+          <tr><td><code>redirectUriOverride</code></td><td><code>?string</code></td><td>Sent to the token endpoint as <code>redirect_uri</code> instead of the config's value, for a provider that expects a different one on this path.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Logs a <code>warning</code> every time it completes, saying <code>state</code>,
+        <code>nonce</code>, and PKCE were not verified.
+      </p>
+      <ul class="throws-list">
+        <li><code>throws AuthenticationFailedException</code></li>
+        <li><code>throws ConfigurationException</code></li>
+        <li><code>throws ProviderDiscoveryException</code></li>
+        <li><code>throws TokenRequestException</code></li>
+      </ul>
       <p class="back-to-index"><a href="#index">↑ back to index</a></p>
     </div>
 
