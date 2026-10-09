@@ -1114,4 +1114,73 @@ class ClaimsValidatorTest extends TestCase {
 		$validator->validateAuthTime($this->validClaims([ 'auth_time' => self::NOW - 661 ]), 600);
 	}
 
+	public function testValidateIssuedAtAgeAllowsATokenIssuedWithinTheMaximum(): void {
+		$claims = $this->validClaims([ 'iat' => self::NOW - 100 ]);
+
+		$this->authTimeValidator()->validateIssuedAtAge($claims, 600);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateIssuedAtAgeAllowsATokenExactlyAtTheMaximumPlusLeeway(): void {
+		$claims = $this->validClaims([ 'iat' => self::NOW - 660 ]);
+
+		$this->authTimeValidator(leewaySeconds: 60)->validateIssuedAtAge($claims, 600);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateIssuedAtAgeRejectsATokenOneSecondPastTheMaximumPlusLeeway(): void {
+		$claims = $this->validClaims([ 'iat' => self::NOW - 661 ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('issued longer ago than the configured maximum age');
+
+		$this->authTimeValidator(leewaySeconds: 60)->validateIssuedAtAge($claims, 600);
+	}
+
+	public function testValidateIssuedAtAgeRejectsAMissingIat(): void {
+		$claims = new Claims([ 'sub' => 'the-subject' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('missing the iat claim');
+
+		$this->authTimeValidator()->validateIssuedAtAge($claims, 600);
+	}
+
+	public function testValidateIssuedAtAgeRejectsANonNumericIat(): void {
+		$claims = $this->validClaims([ 'iat' => 'yesterday' ]);
+
+		$this->expectException(AuthenticationFailedException::class);
+		$this->expectExceptionMessage('missing the iat claim');
+
+		$this->authTimeValidator()->validateIssuedAtAge($claims, 600);
+	}
+
+	public function testValidateIssuedAtAgeAllowsAnIatInTheFuture(): void {
+		$claims = $this->validClaims([ 'iat' => self::NOW + 30 ]);
+
+		$this->authTimeValidator()->validateIssuedAtAge($claims, 600);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testValidateIssuedAtAgeLogsTheAgeMaximumAndLeewayOnRejection(): void {
+		$logger = new ArrayLogger;
+		$claims = $this->validClaims([ 'iat' => self::NOW - 1000 ]);
+
+		try {
+			$this->authTimeValidator(leewaySeconds: 60, logger: $logger)->withState('the-state')->validateIssuedAtAge($claims, 600);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$records = $logger->recordsAt(LogLevel::ERROR);
+		$this->assertCount(1, $records);
+		$this->assertSame(1000.0, $records[0]['context']['age_seconds']);
+		$this->assertSame(600, $records[0]['context']['max_age_seconds']);
+		$this->assertSame(60, $records[0]['context']['leeway_seconds']);
+		$this->assertFalse($records[0]['context']['security_relevant']);
+	}
+
 }

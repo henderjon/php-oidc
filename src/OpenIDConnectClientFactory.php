@@ -2,6 +2,7 @@
 
 namespace Oidc;
 
+use Oidc\Stateless\StatelessCodeIdTokenClient;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -48,6 +49,24 @@ class OpenIDConnectClientFactory {
 			$tokenEndpointClient,
 			$this->httpFetcher,
 			new RefreshTokenClient($providerMetadataResolver, $idTokenVerifier, $claimsValidator, $tokenEndpointClient, $this->logger),
+			$this->logger,
+		);
+	}
+
+	/**
+	 * Wires the bolt-on for a provider-initiated login that arrives with a code and no state -
+	 * see StatelessCodeIdTokenClient for the one response shape it accepts and what it gives up.
+	 * Takes no cache: it stores nothing. Shares the same collaborator wiring make() uses, so a
+	 * config, clock, or logger behaves the same on both paths.
+	 */
+	public function makeStateless(): StatelessCodeIdTokenClient {
+		$providerMetadataResolver = new ProviderMetadataResolver($this->httpFetcher, new UrlPolicy($this->logger), $this->logger);
+
+		return new StatelessCodeIdTokenClient(
+			$providerMetadataResolver,
+			new IdTokenVerifier($this->httpFetcher, $this->clock, logger: $this->logger),
+			new ClaimsValidator($this->logger, clock: $this->clock),
+			new TokenEndpointClient($this->httpFetcher, $providerMetadataResolver, $this->logger, clock: $this->clock),
 			$this->logger,
 		);
 	}

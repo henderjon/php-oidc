@@ -71,4 +71,10 @@ class OpenIDConnectClientFactoryTest extends TestCase {
 		$this->assertTrue($cache->has("henderjon.oidc.flow.second-key.{$secondParams['state']}"));
 	}
 
+	public function testMakeStatelessBuildsAStatelessCodeIdTokenClient(): void {
+		$client = (new OpenIDConnectClientFactory)->makeStateless();
+
+		$this->assertInstanceOf(\Oidc\Stateless\StatelessCodeIdTokenClientInterface::class, $client);
+	}
+
 }

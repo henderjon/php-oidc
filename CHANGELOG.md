@@ -61,6 +61,14 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
 
 ### Added
 
+- `StatelessCodeIdTokenClient`, built with `OpenIDConnectClientFactory::makeStateless()`: a
+  separate bolt-on for one vendor-driven shape, a provider that starts the login itself and
+  redirects with `?code=...` and no `state`. The code is redeemed at the token endpoint and the
+  ID token gets the main flow's checks minus the nonce, plus a new `iat` age check
+  (`ClaimsValidator::validateIssuedAtAge()`) as the only replay defense. It gives up login CSRF
+  protection and PKCE, logs a warning on every completion, and rejects any other response shape.
+  `completeAuthorizationCodeFlow()` is unchanged and still requires `state`, `nonce`, and PKCE.
+  Not part of OpenID Connect Core: third-party initiated login (Core §4) is the standard answer.
 - `OpenIDConnectClientConfig::$maxAgeSeconds` and `withMaxAgeSeconds()` (#57). When set, the
   authorization request carries `max_age`, and the ID token must carry an `auth_time` no older
   than that plus the clock-skew leeway (`ClaimsValidator::validateAuthTime()`). Sending `max_age`
