@@ -1180,7 +1180,19 @@ class ClaimsValidatorTest extends TestCase {
 		$this->assertSame(1000.0, $records[0]['context']['age_seconds']);
 		$this->assertSame(600, $records[0]['context']['max_age_seconds']);
 		$this->assertSame(60, $records[0]['context']['leeway_seconds']);
-		$this->assertFalse($records[0]['context']['security_relevant']);
+		$this->assertTrue($records[0]['context']['security_relevant']);
+	}
+
+	public function testValidateIssuedAtAgeMarksAMissingIatAsNotSecurityRelevant(): void {
+		$logger = new ArrayLogger;
+
+		try {
+			$this->authTimeValidator(logger: $logger)->validateIssuedAtAge(new Claims([ 'sub' => 'the-subject' ]), 600);
+			$this->fail('Expected AuthenticationFailedException to be thrown');
+		} catch( AuthenticationFailedException ) {
+		}
+
+		$this->assertFalse($logger->recordsAt(LogLevel::ERROR)[0]['context']['security_relevant']);
 	}
 
 }

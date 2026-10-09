@@ -251,7 +251,10 @@ final class ClaimsValidator {
 				'max_age_seconds' => $maxAgeSeconds,
 				'leeway_seconds'  => $this->leewaySeconds,
 				'state'           => $this->state,
-				'security_relevant' => false,
+				// true: with no nonce, a token that old is the shape a replayed capture takes. A slow
+				// redirect or a clock problem can cause it too, but this is one of the few failures
+				// where replay is the leading explanation. See docs/index.html's Logging section.
+				'security_relevant' => true,
 			]);
 
 			throw new AuthenticationFailedException('ID token was issued longer ago than the configured maximum age', state: $this->state);
