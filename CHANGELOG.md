@@ -66,7 +66,7 @@ off the `v1.6.0` tag, not `dev` - see `AGENTS.md`'s Git section for why.
   redirects with `?code=...` and no `state`. The code is redeemed at the token endpoint and the
   ID token gets the main flow's checks minus the nonce, plus a new `iat` age check
   (`ClaimsValidator::validateIssuedAtAge()`) as the only replay defense. It gives up login CSRF
-  protection and PKCE, logs a warning on every completion, and rejects any other response shape.
+  protection and PKCE, logs a `debug` line on every completion, and rejects any other response shape.
   `completeAuthorizationCodeFlow()` is unchanged and still requires `state`, `nonce`, and PKCE.
   Not part of OpenID Connect Core: third-party initiated login (Core §4) is the standard answer.
 - `OpenIDConnectClientConfig::$maxAgeSeconds` and `withMaxAgeSeconds()` (#57). When set, the

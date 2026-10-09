@@ -32,7 +32,7 @@ Prefer third-party initiated login ([OpenID Connect Core §4](https://openid.net
 
 It accepts a bare `code`, redeems it at the token endpoint, and requires an ID token in the answer. Anything else throws, including a response that carries a `state`. The ID token gets the same checks as the main flow, minus the nonce, plus one: its `iat` must be no older than the maximum you pass.
 
-What you give up: login CSRF protection (an attacker can hand a victim a link carrying the attacker's own valid code), replay protection by nonce (only the `iat` age check limits reuse), and PKCE. Keep the window short. Every completion logs a warning.
+What you give up: login CSRF protection (an attacker can hand a victim a link carrying the attacker's own valid code), replay protection by nonce (only the `iat` age check limits reuse), and PKCE. Keep the window short. Every completion logs one `debug` line saying so. It is `debug` because a completed login is a success and you may want it silenced, so keep `debug` on for this logger if you want a trail.
 
 ```php
 $client = (new OpenIDConnectClientFactory($fetcher, logger: $logger))->makeStateless();

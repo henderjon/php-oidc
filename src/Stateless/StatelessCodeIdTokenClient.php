@@ -54,6 +54,10 @@ use Psr\Log\NullLogger;
  * modifying OpenIDConnectClient, so nothing about the stateful flow can change by accident.
  * It touches no AuthorizationStateStore and no cache.
  *
+ * Each completion logs one `debug` line saying state, nonce, and PKCE were not verified. It is
+ * `debug` because a completed login is a success, and a caller may want it silenced. A caller
+ * who wants a trail of the downgrade should keep `debug` enabled for this class's logger.
+ *
  * The validation sequence in verifyAndValidateIdToken() mirrors OpenIDConnectClient's. A test
  * fails when the two lists of validator calls drift apart, so a check added to one cannot
  * silently go missing from the other.
@@ -116,9 +120,10 @@ final class StatelessCodeIdTokenClient implements StatelessCodeIdTokenClientInte
 
 		$claims = $this->verifyAndValidateIdToken($config, $tokenResult->idToken, $tokenResult->accessToken, $providerMetadataResolver, $issuer, $maxIdTokenAgeSeconds);
 
-		// warning: a deliberate downgrade of three protections the main flow always applies.
-		// Logged on every completion so it can never pass without a trace.
-		$this->logger->warning('OIDC: stateless code flow completed without verifying state, nonce, or PKCE', [
+		// debug, not warning: this is a successful login, and a caller may want it silenced.
+		// It still states plainly that three protections the main flow always applies were
+		// skipped, so a caller who wants a trail of the downgrade keeps debug on for this path.
+		$this->logger->debug('OIDC: stateless code flow completed without verifying state, nonce, or PKCE', [
 			'issuer' => $issuer,
 			'sub'    => $claims->get('sub'),
 		]);
