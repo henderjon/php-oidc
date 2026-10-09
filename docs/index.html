@@ -608,8 +608,8 @@ $subject = $result-&gt;claims-&gt;get('sub');</pre>
       <table>
         <thead><tr><th>Level</th><th>Calls</th><th>Fires when...</th></tr></thead>
         <tbody>
-          <tr><td><code>debug</code></td><td>30</td><td>The happy path of nearly every collaborator - what was sent, what came back, what was decided. The bulk of this library's log volume.</td></tr>
-          <tr><td><code>warning</code></td><td>5</td><td>A loose config choice actually producing a happy path at runtime, not merely configured as possible - an Optional PKCE flow completing with no <code>code_verifier</code>, or <code>allowUntrustedAudiences</code> silently dropping a malformed <code>aud</code> entry (<code>ClaimsValidator</code>) - or a runtime event worth a human's attention that is not itself a configuration choice - a callback whose <code>state</code> matched no pending authorization attempt at all, or was not even shaped like one this library could have generated in the first place (<code>AuthorizationStateStore</code>; see that method's own docblock for the several distinct things a miss there could mean). The stateless code flow completing at all: <code>StatelessCodeIdTokenClient</code> logs one on every success, because it skipped <code>state</code>, <code>nonce</code>, and PKCE.</td></tr>
+          <tr><td><code>debug</code></td><td>31</td><td>The happy path of nearly every collaborator - what was sent, what came back, what was decided. The bulk of this library's log volume.</td></tr>
+          <tr><td><code>warning</code></td><td>4</td><td>A loose config choice actually producing a happy path at runtime, not merely configured as possible - an Optional PKCE flow completing with no <code>code_verifier</code>, or <code>allowUntrustedAudiences</code> silently dropping a malformed <code>aud</code> entry (<code>ClaimsValidator</code>) - or a runtime event worth a human's attention that is not itself a configuration choice - a callback whose <code>state</code> matched no pending authorization attempt at all, or was not even shaped like one this library could have generated in the first place (<code>AuthorizationStateStore</code>; see that method's own docblock for the several distinct things a miss there could mean).</td></tr>
           <tr><td><code>info</code></td><td>1</td><td>An outcome PSR-16's own cache interface cannot distinguish from a real failure - <code>AuthorizationStateStore::consume()</code>, when the cache backend reports a delete as possibly not having cleared the entry.</td></tr>
           <tr><td><code>error</code></td><td>86</td><td>Every validation, fetch, or parse failure across every collaborator - by far the largest share of non-<code>debug</code> volume. Always paired with the exception this library is about to throw. Every call at this level also carries a <code>security_relevant</code> boolean - see below.</td></tr>
           <tr><td><code>alert</code></td><td>3</td><td>Reserved for a configuration choice worth a developer's own review, not a runtime event: TLS verification actively disabled for a request (<code>CurlHttpFetcher</code>), an untrusted <code>aud</code> value let through by explicit config opt-out (<code>ClaimsValidator</code>), or a public client building an authorization redirect with PKCE disabled (<code>OpenIDConnectClient</code>).</td></tr>
@@ -1211,8 +1211,10 @@ $factory = new OpenIDConnectClientFactory(logger: $logger);</pre>
         </tbody>
       </table>
       <p>
-        Logs a <code>warning</code> every time it completes, saying <code>state</code>,
-        <code>nonce</code>, and PKCE were not verified.
+        Logs a <code>debug</code> line every time it completes, saying <code>state</code>,
+        <code>nonce</code>, and PKCE were not verified. It is <code>debug</code> because a completed
+        login is a success and a caller may want it silenced - keep <code>debug</code> on for this
+        logger if you want a trail of the downgrade.
       </p>
       <ul class="throws-list">
         <li><code>throws AuthenticationFailedException</code></li>

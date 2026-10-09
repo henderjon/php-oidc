@@ -173,19 +173,22 @@ class StatelessCodeIdTokenClientTest extends TestCase {
 		$this->assertSame(self::REDIRECT_URI, $this->lastTokenRequestParams($fetcher)['redirect_uri']);
 	}
 
-	public function testCompletionLogsAWarningSayingStateNonceAndPkceWereNotVerified(): void {
+	public function testCompletionLogsADebugLineSayingStateNonceAndPkceWereNotVerified(): void {
 		$fixture = new RsaKeyFixture;
 		$logger  = new ArrayLogger;
 
 		$this->complete($this->fetcherReturning($fixture, $fixture->sign($this->claims())), logger: $logger);
 
-		$warnings = $logger->recordsAt(LogLevel::WARNING);
-		$this->assertCount(1, $warnings);
-		$this->assertSame('OIDC: stateless code flow completed without verifying state, nonce, or PKCE', array_values($warnings)[0]['message']);
-		$this->assertSame('user-1', array_values($warnings)[0]['context']['sub']);
+		$completions = array_values(array_filter(
+			$logger->recordsAt(LogLevel::DEBUG),
+			static fn ( array $record ): bool => $record['message'] === 'OIDC: stateless code flow completed without verifying state, nonce, or PKCE',
+		));
+		$this->assertCount(1, $completions);
+		$this->assertSame('user-1', $completions[0]['context']['sub']);
+		$this->assertSame([], $logger->recordsAt(LogLevel::WARNING), 'a completed login is not warned about');
 	}
 
-	public function testAFailureLogsNoCompletionWarning(): void {
+	public function testAFailureLogsNoCompletionLine(): void {
 		$fixture = new RsaKeyFixture;
 		$logger  = new ArrayLogger;
 		$fetcher = $this->fetcherReturning($fixture, $fixture->sign($this->claims([ 'iss' => 'https://evil.example.com' ])));
@@ -196,7 +199,13 @@ class StatelessCodeIdTokenClientTest extends TestCase {
 		} catch( AuthenticationFailedException ) {
 		}
 
-		$this->assertSame([], $logger->recordsAt(LogLevel::WARNING));
+		$this->assertSame(
+			[],
+			array_values(array_filter(
+				$logger->recordsAt(LogLevel::DEBUG),
+				static fn ( array $record ): bool => str_contains($record['message'], 'stateless code flow completed'),
+			)),
+		);
 	}
 
 	public function testRejectsABadSignature(): void {
